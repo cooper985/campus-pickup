@@ -2,31 +2,44 @@
   <view class="eyebrow">校园生活 · 取件更轻松</view>
   <view class="heading">今天的快递，一站站取</view>
   <view class="intro">一次选择最多 9 张取件截图，识别后按地点整理。</view>
-  <view class="notice">云端识别会将截图交由腾讯云 OCR 处理，每张图片调用一次。地点和取件码可能识别错误，请对照原图核对；可点击“修改”纠正。当前看板仅在本次页面内保留。</view>
+  <view class="notice">云端识别会将截图交由腾讯云 OCR 处理，每张图片调用一次。请核对并确认导入；记录仅保存在本机，重启后自动恢复。截图和 OCR 原文不永久保存，清理小程序数据会丢失记录。</view>
+  <view wx:if="{{storageError}}" class="error" role="alert">{{storageError}}</view>
   <view class="card">
     <view class="section-title">01　选择截图 · {{images.length}} 张</view>
     <view class="thumbnails" wx:if="{{images.length}}">
       <image wx:for="{{images}}" wx:key="*this" class="thumbnail" src="{{item}}" mode="aspectFit" data-index="{{index}}" bindtap="previewImage" />
     </view>
     <view wx:else class="placeholder">还没有选择截图<text class="hint">单张不超过 5 MB</text></view>
-    <button class="secondary" bindtap="chooseImage" disabled="{{loading || choosing}}">{{images.length ? '重新选择截图' : '从相册选择截图'}}</button>
+    <button class="secondary" bindtap="chooseImage" disabled="{{loading || choosing || importing}}">{{images.length ? '重新选择截图' : '从相册选择截图'}}</button>
     <view class="hint" wx:if="{{images.length}}">点击缩略图可查看原图</view>
   </view>
-  <button class="secondary" bindtap="recognize" disabled="{{!images.length || loading || choosing}}">本地模拟（不上传）</button>
-  <button class="primary" bindtap="recognizeCloud" disabled="{{!images.length || loading || choosing}}" loading="{{loading}}">{{loading ? progress : '云端识别所选截图'}}</button>
+  <button class="secondary" bindtap="recognize" disabled="{{!images.length || loading || choosing || importing}}">本地模拟（不上传）</button>
+  <button class="primary" bindtap="recognizeCloud" disabled="{{!images.length || loading || choosing || importing}}" loading="{{loading}}">{{loading ? progress : '云端识别所选截图'}}</button>
   <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
-  <view wx:if="{{completed || records.length}}">
+  <view wx:if="{{completed || drafts.length}}">
+    <view class="heading board-title">待确认导入 · {{drafts.length}} 件</view>
+    <view wx:if="{{mock}}" class="notice">模拟示例，与截图内容无关；确认导入也会保存到本机。</view>
+    <view wx:if="{{completed && !drafts.length}}" class="card">没有找到明确标注的取件码，请查看下方原文或换一张清晰截图。</view>
+    <view wx:for="{{draftGroups}}" wx:key="station" wx:for-item="group" class="card">
+      <view class="section-title">{{group.station}}</view>
+      <view wx:for="{{group.items}}" wx:key="id" class="parcel">
+        <text class="pickup-code" user-select="{{true}}">{{item.code}}</text>
+        <view class="hint">截图 {{item.sourceIndex + 1}} · {{item.needsReview ? '地点待确认' : '请核对原图'}}</view>
+        <button size="mini" class="secondary" data-id="{{item.id}}" bindtap="editRecord" disabled="{{loading || importing}}">修改</button>
+      </view>
+    </view>
+    <button wx:if="{{drafts.length}}" class="primary" bindtap="confirmImport" disabled="{{loading || importing || storageBlocked}}" loading="{{importing}}">确认导入</button>
+  </view>
+  <view wx:if="{{records.length}}">
     <view class="heading board-title">取件看板 · 待取 {{remaining}} 件</view>
-    <view wx:if="{{mock}}" class="notice">模拟示例，与截图内容无关。</view>
-    <view wx:if="{{completed && !records.length}}" class="card">没有找到明确标注的取件码，请查看下方原文或换一张清晰截图。</view>
     <view wx:for="{{groups}}" wx:key="station" wx:for-item="group" class="card">
       <view class="section-title">{{group.station}}</view>
       <view wx:for="{{group.items}}" wx:key="id" class="parcel {{item.taken ? 'taken' : ''}}">
         <text class="pickup-code" user-select="{{true}}">{{item.code}}</text>
-        <view class="hint">截图 {{item.sourceIndex + 1}} · {{item.needsReview ? '地点待确认' : '请核对原图'}}</view>
+        <view class="hint">{{item.carrier || '快递公司未识别'}} · {{item.taken ? '已取' : '待取'}}</view>
         <view class="actions">
-          <button size="mini" class="secondary" data-id="{{item.id}}" bindtap="editRecord" disabled="{{loading}}">修改</button>
-          <button size="mini" class="secondary" data-id="{{item.id}}" bindtap="toggleTaken" disabled="{{loading}}">{{item.taken ? '恢复待取' : '标记已取'}}</button>
+          <button size="mini" class="secondary" data-id="{{item.id}}" bindtap="editRecord" disabled="{{loading || importing || storageBlocked}}">修改</button>
+          <button size="mini" class="secondary" data-id="{{item.id}}" bindtap="toggleTaken" disabled="{{loading || importing || storageBlocked}}">{{item.taken ? '恢复待取' : '标记已取'}}</button>
         </view>
       </view>
     </view>
