@@ -1,0 +1,20 @@
+# Dependencies and generated output
+node_modules/
+miniprogram_npm/
+coverage/
+*.log
+.DS_Store
+
+# Local IDE configuration and credentials
+project.private.config.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+secrets*.json
+
+# Local snapshots and private pickup screenshots
+.local-backups/
+test-data/private/
