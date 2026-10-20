@@ -23,7 +23,8 @@ test("模拟供应商成功、空结果与损坏结果", async () => {
   const success = await handle(event, identity, { ...real, recognize: async image => {
     assert.equal(image, imageBase64); return { TextDetections: [{ DetectedText: "取件码 123" }] };
   } });
-  assert.deepEqual(success, { ok: true, mock: false, lines: ["取件码 123"] });
+  assert.equal(success.ok, true); assert.deepEqual(success.lines, ["取件码 123"]);
+  assert.deepEqual(success.boxes, [null]); assert.ok(success.timings.ocrMs >= 0);
   assert.deepEqual((await handle(event, identity, { ...real, recognize: async () => ({ TextDetections: [] }) })).lines, []);
   assert.equal((await handle(event, identity, { ...real, recognize: async () => ({}) })).error.code, "BAD_RESPONSE");
 });
@@ -36,4 +37,15 @@ test("超时、授权、额度与未知错误脱敏且不自动重试", async ()
   }
   const result = await handle(event, identity, { ...real, timeoutMs: 10, recognize: () => new Promise(() => {}) });
   assert.equal(result.error.code, "TIMEOUT");
+});
+test('返回经过筛选的行坐标，不暴露供应商原始响应和额外字段', async()=>{
+ const r=await handle(event,identity,{...real,recognize:async()=>({RequestId:'private-request',TextDetections:[
+  {DetectedText:'已派送至：一中看台',ItemPolygon:{X:10,Y:20,Width:150,Height:20,private:'secret'}},
+  {DetectedText:'取件码603402',ItemPolygon:{X:10,Y:50,Width:150,Height:20}},
+  {DetectedText:'地图城市',ItemPolygon:{X:'bad',Y:90,Width:150,Height:20}}
+ ]})});
+ assert.deepEqual(r.boxes,[{x:10,y:20,width:150,height:20},{x:10,y:50,width:150,height:20},null]);
+ assert.ok(!JSON.stringify(r).includes('secret')); assert.ok(!JSON.stringify(r).includes('private-request'));
+ const {analyze}=require('../miniprogram/services/pickup-parser');
+ assert.equal(analyze(r.lines,0,r.boxes).records[0].station,'一中看台');
 });

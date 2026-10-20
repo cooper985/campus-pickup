@@ -15,6 +15,8 @@
   </view>
   <button class="secondary" bindtap="recognize" disabled="{{!images.length || loading || choosing || importing}}">本地模拟（不上传）</button>
   <button class="primary" bindtap="recognizeCloud" disabled="{{!images.length || loading || choosing || importing}}" loading="{{loading}}">{{loading ? progress : '云端识别所选截图'}}</button>
+  <view wx:if="{{loading}}" class="actions"><button bindtap="skipImage">跳过当前图片</button><button bindtap="cancelRecognition">取消本批识别</button></view>
+  <view wx:if="{{loading}}" class="hint">单张最多等待 {{waitSeconds}} 秒；跳过或取消只停止等待，已发出的云端请求可能继续执行。</view>
   <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
   <view wx:if="{{completed || drafts.length}}">
     <view class="heading board-title">待确认导入 · {{drafts.length}} 件</view>
@@ -51,7 +53,9 @@
     <view class="actions"><button size="mini" bindtap="cancelEdit">取消</button><button size="mini" class="primary" bindtap="saveEdit">保存修改</button></view>
   </view>
   <view wx:for="{{results}}" wx:key="index" class="card">
-    <view class="section-title">截图 {{item.index}} · {{item.error ? '识别失败' : (item.mock ? '模拟原文' : 'OCR 原文')}}</view>
+    <view class="section-title">截图 {{item.index}} · {{item.error ? '未完成' : (item.mock ? '模拟结果' : 'OCR 已完成')}}</view>
+    <view wx:if="{{item.message}}" class="hint">{{item.message}}</view>
+    <button wx:if="{{item.retryable}}" size="mini" data-index="{{item.index}}" bindtap="retryImage" disabled="{{loading || importing}}">重试此图</button>
     <view wx:if="{{item.error}}" class="error">{{item.error}}</view>
     <view wx:for="{{item.lines}}" wx:for-item="line" wx:key="index" class="result-line"><text user-select="{{true}}">{{line}}</text></view>
   </view>
