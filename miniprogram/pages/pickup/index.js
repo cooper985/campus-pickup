@@ -1,8 +1,9 @@
 const ocr = require("../../services/mock-ocr");
+const cloudOcr = require("../../services/cloud-ocr");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { imagePath: "", loading: false, choosing: false, lines: [], error: "", completed: false },
+  data: { imagePath: "", loading: false, choosing: false, lines: [], error: "", completed: false, mock: true, cloudResult: false },
   async chooseImage() {
     if (this.data.loading || this.data.choosing) return;
     this.setData({ choosing: true, error: "" });
@@ -33,17 +34,23 @@ Page({
     }
   },
   async recognize() {
+    return this.runRecognition(false);
+  },
+  async recognizeCloud() {
+    return this.runRecognition(true);
+  },
+  async runRecognition(useCloud) {
     if (!this.data.imagePath || this.data.loading || this.data.choosing) return;
     this.setData({ loading: true, error: "", lines: [], completed: false });
     try {
-      const result = await ocr.recognize();
-      if (!result || result.mock !== true || !Array.isArray(result.lines) ||
+      const result = await (useCloud ? cloudOcr.recognize(this.data.imagePath) : ocr.recognize());
+      if (!result || typeof result.mock !== "boolean" || !Array.isArray(result.lines) ||
           !result.lines.every(line => typeof line === "string")) {
         throw new Error("识别结果格式异常，请重试。");
       }
-      this.setData({ lines: result.lines, completed: true });
+      this.setData({ lines: result.lines, completed: true, mock: result.mock, cloudResult: useCloud });
     } catch (err) {
-      this.setData({ error: "模拟识别失败，请重试。" });
+      this.setData({ error: err && err.message || "识别失败，请重试。" });
     } finally {
       this.setData({ loading: false });
     }

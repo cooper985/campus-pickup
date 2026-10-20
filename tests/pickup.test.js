@@ -37,3 +37,14 @@ test("未选择图片不调用；重复点击只调用一次；失败可重试",
   reject(new Error("network")); await pending;
   assert.equal(p.data.loading, false); assert.equal(p.data.completed, false); assert.ok(p.data.error);
 });
+test("云端结果明确区分真实识别与模拟模式", async () => {
+  const p = page({}, async path => {
+    assert.equal(path, "local.png");
+    return { mock: false, lines: ["真实文字"] };
+  });
+  p.data.imagePath = "local.png";
+  await p.recognizeCloud();
+  assert.equal(p.data.mock, false);
+  assert.equal(p.data.cloudResult, true);
+  assert.equal(p.data.completed, true);
+});
