@@ -1,0 +1,22 @@
+<view class="pickup">
+  <view class="eyebrow">校园生活 · 取件更轻松</view>
+  <view class="heading">把取件信息放在一起</view>
+  <view class="intro">选择一张淘宝、拼多多、京东或抖音取件截图，先体验信息展示流程。</view>
+  <view class="notice">当前为模拟体验：图片不会上传，结果为固定示例，并非图片的真实识别内容。</view>
+  <view class="card">
+    <view class="section-title">01　选择截图</view>
+    <image wx:if="{{imagePath}}" class="preview" src="{{imagePath}}" mode="aspectFit" bindtap="previewImage" aria-label="点击预览所选截图" />
+    <view wx:else class="placeholder">还没有选择截图<text class="hint">支持从相册选择，单张不超过 5 MB</text></view>
+    <button class="secondary" bindtap="chooseImage" disabled="{{loading || choosing}}" loading="{{choosing}}">{{imagePath ? '重新选择截图' : '从相册选择截图'}}</button>
+    <view wx:if="{{imagePath}}" class="hint">点击图片可放大查看</view>
+  </view>
+  <button class="primary" bindtap="recognize" disabled="{{!imagePath || loading || choosing}}" loading="{{loading}}">{{loading ? '正在处理…' : '查看模拟识别结果'}}</button>
+  <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
+  <view wx:if="{{completed}}" class="card">
+    <view class="section-title">02　模拟识别结果</view>
+    <view class="hint">示例内容，仅用于验证页面流程</view>
+    <view wx:for="{{lines}}" wx:key="index" class="result-line"><text user-select="{{true}}">{{item}}</text></view>
+    <view wx:if="{{!lines.length}}" class="hint">未识别到文字，请换一张清晰截图。</view>
+  </view>
+  <view class="footer">单张截图体验 · 批量识别与驿站看板将在真实联调后开放</view>
+</view>

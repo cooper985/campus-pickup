@@ -1,0 +1,10 @@
+{
+  "name": "recognize-pickup",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "dependencies": {
+    "tencentcloud-sdk-nodejs-ocr": "4.1.328",
+    "wx-server-sdk": "4.0.2"
+  }
+}
