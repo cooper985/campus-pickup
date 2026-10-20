@@ -1,23 +1,45 @@
 <view class="pickup">
   <view class="eyebrow">校园生活 · 取件更轻松</view>
-  <view class="heading">把取件信息放在一起</view>
-  <view class="intro">选择一张淘宝、拼多多、京东或抖音取件截图，先体验信息展示流程。</view>
-  <view class="notice">“本地模拟”不上传图片。“云端识别”会把所选图片发送至微信云函数；服务开启真实识别后，会交由腾讯云 OCR 处理。测试期间请使用无个人信息的图片。</view>
+  <view class="heading">今天的快递，一站站取</view>
+  <view class="intro">一次选择最多 9 张取件截图，识别后按地点整理。</view>
+  <view class="notice">云端识别会将截图交由腾讯云 OCR 处理，每张图片调用一次。地点和取件码可能识别错误，请对照原图核对；可点击“修改”纠正。当前看板仅在本次页面内保留。</view>
   <view class="card">
-    <view class="section-title">01　选择截图</view>
-    <image wx:if="{{imagePath}}" class="preview" src="{{imagePath}}" mode="aspectFit" bindtap="previewImage" aria-label="点击预览所选截图" />
-    <view wx:else class="placeholder">还没有选择截图<text class="hint">支持从相册选择，单张不超过 5 MB</text></view>
-    <button class="secondary" bindtap="chooseImage" disabled="{{loading || choosing}}" loading="{{choosing}}">{{imagePath ? '重新选择截图' : '从相册选择截图'}}</button>
-    <view wx:if="{{imagePath}}" class="hint">点击图片可放大查看</view>
+    <view class="section-title">01　选择截图 · {{images.length}} 张</view>
+    <view class="thumbnails" wx:if="{{images.length}}">
+      <image wx:for="{{images}}" wx:key="*this" class="thumbnail" src="{{item}}" mode="aspectFit" data-index="{{index}}" bindtap="previewImage" />
+    </view>
+    <view wx:else class="placeholder">还没有选择截图<text class="hint">单张不超过 5 MB</text></view>
+    <button class="secondary" bindtap="chooseImage" disabled="{{loading || choosing}}">{{images.length ? '重新选择截图' : '从相册选择截图'}}</button>
+    <view class="hint" wx:if="{{images.length}}">点击缩略图可查看原图</view>
   </view>
-  <button class="secondary" bindtap="recognize" disabled="{{!imagePath || loading || choosing}}">本地模拟（不上传）</button>
-  <button class="primary" bindtap="recognizeCloud" disabled="{{!imagePath || loading || choosing}}" loading="{{loading}}">{{loading ? '正在处理…' : '云端识别'}}</button>
+  <button class="secondary" bindtap="recognize" disabled="{{!images.length || loading || choosing}}">本地模拟（不上传）</button>
+  <button class="primary" bindtap="recognizeCloud" disabled="{{!images.length || loading || choosing}}" loading="{{loading}}">{{loading ? progress : '云端识别所选截图'}}</button>
   <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
-  <view wx:if="{{completed}}" class="card">
-    <view class="section-title">02　{{mock ? '模拟识别结果' : '图片识别结果'}}</view>
-    <view class="hint">{{mock ? (cloudResult ? '云函数连接成功；当前为模拟模式，以下为固定示例。' : '本地固定示例，与图片内容无关。') : '腾讯云 OCR 返回的文字，请核对原图。'}}</view>
-    <view wx:for="{{lines}}" wx:key="index" class="result-line"><text user-select="{{true}}">{{item}}</text></view>
-    <view wx:if="{{!lines.length}}" class="hint">未识别到文字，请换一张清晰截图。</view>
+  <view wx:if="{{completed || records.length}}">
+    <view class="heading board-title">取件看板 · 待取 {{remaining}} 件</view>
+    <view wx:if="{{mock}}" class="notice">模拟示例，与截图内容无关。</view>
+    <view wx:if="{{completed && !records.length}}" class="card">没有找到明确标注的取件码，请查看下方原文或换一张清晰截图。</view>
+    <view wx:for="{{groups}}" wx:key="station" wx:for-item="group" class="card">
+      <view class="section-title">{{group.station}}</view>
+      <view wx:for="{{group.items}}" wx:key="id" class="parcel {{item.taken ? 'taken' : ''}}">
+        <text class="pickup-code" user-select="{{true}}">{{item.code}}</text>
+        <view class="hint">截图 {{item.sourceIndex + 1}} · {{item.needsReview ? '地点待确认' : '请核对原图'}}</view>
+        <view class="actions">
+          <button size="mini" class="secondary" data-id="{{item.id}}" bindtap="editRecord" disabled="{{loading}}">修改</button>
+          <button size="mini" class="secondary" data-id="{{item.id}}" bindtap="toggleTaken" disabled="{{loading}}">{{item.taken ? '恢复待取' : '标记已取'}}</button>
+        </view>
+      </view>
+    </view>
   </view>
-  <view class="footer">单张截图体验 · 批量识别与驿站看板将在真实联调后开放</view>
+  <view wx:if="{{editing}}" class="card">
+    <view class="section-title">核对并修改</view>
+    <input value="{{editing.station}}" bindinput="editStation" placeholder="取件地点" maxlength="100" />
+    <input value="{{editing.code}}" bindinput="editCode" placeholder="取件码" maxlength="32" />
+    <view class="actions"><button size="mini" bindtap="cancelEdit">取消</button><button size="mini" class="primary" bindtap="saveEdit">保存修改</button></view>
+  </view>
+  <view wx:for="{{results}}" wx:key="index" class="card">
+    <view class="section-title">截图 {{item.index}} · {{item.error ? '识别失败' : (item.mock ? '模拟原文' : 'OCR 原文')}}</view>
+    <view wx:if="{{item.error}}" class="error">{{item.error}}</view>
+    <view wx:for="{{item.lines}}" wx:for-item="line" wx:key="index" class="result-line"><text user-select="{{true}}">{{line}}</text></view>
+  </view>
 </view>

@@ -3,8 +3,12 @@ const { handle } = require("./handler");
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 exports.main = async (event) => {
+  const identity = cloud.getWXContext();
+  if (event && event.action === "identity") {
+    return identity.OPENID ? { openid: identity.OPENID } : { error: "UNAUTHORIZED" };
+  }
   // 每次调用读取临时凭证，避免复用已过期凭证；不接受客户端传入凭证或模式。
-  return handle(event, cloud.getWXContext(), {
+  return handle(event, identity, {
     mode: process.env.OCR_MODE || "mock",
     allowedOpenids: (process.env.OCR_ALLOWED_OPENIDS || "").split(",").map(value => value.trim()).filter(Boolean),
     recognize: async (imageBase64) => {
