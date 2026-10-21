@@ -50,7 +50,7 @@ Page({
     if (!result || !result.error || /^(SKIPPED|CANCELLED)$/.test(result.status)) return;
     // Copy only this allowlist; never include paths, OCR text, codes, or account identifiers.
     wx.setClipboardData({ data: JSON.stringify({ build: DIAGNOSTIC_BUILD, code: result.status,
-      origin: result.failureOrigin, phase: result.phase, elapsedMs: result.elapsedMs, queueMs: result.queueMs }),
+      origin: result.failureOrigin, sdkCode: result.sdkCode, phase: result.phase, elapsedMs: result.elapsedMs, queueMs: result.queueMs }),
       success: () => wx.showToast({ title: "问题信息已复制", icon: "none" }),
       fail: () => wx.showToast({ title: "复制失败，请重试", icon: "none" }),
     });
@@ -138,6 +138,7 @@ Page({
           ? safe.message : "识别暂时不可用，请重试";
       update({ state: "failed", status: safe.code, error: message, message: "", retryable: true,
         failureOrigin: ["client_wait", "cloud_call", "cloud_result"].includes(err && err.origin) ? err.origin : "client",
+        sdkCode: Number.isInteger(err && err.sdkCode) ? err.sdkCode : null,
         retained: this.data.drafts.some(r => r.sourceIndex === i) });
     } finally {
       this.imageJobs.delete(taskId);

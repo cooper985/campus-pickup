@@ -63,7 +63,7 @@ test('相同超时提示保留真实失败来源，主动反馈仅复制白名�
   assert.equal(p.data.results[0].error, '识别超时，点击重试');
   p.copyRecognitionDiagnostic(imageEvent(p));
   const diagnostic = JSON.parse(copied);
-  assert.deepEqual(Object.keys(diagnostic).sort(), ['build', 'code', 'elapsedMs', 'origin', 'phase', 'queueMs']);
+  assert.deepEqual(Object.keys(diagnostic).sort(), ['build', 'code', 'elapsedMs', 'origin', 'phase', 'queueMs', 'sdkCode']);
   assert.equal(diagnostic.origin, 'cloud_result'); assert.equal(diagnostic.phase, 'cloud_roundtrip');
   assert.ok(Number.isFinite(diagnostic.elapsedMs)); assert.ok(!copied.includes('private'));
   assert.equal(wx.getStorageSync(storage.KEY), undefined); assert.equal(wx.writes.length, 0);

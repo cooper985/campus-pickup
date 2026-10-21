@@ -1,6 +1,6 @@
 // Waiting is cancellable; wx.cloud.callFunction itself is not aborted.
 const PREPARE_TIMEOUT_MS = 15000;
-// The SDK already bounds the cloud call at 20s; allow its result/error to arrive before the watchdog.
+// The deployed function has a 20s execution limit; this only bounds frontend waiting, not the physical call.
 const WAIT_TIMEOUT_MS = 22000;
 const SLOW_AFTER_MS = 8000;
 const messages = {

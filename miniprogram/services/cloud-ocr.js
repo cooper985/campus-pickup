@@ -52,14 +52,14 @@ async function recognize(imagePath, control = { check() {}, stage() {} }) {
   if (control.stage) control.stage("cloud_roundtrip");
   try {
     response = await wx.cloud.callFunction({
-      name: "recognizePickup", data: { imageBase64 }, config: { timeout: 20000 },
+      name: "recognizePickup", data: { imageBase64 },
     });
   } catch (err) {
     const message = err && err.errMsg || "";
     const code = /timeout|timed out|time.?limit|超时/i.test(message) ? "TIMEOUT"
       : /network|网络/i.test(message) ? "NETWORK_FAILED" : "CLOUD_FAILED";
     log("cloud_roundtrip", cloudStarted, code);
-    throw Object.assign(error(code), { origin: "cloud_call" });
+    throw Object.assign(error(code), { origin: "cloud_call", sdkCode: Number.isInteger(err && err.errCode) ? err.errCode : null });
   }
   log("cloud_roundtrip", cloudStarted);
   control.check();

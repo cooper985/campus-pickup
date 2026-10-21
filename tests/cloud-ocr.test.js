@@ -25,6 +25,7 @@ test("云识别传图并保留服务器模式；错误不自动重试", async ()
     assert.equal(s.calls.length, 1);
     assert.equal(s.calls[0].data.imageBase64, small);
     assert.equal(s.calls[0].name, "recognizePickup");
+    assert.deepEqual(Object.keys(s.calls[0]).sort(), ['data', 'name']);
   }
   const s = service({ image: small }, { ok: false, error: { code: "OCR_AUTH", message: "private" } });
   await assert.rejects(s.recognize("image"), e => e.code === "OCR_AUTH" && e.origin === "cloud_result");
@@ -53,8 +54,8 @@ test('读图超时或取消后不能继续发送云端请求',async()=>{
 });
 test('微信实际返回超时错误时使用超时类型，普通服务异常仍为服务异常', async () => {
  const s=service({image:small},{ok:true,mock:false,lines:[]});
- s.wx.cloud.callFunction=async()=>{throw {errMsg:'cloud.callFunction:fail request timeout'};};
- await assert.rejects(s.recognize('image'),e=>e.code==='TIMEOUT' && e.origin==='cloud_call');
+ s.wx.cloud.callFunction=async()=>{throw {errMsg:'cloud.callFunction:fail request timeout',errCode:-504003};};
+ await assert.rejects(s.recognize('image'),e=>e.code==='TIMEOUT' && e.origin==='cloud_call' && e.sdkCode===-504003);
  s.wx.cloud.callFunction=async()=>({result:{ok:false,error:{code:'TIMEOUT'}}});
  await assert.rejects(s.recognize('image'),e=>e.code==='TIMEOUT' && e.origin==='cloud_result');
 });
