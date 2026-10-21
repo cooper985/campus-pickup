@@ -10,13 +10,13 @@ function createQueue() {
       if (entry.cancelled) continue;
       active++;
       entry.onStart();
-      entry.job = task.start(entry.work, entry.timeoutMs, entry.onStage);
+      entry.job = task.start(entry.work, entry.timeoutMs, entry.onStage, entry.onSlow);
       entry.job.promise.then(entry.resolve, entry.reject);
       entry.job.settled.then(() => { active--; pump(); });
     }
   }
-  function add(work, { timeoutMs, onStart = () => {}, onStage = () => {} } = {}) {
-    const entry = { work, timeoutMs, onStart, onStage };
+  function add(work, { timeoutMs, onStart = () => {}, onStage = () => {}, onSlow = () => {} } = {}) {
+    const entry = { work, timeoutMs, onStart, onStage, onSlow };
     const promise = new Promise((resolve, reject) => Object.assign(entry, { resolve, reject }));
     waiting.push(entry);
     // Give the caller time to attach its cancellation handle before callbacks run.

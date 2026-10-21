@@ -28,10 +28,10 @@ test('慢无码图不挡住正常图，完成顺序独立更新且实际同时�
   releases.b(['取件码2222']); await tick();
   releases.d(['已到站']); releases.e(['物流详情']); releases.slow(['运输中']); await run;
   assert.equal(peak, 3); assert.equal(p.data.drafts.length, 2);
-  assert.equal(p.data.results[0].message, '快递运输中，暂无取件码');
-  assert.equal(p.data.results[3].message, '已到站，但未发现可用取件码');
+  assert.equal(p.data.results[0].message, '快递还在运输中，暂无取件码');
+  assert.equal(p.data.results[3].message, '暂未获取到取件码');
   assert.equal(p.data.results[4].message, '未发现取件码');
-  assert.equal(p.data.results[2].message, '识别到 1 个取件码');
+  assert.equal(p.data.results[2].message, '识别到 1 件快递');
 });
 test('超时和手动重试仍占用真实请求槽，不因停止等待突破三次并发', async () => {
   const releases = []; let active = 0, peak = 0;
@@ -40,7 +40,7 @@ test('超时和手动重试仍占用真实请求槽，不因停止等待突破�
     releases.push(() => { active--; resolve({ mock: false, lines: ['取件码8888'] }); });
   }));
   p.recognitionTimeoutMs = 5; p.data.images = ['a', 'b', 'c']; await p.recognizeCloud();
-  assert.equal(releases.length, 3); assert.equal(p.data.results[0].error, '识别超时，可单独重试');
+  assert.equal(releases.length, 3); assert.equal(p.data.results[0].error, '识别超时，点击重试');
   const oldId = p.data.results[0].taskId;
   const retry = p.retryImage(imageEvent(p)); await tick();
   assert.notEqual(p.data.results[0].taskId, oldId); assert.equal(p.data.results[0].state, 'queued');
@@ -78,16 +78,16 @@ test('识别异常可在其他图仍运行时单独重试，不重跑成功图�
   assert.equal(calls.join(','), 'bad,slow,bad');
   release({ mock: false, lines: ['已到站'] }); await run;
 });
-test('仅已取记录可右滑，明确横向阈值且最多展开一条，竖滚/短滑/取消不展开', () => {
+test('仅已取记录可左滑，明确横向阈值且最多展开一条，竖滚/短滑/取消不展开', () => {
   const { p, pending, taken, other } = savedPage();
   function swipe(id, dx, dy) { p.touchStart(touch(id, 20, 20)); p.touchMove(touch(id, 20 + dx, 20 + dy)); p.touchEnd(touch(id, 20 + dx, 20 + dy, true)); }
-  swipe(pending, 100, 0); assert.equal(p.data.openDeleteId, '');
-  swipe(taken, 55, 0); assert.equal(p.data.openDeleteId, '');
-  swipe(taken, 60, 50); assert.equal(p.data.openDeleteId, '');
-  swipe(taken, 80, 3); assert.equal(p.data.openDeleteId, taken);
-  swipe(other, 80, 0); assert.equal(p.data.openDeleteId, other);
-  swipe(other, -80, 0); assert.equal(p.data.openDeleteId, '');
-  swipe(taken, 100, 0); p.touchCancel(); assert.equal(p.data.openDeleteId, '');
+  swipe(pending, -100, 0); assert.equal(p.data.openDeleteId, '');
+  swipe(taken, -55, 0); assert.equal(p.data.openDeleteId, '');
+  swipe(taken, -60, 50); assert.equal(p.data.openDeleteId, '');
+  swipe(taken, -80, 3); assert.equal(p.data.openDeleteId, taken);
+  swipe(other, -80, 0); assert.equal(p.data.openDeleteId, other);
+  swipe(other, 80, 0); assert.equal(p.data.openDeleteId, '');
+  swipe(taken, -100, 0); p.touchCancel(); assert.equal(p.data.openDeleteId, '');
   p.suppressTapUntil = 0; p.revealDelete(event(taken)); p.recordTap(); assert.equal(p.data.openDeleteId, '');
   p.revealDelete(event(other)); p.onPageScroll(); assert.equal(p.data.openDeleteId, '');
 });
@@ -149,4 +149,12 @@ test('删除确认期间页面卸载，不写入旧页面也不持久删除', as
   p.revealDelete(event(taken)); const deletion = p.deleteRecord(event(taken));
   const before = JSON.stringify(wx.values); p.onUnload(); release({ confirm: true }); await deletion;
   assert.equal(JSON.stringify(wx.values), before); assert.equal(p.data.records.length, 3);
+});
+test('长按备用入口仅对已取生效，选择菜单后仍需确认且可撤销', async () => {
+  const { p, wx, pending, taken } = savedPage(); let menus = 0, confirmations = 0;
+  wx.showActionSheet = async o => { menus++; assert.equal(o.itemList[0], '删除已取记录'); return { tapIndex: 0 }; };
+  wx.showModal = async () => { confirmations++; return { confirm: true }; };
+  await p.recordLongPress(event(pending)); assert.equal(menus, 0);
+  await p.recordLongPress(event(taken)); assert.equal(menus, 1); assert.equal(confirmations, 1);
+  assert.equal(p.data.records.length, 2); p.undoDelete(); assert.equal(p.data.records.length, 3); p.onUnload();
 });

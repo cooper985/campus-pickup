@@ -55,7 +55,9 @@ async function recognize(imagePath, control = { check() {}, stage() {} }) {
       name: "recognizePickup", data: { imageBase64 }, config: { timeout: 20000 },
     });
   } catch (err) {
-    const code = /network|网络/i.test(err && err.errMsg || "") ? "NETWORK_FAILED" : "CLOUD_FAILED";
+    const message = err && err.errMsg || "";
+    const code = /timeout|timed out|time.?limit|超时/i.test(message) ? "TIMEOUT"
+      : /network|网络/i.test(message) ? "NETWORK_FAILED" : "CLOUD_FAILED";
     log("cloud_roundtrip", cloudStarted, code);
     throw error(code);
   }

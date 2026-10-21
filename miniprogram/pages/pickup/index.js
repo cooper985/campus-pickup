@@ -8,7 +8,7 @@ const { createQueue } = require("../../services/recognition-queue");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { waitSeconds: task.WAIT_TIMEOUT_MS / 1000, images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
@@ -40,6 +40,10 @@ Page({
   },
   recognize() { return this.runRecognition(false); },
   recognizeCloud() { return this.runRecognition(true); },
+  toggleResultLines(e) {
+    const id = e.currentTarget.dataset.taskId;
+    this.setData({ results: this.data.results.map(r => r.taskId === id ? { ...r, showLines: !r.showLines } : r) });
+  },
   retryImage(e) {
     const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId ||
       r.index === Number(e.currentTarget.dataset.index));
@@ -75,8 +79,7 @@ Page({
     if (!this.data.images.length || this.data.loading || this.data.choosing || this.data.importing) return;
     const run = { startedAt: Date.now(), useCloud };
     this.recognitionRun = run;
-    this.setData({ results: [], loading: true, error: "", completed: false, editing: null,
-      waitSeconds: Math.ceil((this.recognitionTimeoutMs || task.WAIT_TIMEOUT_MS) / 1000) });
+    this.setData({ results: [], loading: true, error: "", completed: false, editing: null });
     return Promise.all(this.data.images.map((_, i) => this.startImage(i, run)));
   },
   async startImage(i, run) {
@@ -99,6 +102,7 @@ Page({
       timeoutMs: this.recognitionTimeoutMs,
       onStart: () => { startedAt = Date.now(); update({ state: "running", message: "正在准备图片" }); },
       onStage: stage => update({ message: phases[stage] || "正在识别" }),
+      onSlow: () => update({ message: "还在识别中，可先导入已完成的快递" }),
     });
     this.imageJobs.set(taskId, job);
     try {
@@ -113,12 +117,12 @@ Page({
       const drafts = [...this.data.drafts.filter(r => r.sourceIndex !== i), ...parsed];
       task.log("text_parse", parseStarted);
       this.setData({ drafts, draftGroups: parser.group(drafts) });
-      update({ state: "done", lines: result.lines, mock: result.mock, count: parsed.length,
+      update({ state: "done", lines: result.lines, boxes: result.boxes || [], mock: result.mock, count: parsed.length,
         status: analysis.status, message: analysis.message });
     } catch (err) {
       if (!current()) return;
       const safe = task.error(err && err.code);
-      const message = /^(WAIT_TIMEOUT|TIMEOUT)$/.test(safe.code) ? "识别超时，可单独重试"
+      const message = /^(WAIT_TIMEOUT|TIMEOUT)$/.test(safe.code) ? "识别超时，点击重试"
         : /^(SKIPPED|CANCELLED|IMAGE_READ|IMAGE_COMPRESS|IMAGE_TOO_LARGE|UNSUPPORTED_IMAGE|INVALID_IMAGE)$/.test(safe.code)
           ? safe.message : "识别暂时不可用，请重试";
       update({ state: "failed", status: safe.code, error: message, message: "", retryable: true,
@@ -133,8 +137,10 @@ Page({
           if (!current()) return;
           const appearedMs = Date.now() - run.startedAt;
           update({ appearedMs });
+          const response = this.data.results.find(r => r.taskId === taskId);
           console.info("[pickup-batch]", { taskId, status, appearedMs, elapsedMs: startedAt ? finishedAt - startedAt : 0,
-            queueMs: (startedAt || finishedAt) - queuedAt });
+            queueMs: (startedAt || finishedAt) - queuedAt, lines: response.lines.length,
+            boxes: response.boxes ? response.boxes.filter(Boolean).length : 0, records: response.count });
         });
         this.refreshRecognition();
       }
@@ -219,7 +225,7 @@ Page({
     const dx = e.changedTouches[0].clientX - swipe.x, dy = Math.abs(e.changedTouches[0].clientY - swipe.y);
     if (swipe.axis !== "y" && Math.abs(dx) >= 56 && Math.abs(dx) > dy * 1.5) {
       this.suppressTapUntil = Date.now() + 350;
-      this.setData({ openDeleteId: dx > 0 ? swipe.id : "" });
+      this.setData({ openDeleteId: dx < 0 ? swipe.id : "" });
     }
   },
   touchCancel() { this.swipe = null; this.closeDelete(); },
@@ -227,6 +233,17 @@ Page({
     if (this.data.deleting || this.data.storageBlocked || Date.now() < (this.suppressTapUntil || 0)) return;
     const id = e.currentTarget.dataset.id;
     if (this.data.records.some(r => r.id === id && r.taken)) this.setData({ openDeleteId: id });
+  },
+  async recordLongPress(e) {
+    const id = e.currentTarget.dataset.id;
+    if (this.menuOpen || this.data.deleting || this.data.importing || this.data.storageBlocked ||
+      !this.data.records.some(r => r.id === id && r.taken)) return;
+    this.menuOpen = true;
+    try {
+      const answer = await wx.showActionSheet({ itemList: ["删除已取记录"] });
+      if (answer.tapIndex === 0 && !this.unloaded) { this.revealDelete(e); await this.deleteRecord(e); }
+    } catch (_) { /* Closing the action sheet keeps the record. */ }
+    finally { this.menuOpen = false; }
   },
   clearUndo() {
     clearTimeout(this.undoTimer);

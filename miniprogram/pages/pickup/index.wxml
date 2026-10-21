@@ -2,7 +2,7 @@
   <view class="eyebrow">校园生活 · 取件更轻松</view>
   <view class="heading">今天的快递，一站站取</view>
   <view class="intro">一次选择最多 9 张取件截图，识别后按地点整理。</view>
-  <view class="notice">云端识别会将截图交由腾讯云 OCR 处理，每张图片调用一次。请核对并确认导入；记录仅保存在本机，重启后自动恢复。截图和 OCR 原文不永久保存，清理小程序数据会丢失记录。</view>
+  <view class="notice">截图会交由腾讯云识别，请核对后再导入。取件记录只保存在本机，清理小程序数据会丢失记录。</view>
   <view wx:if="{{storageError}}" class="error" role="alert">{{storageError}}</view>
   <view class="card">
     <view class="section-title">01　选择截图 · {{images.length}} 张</view>
@@ -16,8 +16,22 @@
   <button class="secondary" bindtap="recognize" disabled="{{!images.length || loading || choosing || importing}}">本地模拟（不上传）</button>
   <button class="primary" bindtap="recognizeCloud" disabled="{{!images.length || loading || choosing || importing}}" loading="{{loading}}">{{loading ? progress : '云端识别所选截图'}}</button>
   <view wx:if="{{loading}}" class="actions"><button bindtap="cancelRecognition">取消本批识别</button></view>
-  <view wx:if="{{loading}}" class="hint">最多同时识别 3 张；每张开始后最多等待 {{waitSeconds}} 秒。跳过、取消或超时只停止等待，云端请求可能继续执行并占用识别额度；单独重试会重新调用。</view>
+  <view wx:if="{{loading}}" class="hint">识别结果会逐张显示，已完成的快递可以先导入。</view>
   <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
+  <view wx:for="{{results}}" wx:key="taskId" class="card image-result">
+    <view class="section-title">截图 {{item.index}} · {{item.state === 'queued' ? '等待中' : (item.state === 'running' ? '识别中' : (item.error ? '未完成' : (item.mock ? '模拟结果' : '已完成')))}}</view>
+    <view wx:if="{{item.message}}" class="hint">{{item.message}}</view>
+
+    <view wx:if="{{item.state === 'queued' || item.state === 'running'}}" class="actions">
+      <button size="mini" data-task-id="{{item.taskId}}" bindtap="skipImage">跳过此图</button>
+      <button size="mini" data-task-id="{{item.taskId}}" bindtap="cancelImage">取消此图</button>
+    </view>
+    <button wx:if="{{item.retryable}}" size="mini" data-task-id="{{item.taskId}}" bindtap="retryImage" disabled="{{importing}}">重试此图</button>
+    <view wx:if="{{item.error}}" class="error">{{item.error}}</view>
+    <view wx:if="{{item.retained}}" class="hint">本图上次的成功草稿已保留，请核对后导入。</view>
+    <button wx:if="{{item.lines.length}}" size="mini" class="secondary" data-task-id="{{item.taskId}}" bindtap="toggleResultLines">{{item.showLines ? '收起识别文字' : '查看识别文字'}}</button>
+    <view wx:if="{{item.showLines}}"><view wx:for="{{item.lines}}" wx:for-item="line" wx:key="index" class="result-line"><text user-select="{{true}}">{{line}}</text></view></view>
+  </view>
   <view wx:if="{{completed || drafts.length}}">
     <view class="heading board-title">待确认导入 · {{drafts.length}} 件</view>
     <view wx:if="{{mock}}" class="notice">模拟示例，与截图内容无关；确认导入也会保存到本机。</view>
@@ -38,17 +52,16 @@
     <view wx:for="{{groups}}" wx:key="station" wx:for-item="group" class="card">
       <view class="section-title">{{group.station}}</view>
       <view wx:for="{{group.items}}" wx:key="id" class="swipe-shell" data-id="{{item.id}}"
-        bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel" catchtap="recordTap">
-        <button wx:if="{{item.taken && openDeleteId === item.id}}" class="delete-button" data-id="{{item.id}}" catchtap="deleteRecord"
-          disabled="{{deleting || importing || storageBlocked}}">删除</button>
+        bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel" catchtap="recordTap" bindlongpress="recordLongPress">
+        <button wx:if="{{item.taken && openDeleteId === item.id}}" class="delete-button" size="mini" data-id="{{item.id}}" catchtap="deleteRecord"
+          disabled="{{deleting || importing || storageBlocked}}"><text class="delete-label">删除</text></button>
         <view class="parcel swipe-content {{item.taken ? 'taken' : ''}} {{openDeleteId === item.id ? 'swipe-open' : ''}}">
           <text class="pickup-code" user-select="{{true}}">{{item.code}}</text>
           <view class="hint">{{item.carrier || '快递公司未识别'}} · {{item.taken ? '已取' : '待取'}}</view>
-          <view wx:if="{{item.taken}}" class="hint">向右滑动可删除，也可点击“删除…”</view>
+          <view wx:if="{{item.taken}}" class="hint">左滑或长按可删除</view>
           <view class="actions">
             <button size="mini" class="secondary" data-id="{{item.id}}" catchtap="editRecord" disabled="{{loading || importing || deleting || storageBlocked}}">修改</button>
             <button size="mini" class="secondary" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{loading || importing || deleting || storageBlocked}}">{{item.taken ? '恢复待取' : '我已取件'}}</button>
-            <button wx:if="{{item.taken}}" size="mini" class="delete-link" data-id="{{item.id}}" catchtap="revealDelete" disabled="{{deleting || importing || storageBlocked}}">删除…</button>
           </view>
         </view>
       </view>
@@ -59,19 +72,6 @@
     <input value="{{editing.station}}" bindinput="editStation" placeholder="取件地点" maxlength="100" />
     <input value="{{editing.code}}" bindinput="editCode" placeholder="取件码" maxlength="32" />
     <view class="actions"><button size="mini" bindtap="cancelEdit">取消</button><button size="mini" class="primary" bindtap="saveEdit">保存修改</button></view>
-  </view>
-  <view wx:for="{{results}}" wx:key="taskId" class="card image-result">
-    <view class="section-title">截图 {{item.index}} · {{item.state === 'queued' ? '等待中' : (item.state === 'running' ? '识别中' : (item.error ? '未完成' : (item.mock ? '模拟结果' : '已完成')))}}</view>
-    <view wx:if="{{item.message}}" class="hint">{{item.message}}</view>
-    <view wx:if="{{item.state === 'queued'}}" class="hint">等待可用识别位置；已超时的云端请求结束后会释放位置。</view>
-    <view wx:if="{{item.state === 'queued' || item.state === 'running'}}" class="actions">
-      <button size="mini" data-task-id="{{item.taskId}}" bindtap="skipImage">跳过此图</button>
-      <button size="mini" data-task-id="{{item.taskId}}" bindtap="cancelImage">取消此图</button>
-    </view>
-    <button wx:if="{{item.retryable}}" size="mini" data-task-id="{{item.taskId}}" bindtap="retryImage" disabled="{{importing}}">重试此图</button>
-    <view wx:if="{{item.error}}" class="error">{{item.error}}</view>
-    <view wx:if="{{item.retained}}" class="hint">本图上次的成功草稿已保留，请核对后导入。</view>
-    <view wx:for="{{item.lines}}" wx:for-item="line" wx:key="index" class="result-line"><text user-select="{{true}}">{{line}}</text></view>
   </view>
   <view wx:if="{{undoAvailable}}" class="undo-bar" catchtap="recordTap">
     <text>已删除 · 5 秒内可撤销</text><button class="undo-action" size="mini" catchtap="undoDelete" disabled="{{storageBlocked || importing || deleting}}">撤销</button>

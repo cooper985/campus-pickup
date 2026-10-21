@@ -5,7 +5,7 @@ test("五个取件码分四站，过滤图标、运单与电话",()=>{
  const records=parse(["今日有5个快递待取","校园邮政","大学路14号","电话","取件码1018-0079","亩","邮政快递包裹9810000000000","支持退换货北门水店","北门水店","电话","取件码186-220","亩","中通快递78000000000000","取件码 186-139","菜鸟驿站","西区校园超市店","取件码1-1-6086","极兔速递JT5400000000000","南门好时店","南门小区6栋","电话","TTO","取件码1-1-4956","回","中通快递","查看全部快递"]);
  assert.deepEqual(records.map(r=>r.code),["1018-0079","186-220","186-139","1-1-6086","1-1-4956"]);
  assert.deepEqual(group(records).map(g=>g.items.length),[1,2,1,1]);
- assert.equal(records[3].station,UNKNOWN); // Ambiguous names must not be concatenated.
+ assert.equal(records[3].station,"西区校园超市店"); // A station brand and its branch describe the same block.
 });
 test("独立标签、全角与横线；长运单不误识别",()=>{
  assert.equal(parse(["取件码：","１２－３４－５６７８"])[0].code,"12-34-5678");

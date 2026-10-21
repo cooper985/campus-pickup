@@ -51,3 +51,8 @@ test('读图超时或取消后不能继续发送云端请求',async()=>{
  await assert.rejects(job.promise,e=>e.code==='WAIT_TIMEOUT'); release({data:small});
  await new Promise(r=>setImmediate(r)); assert.equal(s.calls.length,0);
 });
+test('微信实际返回超时错误时使用超时类型，普通服务异常仍为服务异常', async () => {
+ const s=service({image:small},{ok:true,mock:false,lines:[]});
+ s.wx.cloud.callFunction=async()=>{throw {errMsg:'cloud.callFunction:fail request timeout'};};
+ await assert.rejects(s.recognize('image'),e=>e.code==='TIMEOUT');
+});
