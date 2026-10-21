@@ -16,18 +16,24 @@ function byteLength(base64) {
 }
 
 async function recognize(imagePath, control = { check() {}, stage() {} }) {
+  const timing = (stage, started, code, metrics = {}) => log(stage, started, code, { ...metrics, traceId: control.traceId });
   async function measure(stage, work) {
     control.check();
     if (control.stage) control.stage(stage);
     const started = Date.now();
-    try { const value = await work(); log(stage, started); control.check(); return value; }
-    catch (err) { log(stage, started, err && err.code || "OCR_FAILED"); throw err; }
+    try { const value = await work(); timing(stage, started); control.check(); return value; }
+    catch (err) { timing(stage, started, err && err.code || "OCR_FAILED"); throw err; }
   }
   const prepareStarted = Date.now();
   control.check();
-  let imageBase64 = await measure("image_read", () => readImage(imagePath));
-  control.check();
-  if (byteLength(imageBase64) > MAX_BYTES) {
+  // Inspect size without materializing the original image as a large JS string.
+  const info = await measure("image_stat", () => new Promise((resolve, reject) => {
+    wx.getFileSystemManager().getFileInfo({ filePath: imagePath,
+      success: resolve, fail: () => reject(error("IMAGE_READ")) });
+  }));
+  timing("image_size", prepareStarted, "OK", { imageBytes: info.size });
+  let preparedPath = imagePath;
+  if (info.size > MAX_BYTES) {
     const compressed = await measure("image_compress", () => new Promise((resolve, reject) => {
       wx.compressImage({
         src: imagePath, quality: 70,
@@ -36,16 +42,17 @@ async function recognize(imagePath, control = { check() {}, stage() {} }) {
       });
     }));
     control.check();
-    imageBase64 = await measure("compressed_read", () => readImage(compressed.tempFilePath));
-    control.check();
+    preparedPath = compressed.tempFilePath;
   }
+  const imageBase64 = await measure(preparedPath === imagePath ? "image_read" : "compressed_read", () => readImage(preparedPath));
   if (byteLength(imageBase64) > MAX_BYTES) {
     throw error("IMAGE_TOO_LARGE");
   }
   if (!/^(iVBORw0KGgo|\/9j\/)/.test(imageBase64)) {
     throw error("UNSUPPORTED_IMAGE");
   }
-  log("image_prepare", prepareStarted);
+  timing("image_prepare", prepareStarted, "OK", { imageBytes: byteLength(imageBase64), base64Chars: imageBase64.length,
+    requestBytes: imageBase64.length + '{"imageBase64":""}'.length });
   control.check();
   let response;
   const cloudStarted = Date.now();
@@ -58,12 +65,19 @@ async function recognize(imagePath, control = { check() {}, stage() {} }) {
     const message = err && err.errMsg || "";
     const code = /timeout|timed out|time.?limit|超时/i.test(message) ? "TIMEOUT"
       : /network|网络/i.test(message) ? "NETWORK_FAILED" : "CLOUD_FAILED";
-    log("cloud_roundtrip", cloudStarted, code);
+    timing("cloud_roundtrip", cloudStarted, code);
     throw Object.assign(error(code), { origin: "cloud_call", sdkCode: Number.isInteger(err && err.errCode) ? err.errCode : null });
   }
-  log("cloud_roundtrip", cloudStarted);
-  control.check();
+  const roundtripMs = Date.now() - cloudStarted;
+  timing("cloud_roundtrip", cloudStarted);
   const result = response && response.result;
+  const ocrMs = result && result.timings && result.timings.ocrMs;
+  if (Number.isFinite(ocrMs) && ocrMs >= 0 && ocrMs <= roundtripMs) {
+    // Residual includes cold start / serialization / dispatch, not pure network latency.
+    timing("cloud_breakdown", cloudStarted, "OK", { ocrMs, overheadMs: roundtripMs - ocrMs });
+  }
+  try { control.check(); }
+  catch (err) { timing("cloud_late_result", cloudStarted, "CANCELLED"); throw err; }
   if (result && result.ok === false) {
     throw Object.assign(error(result.error && result.error.code), { origin: "cloud_result" });
   }

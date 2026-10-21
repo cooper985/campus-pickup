@@ -1,7 +1,7 @@
 // Waiting is cancellable; wx.cloud.callFunction itself is not aborted.
 const PREPARE_TIMEOUT_MS = 15000;
-// The deployed function has a 20s execution limit; this only bounds frontend waiting, not the physical call.
-const WAIT_TIMEOUT_MS = 22000;
+// Roundtrip includes upload, cold start and download, not just the function's 20s execution.
+const WAIT_TIMEOUT_MS = 60000;
 const SLOW_AFTER_MS = 8000;
 const messages = {
   IMAGE_READ: "无法读取图片，请重新选择。",
@@ -25,8 +25,17 @@ const messages = {
 };
 const known = code => typeof code === "string" && Object.prototype.hasOwnProperty.call(messages, code);
 function error(code) { return Object.assign(new Error(known(code) ? messages[code] : messages.OCR_FAILED), { code: known(code) ? code : "OCR_FAILED" }); }
-function log(stage, started, code = "OK") {
-  console.info("[pickup-timing]", { stage, ms: Math.max(0, Date.now() - started), type: code === "OK" || known(code) ? code : "OCR_FAILED" });
+function isDevelopment() {
+  try { return wx.getAccountInfoSync().miniProgram.envVersion === "develop"; }
+  catch (_) { return false; }
+}
+function log(stage, started, code = "OK", metrics = {}) {
+  if (!isDevelopment()) return;
+  const safe = {};
+  for (const key of ["traceId", "imageBytes", "base64Chars", "requestBytes", "ocrMs", "overheadMs"]) {
+    if (Number.isFinite(metrics[key]) && metrics[key] >= 0) safe[key] = metrics[key];
+  }
+  console.info("[pickup-timing]", { stage, ms: Math.max(0, Date.now() - started), type: code === "OK" || known(code) ? code : "OCR_FAILED", ...safe });
 }
 function start(work, timeoutMs, onStage = () => {}, onSlow = () => {}) {
   let active = true, timer, slowTimer, rejectWait, phase = "image_prepare", phaseStarted = Date.now();
@@ -48,4 +57,4 @@ function start(work, timeoutMs, onStage = () => {}, onSlow = () => {}) {
   const settled = Promise.resolve(result).then(() => {}, () => {});
   return { promise, settled, cancel: (code = "CANCELLED") => stop(code) };
 }
-module.exports = { start, error, log, WAIT_TIMEOUT_MS, PREPARE_TIMEOUT_MS, SLOW_AFTER_MS };
+module.exports = { start, error, log, isDevelopment, WAIT_TIMEOUT_MS, PREPARE_TIMEOUT_MS, SLOW_AFTER_MS };

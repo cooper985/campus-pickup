@@ -96,9 +96,13 @@ Page({
     this.setData({ results: [...this.data.results.filter(r => r.index !== i + 1), entry].sort((a, b) => a.index - b.index) });
     this.refreshRecognition();
     const phases = { image_read: "识别中", image_compress: "识别中", compressed_read: "识别中", cloud_roundtrip: "识别中" };
-    const job = this.ocrQueue.add(control => run.useCloud ? cloudOcr.recognize(imagePath, control) : mockOcr.recognize(), {
+    const traceId = this.taskSequence;
+    const job = this.ocrQueue.add(control => {
+      control.traceId = traceId;
+      return run.useCloud ? cloudOcr.recognize(imagePath, control) : mockOcr.recognize();
+    }, {
       timeoutMs: this.recognitionTimeoutMs,
-      onStart: () => { startedAt = Date.now(); update({ state: "running", message: "识别中" }); },
+      onStart: () => { startedAt = Date.now(); task.log("queue_wait", queuedAt, "OK", { traceId }); update({ state: "running", message: "识别中" }); },
       onStage: stage => update({ message: phases[stage] || "正在识别" }),
       onSlow: () => update({ message: "还在识别中，可先导入已完成的快递" }),
     });
@@ -114,7 +118,7 @@ Page({
       const parsed = analysis.records.map((r, j) => ({ ...r, ...metadata, id: `draft-${taskId}-${j}`, taken: false }));
       // A valid no-code response must also replace old drafts from this image.
       const drafts = [...this.data.drafts.filter(r => r.sourceIndex !== i), ...parsed];
-      task.log("text_parse", parseStarted);
+      task.log("text_parse", parseStarted, "OK", { traceId });
       this.setData({ drafts, draftGroups: parser.group(drafts) });
       update({ state: "done", mock: result.mock, count: parsed.length, uncertainCount: analysis.uncertainCount,
         status: analysis.status, message: analysis.message, retryable: analysis.status === "unrecognized" });
@@ -131,7 +135,7 @@ Page({
         message: cancelled ? "已跳过" : "", retryable: true,
         retained: this.data.drafts.some(r => r.sourceIndex === i) });
       task.log("image_total", startedAt || queuedAt, safe.code);
-      console.info("[pickup-failure]", { taskId, type: safe.code,
+      if (task.isDevelopment()) console.info("[pickup-failure]", { taskId, type: safe.code,
         origin: ["client_wait", "cloud_call", "cloud_result"].includes(err && err.origin) ? err.origin : "client",
         sdkCode: Number.isInteger(err && err.sdkCode) ? err.sdkCode : null });
     } finally {
@@ -145,7 +149,7 @@ Page({
           const appearedMs = Date.now() - run.startedAt;
           update({ appearedMs });
           const response = this.data.results.find(r => r.taskId === taskId);
-          console.info("[pickup-batch]", { taskId, status, appearedMs, elapsedMs: startedAt ? finishedAt - startedAt : 0,
+          if (task.isDevelopment()) console.info("[pickup-batch]", { taskId, status, appearedMs, elapsedMs: startedAt ? finishedAt - startedAt : 0,
             queueMs: (startedAt || finishedAt) - queuedAt, records: response.count });
         });
         this.refreshRecognition();

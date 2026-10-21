@@ -9,6 +9,7 @@ function service(files, result) {
   const calls = [];
   const wx = {
     getFileSystemManager: () => ({
+      getFileInfo: ({ filePath, success }) => success({ size: Buffer.from(files[filePath], "base64").length }),
       readFile: ({ filePath, success }) => success({ data: files[filePath] }),
     }),
     compressImage: ({ success }) => success({ tempFilePath: "compressed" }),
@@ -34,7 +35,11 @@ test("云识别传图并保留服务器模式；错误不自动重试", async ()
 });
 test("大图压缩后再上传，仍超限或格式错误时不上传", async () => {
   const s = service({ image: large, compressed: small }, { ok: true, mock: true, lines: [] });
+  const reads = [];
+  const manager = s.wx.getFileSystemManager();
+  s.wx.getFileSystemManager = () => ({ ...manager, readFile: options => { reads.push(options.filePath); manager.readFile(options); } });
   await s.recognize("image");
+  assert.deepEqual(reads, ["compressed"]);
   assert.equal(s.calls[0].data.imageBase64, small);
   const tooLarge = service({ image: large, compressed: large });
   await assert.rejects(tooLarge.recognize("image"), /仍超过/);
@@ -43,10 +48,29 @@ test("大图压缩后再上传，仍超限或格式错误时不上传", async ()
   await assert.rejects(invalid.recognize("image"), /仅支持/);
   assert.equal(invalid.calls.length, 0);
 });
+
+test('开发诊断拆分云端OCR与往返剩余耗时，只记录数值，不包含原图和原文', async () => {
+ const logs=[], taskModule={exports:{}};
+ const wx={getAccountInfoSync:()=>({miniProgram:{envVersion:'develop'}})};
+ vm.runInNewContext(fs.readFileSync('miniprogram/services/recognition-task.js','utf8'),
+  {module:taskModule,wx,setTimeout,clearTimeout,console:{info:(...args)=>logs.push(args)}});
+ const s=service({image:small},{ok:true,mock:false,lines:['private text'],timings:{ocrMs:0}});
+ const module={exports:{}};
+ vm.runInNewContext(source,{wx:s.wx,module,require:()=>taskModule.exports});
+ await module.exports.recognize('image',{check(){},stage(){},traceId:7});
+ const preparation=logs.find(x=>x[1].stage==='image_prepare')[1];
+ assert.equal(preparation.imageBytes,9); assert.equal(preparation.base64Chars,small.length);
+ assert.equal(preparation.requestBytes,JSON.stringify({imageBase64:small}).length);
+ const breakdown=logs.find(x=>x[1].stage==='cloud_breakdown')[1];
+ assert.equal(breakdown.traceId,7); assert.equal(breakdown.ocrMs,0); assert.ok(breakdown.overheadMs>=0);
+ assert.ok(!JSON.stringify(logs).includes(small)); assert.ok(!JSON.stringify(logs).includes('private text'));
+ wx.getAccountInfoSync=()=>({miniProgram:{envVersion:'release'}});
+ const count=logs.length; await module.exports.recognize('image'); assert.equal(logs.length,count);
+});
 test('读图超时或取消后不能继续发送云端请求',async()=>{
  const { start }=require('../miniprogram/services/recognition-task');
  const s=service({image:small},{ok:true,mock:false,lines:[]}); let release;
- s.wx.getFileSystemManager=()=>({readFile:({success})=>release=success});
+ s.wx.getFileSystemManager=()=>({getFileInfo:({success})=>success({size:9}),readFile:({success})=>release=success});
  const job=start(control=>s.recognize('image',control),5);
  await assert.rejects(job.promise,e=>e.code==='WAIT_TIMEOUT'); release({data:small});
  await new Promise(r=>setImmediate(r)); assert.equal(s.calls.length,0);

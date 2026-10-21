@@ -41,7 +41,7 @@ test('原图字节→真实压缩输入回放→云适配器→并发页面→�
     assert.equal(createHash('sha256').update(prepared).digest('hex'), c.preparedImageSha256);
     byImage.set(prepared.toString('base64'), c.result);
   }
-  wx.getFileSystemManager = () => ({ readFile: ({ filePath, success }) => success({ data: fs.readFileSync(filePath).toString('base64') }) });
+  wx.getFileSystemManager = () => ({ getFileInfo: ({ filePath, success }) => success({size: fs.statSync(filePath).size}), readFile: ({ filePath, success }) => success({ data: fs.readFileSync(filePath).toString('base64') }) });
   wx.compressImage = ({ src, success }) => { compressCalls++; success({ tempFilePath: path.join(path.dirname(src), `prepared-${path.basename(src)}`) }); };
   wx.cloud = { callFunction: async options => {
     cloudCalls++; assert.equal(options.name, 'recognizePickup');
@@ -83,7 +83,18 @@ test('准备和云调用独立计时，取消及真正超时不会伪装为运�
   t.mock.timers.tick(19000); returned('success'); assert.equal(await job.promise, 'success');
   const hanging = task.start(control => { control.stage('cloud_roundtrip'); return new Promise(() => {}); });
   const stopped = hanging.promise.catch(err => err.code);
-  t.mock.timers.tick(22000); assert.equal(await stopped, 'WAIT_TIMEOUT');
+  t.mock.timers.tick(task.WAIT_TIMEOUT_MS); assert.equal(await stopped, 'WAIT_TIMEOUT');
+});
+
+test('30秒云端往返：857的22秒截止丢弃成功结果，新版接受同一响应', async t => {
+ t.mock.timers.enable({apis:['setTimeout','Date']});
+ const previous=oldModule('8573b6e','recognition-task');
+ let release; const response=new Promise(resolve=>release=resolve);
+ const work=control=>{control.stage('cloud_roundtrip');return response;};
+ const jobs=[previous.start(work),task.start(work)];
+ const outcomes=jobs.map(job=>job.promise.then(value=>value,err=>err.code));
+ t.mock.timers.tick(30000); await Promise.resolve(); release('success');
+ assert.deepEqual(await Promise.all(outcomes),['WAIT_TIMEOUT','success']);
 });
 
 const androidCases = require('./fixtures/android-cases-20261021.json');
