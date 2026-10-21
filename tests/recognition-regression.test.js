@@ -85,3 +85,31 @@ test('准备和云调用独立计时，取消及真正超时不会伪装为运�
   const stopped = hanging.promise.catch(err => err.code);
   t.mock.timers.tick(22000); assert.equal(await stopped, 'WAIT_TIMEOUT');
 });
+
+const androidCases = require('./fixtures/android-cases-20261021.json');
+test('新收到的两张原图真实OCR返回：运输不生成记录，字母码与已签收并存仍保留服务站', () => {
+  for (const c of androidCases) {
+    const image = path.join('test-data/private/android-cases-20261021', c.case === 'jd' ? 'jd-service.jpg' : 'in-transit.jpg');
+    if (fs.existsSync(image)) assert.equal(createHash('sha256').update(fs.readFileSync(image)).digest('hex'), c.imageSha256);
+    assert.equal(c.result.ok, true); assert.equal(c.result.mock, false);
+    const result = parser.analyze(c.result.lines, 0, c.result.boxes);
+    assert.deepEqual(result.records.map(r => [r.code, r.station]), c.expected);
+    assert.equal(result.message, c.case === 'jd' ? '识别到 1 件快递' : '还在运输');
+    assert.equal(result.uncertainCount, 0);
+    if (c.case === 'jd') assert.ok(c.result.lines.includes('已签收'));
+  }
+});
+test('真实返回经过页面：有码、运输与请求失败分别呈现，失败不清空成功草稿也不伪装为业务状态', async () => {
+  const jd = androidCases.find(c => c.case === 'jd').result, transit = androidCases.find(c => c.case === 'transit').result;
+  for (const [code, message] of [['TIMEOUT','识别超时，请重试'],['NETWORK_FAILED','网络异常，请重试'],['CLOUD_FAILED','连接失败，请重试'],['OCR_FAILED','识别服务暂不可用，请重试']]) {
+    const calls = [], wx = fakeStorage();
+    const p = page(wx, async image => { calls.push(image); if (image === 'failed') throw {code,message:'private detail'}; return image === 'jd' ? jd : transit; });
+    p.data.images = ['jd','transit','failed']; await p.recognizeCloud();
+    assert.equal(p.data.results[0].message, '识别到 1 件快递'); assert.equal(p.data.results[1].message, '还在运输');
+    assert.equal(p.data.results[2].error, message); assert.equal(p.data.results[2].status, code); assert.equal(p.data.results[2].retryable, true);
+    assert.deepEqual(Array.from(p.data.drafts,r=>[r.code,r.station]), [['B3-4-7401','河南工业大学服务站']]);
+    assert.equal(calls.length,3); assert.equal(p.data.records.length,0);
+    assert.ok(p.data.results.every(r=>!r.lines && !r.boxes));
+    assert.ok(!JSON.stringify(p.data.results).includes('private detail')); p.onUnload();
+  }
+});

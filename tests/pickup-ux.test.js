@@ -40,7 +40,7 @@ test('超时和手动重试仍占用真实请求槽，不因停止等待突破�
     releases.push(() => { active--; resolve({ mock: false, lines: ['取件码8888'] }); });
   }));
   p.recognitionTimeoutMs = 5; p.data.images = ['a', 'b', 'c']; await p.recognizeCloud();
-  assert.equal(releases.length, 3); assert.equal(p.data.results[0].error, '识别不出来');
+  assert.equal(releases.length, 3); assert.equal(p.data.results[0].error, '识别超时，请重试');
   const oldId = p.data.results[0].taskId;
   const retry = p.retryImage(imageEvent(p)); await tick();
   assert.notEqual(p.data.results[0].taskId, oldId); assert.equal(p.data.results[0].state, 'queued');
@@ -73,7 +73,7 @@ test('识别异常可在其他图仍运行时单独重试，不重跑成功图�
   });
   p.data.drafts = [{ id: 'old', sourceIndex: 0, code: '1111', station: '测试驿站' }];
   p.data.images = ['bad', 'slow']; const run = p.recognizeCloud(); await tick();
-  assert.equal(p.data.results[0].error, '识别不出来'); assert.equal(p.data.loading, true);
+  assert.equal(p.data.results[0].error, '连接失败，请重试'); assert.equal(p.data.loading, true);
   fail = false; await p.retryImage(imageEvent(p)); assert.equal(p.data.drafts.length, 0);
   assert.equal(calls.join(','), 'bad,slow,bad');
   release({ mock: false, lines: ['已到站'] }); await run;
@@ -167,7 +167,7 @@ test('四种结果使用简短文案，部分歧义只排除疑项，不把原�
  p.data.images=['good','transit','none','failed','empty']; await p.recognizeCloud();
  assert.deepEqual(Array.from(p.data.drafts,r=>r.code),['7-2-4567','456789']);
  assert.equal(p.data.results[0].uncertainCount,1);
- assert.deepEqual(Array.from(p.data.results,r=>r.error||r.message),['识别到 2 件快递','还在运输','没有取件码','识别不出来','识别不出来']);
+ assert.deepEqual(Array.from(p.data.results,r=>r.error||r.message),['识别到 2 件快递','还在运输','没有取件码','网络异常，请重试','识别不出来']);
  assert.equal(p.data.results[3].status,'NETWORK_FAILED');
  assert.ok(p.data.results[3].retryable && p.data.results[4].retryable);
  assert.ok(!JSON.stringify(p.data.results).includes('private-secret'));

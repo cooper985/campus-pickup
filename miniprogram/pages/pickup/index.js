@@ -122,7 +122,12 @@ Page({
       if (!current()) return;
       const safe = task.error(err && err.code);
       const cancelled = safe.code === "SKIPPED" || safe.code === "CANCELLED";
-      update({ state: "failed", status: safe.code, error: cancelled ? "" : "识别不出来",
+      const retryMessage = /^(WAIT_TIMEOUT|TIMEOUT)$/.test(safe.code) ? "识别超时，请重试"
+        : safe.code === "NETWORK_FAILED" ? "网络异常，请重试"
+          : safe.code === "CLOUD_FAILED" ? "连接失败，请重试"
+            : /^(OCR_FAILED|OCR_AUTH|OCR_UNAVAILABLE|BAD_RESPONSE|FORBIDDEN|UNAUTHORIZED|CONFIG_ERROR)$/.test(safe.code)
+              ? "识别服务暂不可用，请重试" : "识别不出来";
+      update({ state: "failed", status: safe.code, error: cancelled ? "" : retryMessage,
         message: cancelled ? "已跳过" : "", retryable: true,
         retained: this.data.drafts.some(r => r.sourceIndex === i) });
       task.log("image_total", startedAt || queuedAt, safe.code);
