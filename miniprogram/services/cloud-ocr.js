@@ -59,13 +59,13 @@ async function recognize(imagePath, control = { check() {}, stage() {} }) {
     const code = /timeout|timed out|time.?limit|超时/i.test(message) ? "TIMEOUT"
       : /network|网络/i.test(message) ? "NETWORK_FAILED" : "CLOUD_FAILED";
     log("cloud_roundtrip", cloudStarted, code);
-    throw error(code);
+    throw Object.assign(error(code), { origin: "cloud_call" });
   }
   log("cloud_roundtrip", cloudStarted);
   control.check();
   const result = response && response.result;
   if (result && result.ok === false) {
-    throw error(result.error && result.error.code);
+    throw Object.assign(error(result.error && result.error.code), { origin: "cloud_result" });
   }
   if (!result || result.ok !== true || typeof result.mock !== "boolean" ||
       !Array.isArray(result.lines) || !result.lines.every(line => typeof line === "string")) {

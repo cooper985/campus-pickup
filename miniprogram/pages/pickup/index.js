@@ -6,6 +6,7 @@ const duplicates = require("../../services/pickup-duplicates");
 const task = require("../../services/recognition-task");
 const { createQueue } = require("../../services/recognition-queue");
 const MAX_BYTES = 5 * 1024 * 1024;
+const DIAGNOSTIC_BUILD = "20261021-d1";
 
 Page({
   data: { images: [], loading: false, choosing: false, error: "", completed: false,
@@ -43,6 +44,16 @@ Page({
   toggleResultLines(e) {
     const id = e.currentTarget.dataset.taskId;
     this.setData({ results: this.data.results.map(r => r.taskId === id ? { ...r, showLines: !r.showLines } : r) });
+  },
+  copyRecognitionDiagnostic(e) {
+    const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId);
+    if (!result || !result.error || /^(SKIPPED|CANCELLED)$/.test(result.status)) return;
+    // Copy only this allowlist; never include paths, OCR text, codes, or account identifiers.
+    wx.setClipboardData({ data: JSON.stringify({ build: DIAGNOSTIC_BUILD, code: result.status,
+      origin: result.failureOrigin, phase: result.phase, elapsedMs: result.elapsedMs, queueMs: result.queueMs }),
+      success: () => wx.showToast({ title: "问题信息已复制", icon: "none" }),
+      fail: () => wx.showToast({ title: "复制失败，请重试", icon: "none" }),
+    });
   },
   retryImage(e) {
     const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId ||
@@ -93,7 +104,7 @@ Page({
       if (!current()) return;
       this.setData({ results: this.data.results.map(r => r.taskId === taskId ? { ...r, ...changes } : r) });
     };
-    const entry = { taskId, index: i + 1, state: "queued", status: "queued", message: "排队中", error: "",
+    const entry = { taskId, index: i + 1, state: "queued", status: "queued", phase: "queued", message: "排队中", error: "",
       lines: [], count: 0, retryable: false, mock: !run.useCloud };
     this.setData({ results: [...this.data.results.filter(r => r.index !== i + 1), entry].sort((a, b) => a.index - b.index) });
     this.refreshRecognition();
@@ -101,7 +112,7 @@ Page({
     const job = this.ocrQueue.add(control => run.useCloud ? cloudOcr.recognize(imagePath, control) : mockOcr.recognize(), {
       timeoutMs: this.recognitionTimeoutMs,
       onStart: () => { startedAt = Date.now(); update({ state: "running", message: "正在准备图片" }); },
-      onStage: stage => update({ message: phases[stage] || "正在识别" }),
+      onStage: stage => update({ phase: stage, message: phases[stage] || "正在识别" }),
       onSlow: () => update({ message: "还在识别中，可先导入已完成的快递" }),
     });
     this.imageJobs.set(taskId, job);
@@ -126,6 +137,7 @@ Page({
         : /^(SKIPPED|CANCELLED|IMAGE_READ|IMAGE_COMPRESS|IMAGE_TOO_LARGE|UNSUPPORTED_IMAGE|INVALID_IMAGE)$/.test(safe.code)
           ? safe.message : "识别暂时不可用，请重试";
       update({ state: "failed", status: safe.code, error: message, message: "", retryable: true,
+        failureOrigin: ["client_wait", "cloud_call", "cloud_result"].includes(err && err.origin) ? err.origin : "client",
         retained: this.data.drafts.some(r => r.sourceIndex === i) });
     } finally {
       this.imageJobs.delete(taskId);

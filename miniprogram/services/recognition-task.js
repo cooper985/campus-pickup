@@ -38,7 +38,7 @@ function start(work, timeoutMs, onStage = () => {}, onSlow = () => {}) {
   };
   const check = () => { if (!active) throw error("CANCELLED"); };
   const stopped = new Promise((_, reject) => { rejectWait = reject; });
-  const stop = code => { if (active) { active = false; log(phase, phaseStarted, code); rejectWait(error(code)); } };
+  const stop = code => { if (active) { active = false; log(phase, phaseStarted, code); rejectWait(Object.assign(error(code), { origin: "client_wait" })); } };
   timer = setTimeout(() => stop("WAIT_TIMEOUT"), timeoutMs === undefined ? PREPARE_TIMEOUT_MS : timeoutMs);
   slowTimer = setTimeout(() => { if (active) onSlow(); }, SLOW_AFTER_MS);
   let result;

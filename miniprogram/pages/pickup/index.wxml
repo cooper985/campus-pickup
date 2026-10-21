@@ -28,6 +28,7 @@
     </view>
     <button wx:if="{{item.retryable}}" size="mini" data-task-id="{{item.taskId}}" bindtap="retryImage" disabled="{{importing}}">重试此图</button>
     <view wx:if="{{item.error}}" class="error">{{item.error}}</view>
+    <button wx:if="{{item.error && item.status !== 'SKIPPED' && item.status !== 'CANCELLED'}}" size="mini" class="secondary" data-task-id="{{item.taskId}}" bindtap="copyRecognitionDiagnostic">反馈问题</button>
     <view wx:if="{{item.retained}}" class="hint">本图上次的成功草稿已保留，请核对后导入。</view>
     <button wx:if="{{item.lines.length}}" size="mini" class="secondary" data-task-id="{{item.taskId}}" bindtap="toggleResultLines">{{item.showLines ? '收起识别文字' : '查看识别文字'}}</button>
     <view wx:if="{{item.showLines}}"><view wx:for="{{item.lines}}" wx:for-item="line" wx:key="index" class="result-line"><text user-select="{{true}}">{{line}}</text></view></view>

@@ -41,6 +41,7 @@ test('超时和手动重试仍占用真实请求槽，不因停止等待突破�
   }));
   p.recognitionTimeoutMs = 5; p.data.images = ['a', 'b', 'c']; await p.recognizeCloud();
   assert.equal(releases.length, 3); assert.equal(p.data.results[0].error, '识别超时，点击重试');
+  assert.equal(p.data.results[0].failureOrigin, 'client_wait');
   const oldId = p.data.results[0].taskId;
   const retry = p.retryImage(imageEvent(p)); await tick();
   assert.notEqual(p.data.results[0].taskId, oldId); assert.equal(p.data.results[0].state, 'queued');
@@ -49,6 +50,23 @@ test('超时和手动重试仍占用真实请求槽，不因停止等待突破�
   releases[3](); await retry;
   assert.equal(p.data.drafts.length, 1); assert.equal(peak, 3);
   releases[1](); releases[2](); await tick(); assert.equal(p.data.drafts.length, 1);
+});
+test('相同超时提示保留真实失败来源，主动反馈仅复制白名单诊断字段', async () => {
+  const wx = fakeStorage(); let copied;
+  wx.setClipboardData = options => { copied = options.data; options.success(); };
+  wx.showToast = () => {};
+  const p = page(wx, async (_path, control) => {
+    control.stage('cloud_roundtrip');
+    throw { code: 'TIMEOUT', origin: 'cloud_result', message: 'private server detail', lines: ['private OCR text'] };
+  });
+  p.data.images = ['private-image-path']; await p.recognizeCloud();
+  assert.equal(p.data.results[0].error, '识别超时，点击重试');
+  p.copyRecognitionDiagnostic(imageEvent(p));
+  const diagnostic = JSON.parse(copied);
+  assert.deepEqual(Object.keys(diagnostic).sort(), ['build', 'code', 'elapsedMs', 'origin', 'phase', 'queueMs']);
+  assert.equal(diagnostic.origin, 'cloud_result'); assert.equal(diagnostic.phase, 'cloud_roundtrip');
+  assert.ok(Number.isFinite(diagnostic.elapsedMs)); assert.ok(!copied.includes('private'));
+  assert.equal(wx.getStorageSync(storage.KEY), undefined); assert.equal(wx.writes.length, 0);
 });
 test('取消批次不启动排队图，旧批次迟到结果不覆盖新选择或重复导入', async () => {
   const releases = [];
