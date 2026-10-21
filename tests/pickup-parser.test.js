@@ -5,7 +5,7 @@ test("五个取件码分四站，过滤图标、运单与电话",()=>{
  const records=parse(["今日有5个快递待取","校园邮政","大学路14号","电话","取件码1018-0079","亩","邮政快递包裹9810000000000","支持退换货北门水店","北门水店","电话","取件码186-220","亩","中通快递78000000000000","取件码 186-139","菜鸟驿站","西区校园超市店","取件码1-1-6086","极兔速递JT5400000000000","南门好时店","南门小区6栋","电话","TTO","取件码1-1-4956","回","中通快递","查看全部快递"]);
  assert.deepEqual(records.map(r=>r.code),["1018-0079","186-220","186-139","1-1-6086","1-1-4956"]);
  assert.deepEqual(group(records).map(g=>g.items.length),[1,2,1,1]);
- assert.equal(records[3].station,UNKNOWN); // Ambiguous names must not be concatenated.
+ assert.equal(records[3].station,'西区校园超市店'); // Prefer the specific branch under a generic station title.
 });
 test("独立标签、全角与横线；长运单不误识别",()=>{
  assert.equal(parse(["取件码：","１２－３４－５６７８"])[0].code,"12-34-5678");
@@ -24,7 +24,7 @@ test("合法无取件码结果区分运输、到站隐藏和未知", () => {
  assert.equal(analyze(['已到站','取件码：****']).status,'arrived_no_code');
  assert.equal(analyze(['物流详情']).status,'no_code');
  assert.equal(analyze(['运输中','已到站','取件码：603402']).status,'code_found');
- assert.equal(analyze([]).status,'no_code');
+ assert.equal(analyze([]).status,'unrecognized');
 });
 test("明确派送地点优先，不拼接求助按钮、收件城市或地图地名", () => {
  for (const city of ['新乡市','杭州市','成都市']) {
@@ -42,4 +42,28 @@ test("坐标区分不同包裹和地图候选；远处标签不借用号码", ()
  assert.equal(parse(['取件码','603402'],0,[b(0,0),b(300,500)]).length,0);
  assert.equal(parse(['自提点：','一中看台','取件码603402'],0,[b(0,0),b(0,30),b(0,60)])[0].station,'一中看台');
  assert.equal(parse(['东门驿站','西门驿站','取件码603402'])[0].station,UNKNOWN);
+});
+
+test('日期、金额、电话、运单和遮挡号码不生成取件记录，不猜测缺字', () => {
+ const {analyze}=require('../miniprogram/services/pickup-parser');
+ for(const value of ['2026-10-21','2026年10月21日','1234元','1234.56','AB-CD','13800138000','138-0013-8000','SF123456789012','6034**','6034?','1234 **','1234 5678','1-1-','1234 - 56?']) {
+  const result=analyze(['取件码：'+value]);
+  assert.equal(result.records.length,0,value); assert.equal(result.status,'unrecognized',value);
+ }
+ for(const lines of [['电话13800138000','运单SF123456789012'],['已到站','取件码：****'],['没有取件码'],['订单日期2026-10-21','金额1234.56']]) {
+  const result=analyze(lines); assert.equal(result.records.length,0); assert.equal(result.message,'没有取件码');
+ }
+ assert.equal(analyze(['运输中','已签收']).message,'没有取件码');
+ assert.equal(analyze(['***','  ']).message,'识别不出来');
+});
+test('一图保留可信号码，存疑内容单独核对；取货码及同一行多个标签不漏掉', () => {
+ const {analyze}=require('../miniprogram/services/pickup-parser');
+ const r=analyze(['北门驿站','取货码：7-2-4567','取件码：456789  领取码：6034O2']);
+ assert.deepEqual(r.records.map(x=>x.code),['7-2-4567','456789']);
+ assert.equal(r.uncertainCount,1); assert.equal(r.status,'code_found');
+ assert.ok(r.records.every(x=>x.station==='北门驿站'));
+ assert.equal(parse(['取货码：1-23'])[0].code,'1-23');
+ const b=(x,y)=>({x,y,width:120,height:30});
+ const far=analyze(['取件码','456789'],0,[b(0,0),b(800,600)]);
+ assert.equal(far.status,'unrecognized'); assert.equal(far.records.length,0);
 });

@@ -1,6 +1,7 @@
 // Only explicit pickup semantics or recognizable station names may identify a location.
 const UNKNOWN = "待确认地点";
-const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|提货码|领取码/;
+const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|取货码|提货码|领取码|订单|商品|购买|付款|旗舰店|专营店/;
+const labels = /(?:取件码|取货码|提货码|领取码)\s*[:：]?\s*/g;
 function clean(text) {
   return String(text).normalize("NFKC").replace(/[—–－﹣]/g, "-").trim();
 }
@@ -12,61 +13,107 @@ function boxAt(boxes, i) {
   const b = boxes && boxes[i];
   return b && [b.x, b.y, b.width, b.height].every(Number.isFinite) && b.width > 0 && b.height > 0 ? b : null;
 }
-function near(a, b) {
+function sameColumn(a, b) {
   const overlap = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
-  return overlap > 0 && Math.abs(a.y - b.y) <= Math.max(a.height, b.height) * 8;
+  return overlap >= -Math.max(a.height, b.height) * 2;
+}
+function labelNeighbor(a, b) {
+  const height = Math.max(a.height, b.height);
+  const sameRow = Math.abs(a.y + a.height / 2 - b.y - b.height / 2) <= height * 0.65;
+  return sameRow ? b.x >= a.x && b.x - a.x - a.width <= height * 6
+    : b.y >= a.y && b.y - a.y - a.height <= height * 3 && sameColumn(a, b);
+}
+function codeValue(value) {
+  const m = value.match(/^([A-Za-z0-9]{1,8}(?:\s*-\s*[A-Za-z0-9]{1,8}){1,3}|\d{4,8})(?![A-Za-z0-9.\-:/＊*?？_])/);
+  if (!m) return "";
+  const code = m[1].replace(/\s/g, "");
+  // Dates and letter-only fragments are not parcel identifiers, even beside a label.
+  if (!/\d/.test(code) || /^(?:19|20)\d{2}-\d{1,2}-\d{1,2}$/.test(code) ||
+      /^1\d{10}$/.test(code.replace(/-/g, "")) ||
+      /^\s*(?:[-.:/＊*?？_年月日元时分秒￥¥]|\d)/.test(value.slice(m[0].length)) || code.length > 32) return "";
+  return code;
+}
+function extractCodes(text, boxes) {
+  const codes = [];
+  let uncertainCount = 0;
+  for (let i = 0; i < text.length; i++) {
+    const matches = [...text[i].matchAll(labels)];
+    for (let n = 0; n < matches.length; n++) {
+      const label = matches[n];
+      if (/(?:没有|暂无|未生成|未发现|未获取|无有效)\s*$/.test(text[i].slice(0, label.index))) continue;
+      let value = text[i].slice(label.index + label[0].length, n + 1 < matches.length ? matches[n + 1].index : undefined).trim();
+      if (!value) {
+        const a = boxAt(boxes, i), b = boxAt(boxes, i + 1);
+        if (!a || !b || labelNeighbor(a, b)) value = text[i + 1] || "";
+      }
+      const code = codeValue(value);
+      if (code) codes.push({ i, code });
+      else if (!value || !/^[*＊·•●xX\s-]+$|已隐藏|点击.*查看|待生成|暂未生成/.test(value)) uncertainCount++;
+    }
+  }
+  return { codes, uncertainCount };
+}
+function placeName(candidates) {
+  const explicit = candidates.filter(p => p.explicit);
+  if (explicit.length) candidates = explicit;
+  const names = [...new Set(candidates.map(p => p.name))];
+  if (names.length === 1) return names[0];
+  const branches = names.filter(name => !/^(?:菜鸟驿站|妈妈驿站|快递驿站)$/.test(name));
+  return branches.length === 1 ? branches[0] : UNKNOWN;
 }
 function parse(lines, sourceIndex = 0, boxes = []) {
-  const text = lines.map(clean), codes = [], places = [];
+  const text = lines.map(clean), { codes } = extractCodes(text, boxes), places = [];
   for (let i = 0; i < text.length; i++) {
-    const label = text[i].match(/(?:取件码|提货码|领取码)\s*[:：]?\s*(.*)/);
-    if (label) {
-      const nextAllowed = !boxAt(boxes, i) || !boxAt(boxes, i + 1) || near(boxAt(boxes, i), boxAt(boxes, i + 1));
-      const candidate = label[1] || (nextAllowed ? text[i + 1] : "") || "";
-      const m = candidate.match(/^([A-Za-z0-9]{1,8}(?:\s*-\s*[A-Za-z0-9]{1,8}){1,3}|\d{4,8})(?![A-Za-z0-9-])/);
-      if (m) codes.push({ i, code: m[1].replace(/\s/g, "") });
-    }
-    const explicit = text[i].match(/(?:已派送至|已送至|自提点|取件地址|取件地点)\s*[:：]?\s*(.*)/);
+    const explicit = text[i].match(/(?:已派送至|已送至|自提地点|自提点|取件地址|取件地点)\s*[:：]?\s*(.*)/);
     let name = explicit ? explicit[1].replace(/[，,。；;].*$/, "").replace(/(?:请|凭).*$/, "").trim() : text[i].replace(/^支持退换货\s*/, "");
     let locationIndex = i;
-    if (explicit && !name && text[i + 1] && (!boxAt(boxes, i) || !boxAt(boxes, i + 1) || near(boxAt(boxes, i), boxAt(boxes, i + 1)))) {
+    if (explicit && !name && text[i + 1] && (!boxAt(boxes, i) || !boxAt(boxes, i + 1) || labelNeighbor(boxAt(boxes, i), boxAt(boxes, i + 1)))) {
       name = text[i + 1]; locationIndex = i + 1;
     }
-    if (validPlace(name) && (explicit || /驿站|自提柜|快递柜|邮政$|(?:店|服务站)$/.test(name))) {
+    name = name.replace(/^[【\[（(]([^】\]）)]+)[】\]）)].*$/, "$1");
+    const next = text[i + 1] || "", a = boxAt(boxes, i), b = boxAt(boxes, i + 1);
+    // Unfamiliar section names need an adjacent address, not just arbitrary Chinese text.
+    const section = /[号栋]|小区/.test(next) && validPlace(next) && (!a || !b ||
+      Math.abs(a.x - b.x) <= Math.max(a.height, b.height) && b.y > a.y && b.y - a.y <= a.height * 3);
+    if (validPlace(name) && !/^(?:中国邮政|邮政|中通快递|极兔速递)$/.test(name) &&
+      (explicit || /驿站|自提柜|快递柜|邮政$|(?:店|服务站)$/.test(name) || section)) {
       places.push({ i: locationIndex, name, explicit: !!explicit });
     }
   }
-  return codes.map((code, n) => {
-    const previous = n ? codes[n - 1].i : -1, next = n + 1 < codes.length ? codes[n + 1].i : text.length;
-    let candidates = places.filter(p => {
-      const a = boxAt(boxes, code.i), b = boxAt(boxes, p.i);
-      if (a && b) return near(a, b) && !codes.some(other => {
-        const c = boxAt(boxes, other.i);
-        return other !== code && c && near(c, b) && Math.abs(c.y - b.y) < Math.abs(a.y - b.y);
-      });
-      return p.i > previous && p.i < next && (p.i <= code.i || codes.length === 1);
-    });
-    // Consecutive codes may share a clearly named station in the same text block.
-    if (!candidates.length && n && !boxAt(boxes, code.i)) {
-      candidates = places.filter(p => p.i < code.i && p.i > (n > 1 ? codes[n - 2].i : -1));
-    }
-    if (candidates.some(p => p.explicit)) candidates = candidates.filter(p => p.explicit);
-    const names = [...new Set(candidates.map(p => p.name))];
-    const station = names.length === 1 ? names[0] : UNKNOWN;
-    return { station, code: code.code, sourceIndex, needsReview: station === UNKNOWN };
-  });
+  const records = [];
+  for (const code of codes) {
+    const a = boxAt(boxes, code.i);
+    const compatible = p => !a || !boxAt(boxes, p.i) || sameColumn(a, boxAt(boxes, p.i));
+    const previous = codes.filter(c => c.i < code.i && compatible(c)).pop();
+    const next = codes.find(c => c.i > code.i && compatible(c));
+    let candidates = places.filter(p => compatible(p) && p.i > (previous ? previous.i : -1) && p.i <= code.i &&
+      (!a || !boxAt(boxes, p.i) || boxAt(boxes, p.i).y <= a.y + a.height / 2));
+    const after = places.filter(p => (p.explicit || codes.length === 1) && compatible(p) && p.i > code.i && p.i < (next ? next.i : text.length) &&
+      (!a || !boxAt(boxes, p.i) || Math.abs(boxAt(boxes, p.i).y - a.y) <= Math.max(a.height, boxAt(boxes, p.i).height) * 8) &&
+      (!next || !a || !boxAt(boxes, p.i) || !boxAt(boxes, next.i) ||
+        Math.abs(boxAt(boxes, p.i).y - a.y) < Math.abs(boxAt(boxes, p.i).y - boxAt(boxes, next.i).y)));
+    if (after.length) candidates = [...candidates, ...after];
+    const previousRecord = previous && records.find(r => r.lineIndex === previous.i);
+    const station = candidates.length ? placeName(candidates) : previousRecord ? previousRecord.station : UNKNOWN;
+    records.push({ station, code: code.code, sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i });
+  }
+  return records.map(r => ({ station: r.station, code: r.code, sourceIndex: r.sourceIndex, needsReview: r.needsReview }));
 }
 function analyze(lines, sourceIndex = 0, boxes = []) {
   const records = parse(lines, sourceIndex, boxes);
-  if (records.length) return { records, status: "code_found", message: "已识别取件码，请核对地点。" };
+  const { uncertainCount } = extractCodes(lines.map(clean), boxes);
+  if (records.length) return { records, uncertainCount, status: "code_found", message: `识别到 ${records.length} 件快递` };
   const text = lines.map(clean).join("\n");
-  if (/已到站|已入库|已派送至|已送至|待取件|等待领取|请.*(?:取件|领取)/.test(text)) {
-    return { records, status: "arrived_no_code", message: "检测到已到站或待取件信息，但未发现可用取件码，可能尚未显示或已隐藏，请查看原图。" };
+  if (!/[\u4e00-\u9fffA-Za-z0-9]/.test(text) || uncertainCount) {
+    return { records, uncertainCount, status: "unrecognized", message: "识别不出来" };
+  }
+  if (/已到站|已入库|已派送至|已送至|已签收|已取件|已领取|取件完成|待取件|等待领取|请.*(?:取件|领取)/.test(text)) {
+    return { records, uncertainCount, status: "arrived_no_code", message: "没有取件码" };
   }
   if (/运输中|已揽收|预计.*(?:送达|到达)|派送中|转运中/.test(text)) {
-    return { records, status: "in_transit", message: "未发现取件码；截图包含运输或预计送达信息，可能尚未进入取件阶段。" };
+    return { records, uncertainCount, status: "in_transit", message: "还在运输" };
   }
-  return { records, status: "no_code", message: "OCR 已完成，未发现明确取件码，无法判断物流状态。" };
+  return { records, uncertainCount, status: "no_code", message: "没有取件码" };
 }
 function group(records) {
   const groups = [];

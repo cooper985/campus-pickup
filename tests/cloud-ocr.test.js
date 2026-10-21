@@ -51,3 +51,12 @@ test('读图超时或取消后不能继续发送云端请求',async()=>{
  await assert.rejects(job.promise,e=>e.code==='WAIT_TIMEOUT'); release({data:small});
  await new Promise(r=>setImmediate(r)); assert.equal(s.calls.length,0);
 });
+
+test('网络和云调用超时保留内部类型，不采用不受支持的超时配置，不输出供应商详情', async () => {
+ for(const [errMsg,code] of [['request fail timeout private','TIMEOUT'],['network failed private','NETWORK_FAILED']]) {
+  const s=service({image:small}); s.wx.cloud.callFunction=async()=>{throw {errMsg,errCode:-404012};};
+  await assert.rejects(s.recognize('image'),err=>err.code===code && err.sdkCode===-404012 && !err.message.includes('private'));
+ }
+ const s=service({image:small},{ok:true,mock:false,lines:[]}); await s.recognize('image');
+ assert.equal(s.calls[0].config,undefined);
+});
