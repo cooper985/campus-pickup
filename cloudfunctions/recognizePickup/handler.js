@@ -20,8 +20,6 @@ async function handle(event, identity, options = {}) {
     return failure("FORBIDDEN", "真实识别暂仅对授权测试用户开放。");
   }
   let timer;
-  const started = Date.now();
-  let errorType = "OK";
   try {
     const response = await Promise.race([
       Promise.resolve().then(() => mode === "mock" ? {
@@ -35,31 +33,20 @@ async function handle(event, identity, options = {}) {
     ]);
     if (!response || !Array.isArray(response.TextDetections) ||
         !response.TextDetections.every(item => item && typeof item.DetectedText === "string")) {
-      errorType = "BAD_RESPONSE";
       return failure("BAD_RESPONSE", "识别服务返回了异常数据。");
     }
     return {
       ok: true, mock: mode === "mock",
       lines: response.TextDetections.map(item => item.DetectedText),
-      boxes: response.TextDetections.map(item => {
-        const b = item.ItemPolygon;
-        return b && [b.X, b.Y, b.Width, b.Height].every(Number.isFinite) && b.Width > 0 && b.Height > 0
-          ? { x: b.X, y: b.Y, width: b.Width, height: b.Height } : null;
-      }),
-      timings: { ocrMs: Date.now() - started },
     };
   } catch (err) {
     const code = typeof (err && err.code) === "string" ? err.code : "";
-    errorType = code === "TIMEOUT" || /Timeout/.test(code) ? "TIMEOUT"
-      : /AuthFailure|UnauthorizedOperation|MISSING_CREDENTIALS/.test(code) ? "OCR_AUTH"
-      : /LimitExceeded|RequestLimitExceeded|ResourceUnavailable/.test(code) ? "OCR_UNAVAILABLE" : "OCR_FAILED";
     if (code === "TIMEOUT" || /Timeout/.test(code)) return failure("TIMEOUT", "识别超时，请稍后手动重试。");
     if (/AuthFailure|UnauthorizedOperation|MISSING_CREDENTIALS/.test(code)) return failure("OCR_AUTH", "OCR 运行身份尚未授权，请联系管理员。");
     if (/LimitExceeded|RequestLimitExceeded|ResourceUnavailable/.test(code)) return failure("OCR_UNAVAILABLE", "识别额度或服务暂不可用，请稍后再试。");
     return failure("OCR_FAILED", "识别失败，请稍后重试。");
   } finally {
     clearTimeout(timer);
-    console.info("[pickup-timing]", { stage: "tencent_ocr", ms: Date.now() - started, type: errorType });
   }
 }
 module.exports = { handle };
