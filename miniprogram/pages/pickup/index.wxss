@@ -26,3 +26,11 @@ button { font-size: 28rpx; border-radius: 16rpx; }
 .actions button { margin: 0; }
 input { border: 1rpx solid #c7d7ce; border-radius: 12rpx; padding: 20rpx; margin-bottom: 20rpx; font-size: 28rpx; }
 .primary { margin-top: 12rpx; }
+
+.swipe-shell { position: relative; overflow: hidden; border-top: 1rpx solid #edf1ee; }
+.swipe-content { position: relative; background: #fff; border-top: 0; transition: transform 180ms ease; }
+.swipe-open { transform: translateX(140rpx); }
+.delete-button { position: absolute; left: 0; top: 0; bottom: 0; width: 140rpx; margin: 0; border-radius: 12rpx; background: #c43d35; color: #fff; display: flex; align-items: center; justify-content: center; }
+.delete-link { background: transparent; color: #a53830; }
+.undo-bar { position: fixed; z-index: 10; bottom: 32rpx; bottom: calc(32rpx + env(safe-area-inset-bottom)); left: 32rpx; right: 32rpx; padding: 20rpx 24rpx; background: #193b30; color: #fff; border-radius: 16rpx; display: flex; align-items: center; justify-content: space-between; font-size: 26rpx; }
+.undo-action { margin: 0; color: #215b41; }

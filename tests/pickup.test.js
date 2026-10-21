@@ -1,29 +1,17 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const vm = require('node:vm');
-const fs = require('node:fs');
 const storage = require('../miniprogram/services/pickup-store');
 const { fakeStorage } = require('./helpers/storage');
-function page(wx = fakeStorage(), recognize = async () => ({ mock: true, lines: ['北门驿站', '取件码1-2-3456'] })) {
-  let result;
-  wx.showModal ||= async () => ({ confirm: true });
-  vm.runInNewContext(fs.readFileSync('miniprogram/pages/pickup/index.js', 'utf8'), {
-    require: name => /(?:cloud|mock)-ocr$/.test(name) ? { recognize } : require('../miniprogram/services/' + name.split('/').pop()),
-    wx, Page: p => { result = p; },
-  });
-  result.setData = function(data) { Object.assign(this.data, data); };
-  result.onLoad();
-  return result;
-}
+const { page } = require('./helpers/page');
 const event = id => ({ currentTarget: { dataset: { id } } });
 async function importOne(p) { p.data.images = ['a.png']; await p.recognizeCloud(); await p.confirmImport(); }
-test('批量选择、预览、串行识别；确认前不保存，整批确认后重启恢复独立 ID', async () => {
+test('批量选择、预览、并发识别；确认前不保存，整批确认后重启恢复独立 ID', async () => {
   let preview, active = 0;
   const wx = fakeStorage();
   wx.chooseImage = async o => { assert.equal(o.count, 9); return { tempFiles: [{ path: 'a.png', size: 10 }, { path: 'b.png', size: 10 }] }; };
   wx.previewImage = o => { preview = o.current; };
   const p = page(wx, async () => {
-    assert.equal(active++, 0); await Promise.resolve(); active--;
+    assert.ok(++active <= 3); await Promise.resolve(); active--;
     return { mock: false, lines: ['北门驿站', '取件码1-2-3456'] };
   });
   await p.chooseImage(); p.previewImage({ currentTarget: { dataset: { index: 1 } } }); await p.recognizeCloud();
@@ -89,7 +77,7 @@ test('重复点击不重复调用，单图失败保留其他草稿', async () =>
   let calls = 0, release;
   const p = page(fakeStorage(), async () => { calls++; if (calls === 1) await new Promise(r => release = r); else throw Error('network'); return { mock: false, lines: ['取件码1234'] }; });
   await p.recognizeCloud(); assert.equal(calls, 0); p.data.images = ['a', 'b'];
-  const run = p.recognizeCloud(); await p.recognizeCloud(); assert.equal(calls, 1); release(); await run;
+  const run = p.recognizeCloud(); await p.recognizeCloud(); await Promise.resolve(); assert.equal(calls, 2); release(); await run;
   assert.equal(calls, 2); assert.equal(p.data.drafts.length, 1); assert.equal(p.data.records.length, 0); assert.equal(p.data.loading, false);
 });
 test('保存失败不改变看板、不丢草稿，编辑失败保留编辑内容，异常加载禁写', async () => {
@@ -132,11 +120,11 @@ test('无取件码与已到站隐藏都完成批次且不会报服务错误',asy
 test('跳过当前图片继续下一张，取消本批不启动后续图片',async()=>{
  let calls=0, release;
  const p=page(fakeStorage(),()=>{ calls++; if(calls===1)return new Promise(r=>release=r); return Promise.resolve({mock:false,lines:['取件码2222']}); });
- p.data.images=['a','b']; const run=p.recognizeCloud(); p.skipImage(); await run;
- assert.equal(calls,2); assert.equal(p.data.results[0].status,'CANCELLED'); assert.equal(p.data.drafts.length,1);
+ p.data.images=['a','b']; const run=p.recognizeCloud(); await Promise.resolve(); p.skipImage({currentTarget:{dataset:{taskId:p.data.results[0].taskId}}}); await run;
+ assert.equal(calls,2); assert.equal(p.data.results[0].status,'SKIPPED'); assert.equal(p.data.drafts.length,1);
  release({mock:false,lines:['取件码1111']}); await Promise.resolve(); assert.equal(p.data.drafts.length,1);
  const q=page(fakeStorage(),()=>new Promise(()=>{})); q.data.images=['a','b']; const batch=q.recognizeCloud(); q.cancelRecognition(); await batch;
- assert.equal(q.data.loading,false); assert.equal(q.data.results.length,1);
+ assert.equal(q.data.loading,false); assert.equal(q.data.results.length,2);
 });
 test('等待超时继续批次，迟到成功或拒绝不覆盖重试及新批次',async()=>{
  let release; let calls=0;
@@ -152,6 +140,6 @@ test('等待超时继续批次，迟到成功或拒绝不覆盖重试及新批�
 test('页面卸载不再写入旧页面；重跑失败保留原草稿',async()=>{
  let release,fail=false; const p=page(fakeStorage(),()=>fail?Promise.reject({code:'TIMEOUT'}):Promise.resolve({mock:false,lines:['取件码1111']}));
  p.data.images=['a']; await p.recognizeCloud(); fail=true; await p.recognizeCloud(); assert.equal(p.data.drafts.length,1); assert.equal(p.data.results[0].status,'TIMEOUT');
- const q=page(fakeStorage(),()=>new Promise(r=>release=r)); q.data.images=['a']; const run=q.recognizeCloud(); q.onUnload(); const snapshot=JSON.stringify(q.data); await run;
+ const q=page(fakeStorage(),()=>new Promise(r=>release=r)); q.data.images=['a']; const run=q.recognizeCloud(); await Promise.resolve(); q.onUnload(); const snapshot=JSON.stringify(q.data); await run;
  release({mock:false,lines:['取件码9999']}); await Promise.resolve(); assert.equal(JSON.stringify(q.data),snapshot);
 });

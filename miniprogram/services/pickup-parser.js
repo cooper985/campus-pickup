@@ -58,15 +58,15 @@ function parse(lines, sourceIndex = 0, boxes = []) {
 }
 function analyze(lines, sourceIndex = 0, boxes = []) {
   const records = parse(lines, sourceIndex, boxes);
-  if (records.length) return { records, status: "code_found", message: "已识别取件码，请核对地点。" };
+  if (records.length) return { records, status: "code_found", message: `识别到 ${records.length} 个取件码` };
   const text = lines.map(clean).join("\n");
   if (/已到站|已入库|已派送至|已送至|待取件|等待领取|请.*(?:取件|领取)/.test(text)) {
-    return { records, status: "arrived_no_code", message: "检测到已到站或待取件信息，但未发现可用取件码，可能尚未显示或已隐藏，请查看原图。" };
+    return { records, status: "arrived_no_code", message: "已到站，但未发现可用取件码" };
   }
   if (/运输中|已揽收|预计.*(?:送达|到达)|派送中|转运中/.test(text)) {
-    return { records, status: "in_transit", message: "未发现取件码；截图包含运输或预计送达信息，可能尚未进入取件阶段。" };
+    return { records, status: "in_transit", message: "快递运输中，暂无取件码" };
   }
-  return { records, status: "no_code", message: "OCR 已完成，未发现明确取件码，无法判断物流状态。" };
+  return { records, status: "no_code", message: "未发现取件码" };
 }
 function group(records) {
   const groups = [];
