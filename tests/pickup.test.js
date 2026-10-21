@@ -82,7 +82,7 @@ test('取消和超限选图保留原批次；成功选图和 OCR 失败均不影
   p = page(wx, async () => { throw Error('network'); });
   wx.chooseImage = async () => ({ tempFiles: [{ path: 'new', size: 10 }] });
   await p.chooseImage(); await p.recognizeCloud();
-  assert.equal(p.data.records.length, 1); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.results[0].error, 'network');
+  assert.equal(p.data.records.length, 1); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.results[0].status, 'OCR_FAILED');
   assert.equal(JSON.stringify(wx.values), before); assert.equal(page(wx).data.records.length, 1);
 });
 test('重复点击不重复调用，单图失败保留其他草稿', async () => {
@@ -112,4 +112,46 @@ test('过长识别地点可先修改再导入，不进入存储保护或丢弃�
   assert.equal(wx.writes.length, 0); assert.equal(p.data.storageBlocked, false); assert.match(p.data.error, /先修改/);
   p.editRecord(event(p.data.drafts[0].id)); p.data.editing.station = '北门驿站'; p.saveEdit();
   await p.confirmImport(); assert.equal(page(wx).data.records.length, 1);
+});
+test('三图一失败两成功，手动只重试失败图片且保留成功结果', async () => {
+ const calls=[]; let failed=true;
+ const p=page(fakeStorage(),async path=>{ calls.push(path); if(path==='b' && failed) throw {code:'CLOUD_FAILED',message:'private'};
+  return {mock:false,lines:['已派送至：一中看台', '取件码'+({a:'1111',b:'2222',c:'3333'}[path])]}; });
+ p.data.images=['a','b','c']; await p.recognizeCloud();
+ assert.equal(p.data.drafts.length,2); assert.equal(p.data.results[1].status,'CLOUD_FAILED');
+ assert.ok(!JSON.stringify(p.data.results).includes('private'));
+ failed=false; await p.retryImage({currentTarget:{dataset:{index:2}}});
+ assert.equal(calls.join(','),'a,b,c,b'); assert.equal(p.data.drafts.length,3);
+});
+test('无取件码与已到站隐藏都完成批次且不会报服务错误',async()=>{
+ const p=page(fakeStorage(),async path=>({mock:false,lines:path==='a'?['运输中','预计后天送达']:['已到站','取件码****']}));
+ p.data.images=['a','b']; await p.recognizeCloud();
+ assert.equal(p.data.loading,false); assert.equal(p.data.error,'');
+ assert.equal(p.data.results[0].status,'in_transit'); assert.equal(p.data.results[1].status,'arrived_no_code');
+});
+test('跳过当前图片继续下一张，取消本批不启动后续图片',async()=>{
+ let calls=0, release;
+ const p=page(fakeStorage(),()=>{ calls++; if(calls===1)return new Promise(r=>release=r); return Promise.resolve({mock:false,lines:['取件码2222']}); });
+ p.data.images=['a','b']; const run=p.recognizeCloud(); p.skipImage(); await run;
+ assert.equal(calls,2); assert.equal(p.data.results[0].status,'CANCELLED'); assert.equal(p.data.drafts.length,1);
+ release({mock:false,lines:['取件码1111']}); await Promise.resolve(); assert.equal(p.data.drafts.length,1);
+ const q=page(fakeStorage(),()=>new Promise(()=>{})); q.data.images=['a','b']; const batch=q.recognizeCloud(); q.cancelRecognition(); await batch;
+ assert.equal(q.data.loading,false); assert.equal(q.data.results.length,1);
+});
+test('等待超时继续批次，迟到成功或拒绝不覆盖重试及新批次',async()=>{
+ let release; let calls=0;
+ const p=page(fakeStorage(),()=>{calls++; return calls===1?new Promise(r=>release=r):Promise.resolve({mock:false,lines:['取件码2222']});});
+ p.recognitionTimeoutMs=10; p.data.images=['a','b']; await p.recognizeCloud();
+ assert.equal(p.data.results[0].status,'WAIT_TIMEOUT'); assert.equal(p.data.drafts.length,1);
+ await p.retryImage({currentTarget:{dataset:{index:1}}});
+ const snapshot=JSON.stringify(p.data); release({mock:false,lines:['取件码9999']});
+ await new Promise(r=>setImmediate(r)); assert.equal(JSON.stringify(p.data),snapshot);
+ let reject; const q=page(fakeStorage(),()=>new Promise((_,r)=>reject=r)); q.recognitionTimeoutMs=5; q.data.images=['x']; await q.recognizeCloud();
+ const before=JSON.stringify(q.data); reject(Error('private late rejection')); await new Promise(r=>setImmediate(r)); assert.equal(JSON.stringify(q.data),before);
+});
+test('页面卸载不再写入旧页面；重跑失败保留原草稿',async()=>{
+ let release,fail=false; const p=page(fakeStorage(),()=>fail?Promise.reject({code:'TIMEOUT'}):Promise.resolve({mock:false,lines:['取件码1111']}));
+ p.data.images=['a']; await p.recognizeCloud(); fail=true; await p.recognizeCloud(); assert.equal(p.data.drafts.length,1); assert.equal(p.data.results[0].status,'TIMEOUT');
+ const q=page(fakeStorage(),()=>new Promise(r=>release=r)); q.data.images=['a']; const run=q.recognizeCloud(); q.onUnload(); const snapshot=JSON.stringify(q.data); await run;
+ release({mock:false,lines:['取件码9999']}); await Promise.resolve(); assert.equal(JSON.stringify(q.data),snapshot);
 });

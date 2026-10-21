@@ -3,10 +3,11 @@ const cloudOcr = require("../../services/cloud-ocr");
 const parser = require("../../services/pickup-parser");
 const storage = require("../../services/pickup-store");
 const duplicates = require("../../services/pickup-duplicates");
+const task = require("../../services/recognition-task");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { waitSeconds: task.WAIT_TIMEOUT_MS / 1000, images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false },
   onLoad() {
@@ -34,28 +35,66 @@ Page({
   },
   recognize() { return this.runRecognition(false); },
   recognizeCloud() { return this.runRecognition(true); },
-  async runRecognition(useCloud) {
+  retryImage(e) {
+    const index = Number(e.currentTarget.dataset.index) - 1;
+    const result = this.data.results.find(r => r.index === index + 1);
+    if (result && result.retryable) return this.runRecognition(this.lastUseCloud, [index]);
+  },
+  skipImage() { if (this.currentTask) this.currentTask.cancel(); },
+  cancelRecognition() { this.cancelBatch = true; this.skipImage(); },
+  onUnload() { this.recognitionRun = null; this.cancelRecognition(); },
+  async runRecognition(useCloud, retryIndices) {
     if (!this.data.images.length || this.data.loading || this.data.choosing || this.data.importing) return;
-    this.setData({ loading: true, error: "", completed: false, results: [], drafts: [], draftGroups: [], editing: null, mock: !useCloud });
-    const results = [], records = [];
+    const run = {};
+    this.recognitionRun = run;
+    this.lastUseCloud = useCloud;
+    this.cancelBatch = false;
+    const indices = retryIndices || this.data.images.map((_, i) => i);
+    // Re-running only replaces each image after it has a successful OCR result.
+    const results = this.data.results.slice(), records = this.data.drafts.slice();
+    this.setData({ loading: true, error: "", completed: false, editing: null, mock: !useCloud,
+      waitSeconds: Math.ceil((this.recognitionTimeoutMs || task.WAIT_TIMEOUT_MS) / 1000) });
     try {
-      for (let i = 0; i < this.data.images.length; i++) {
+      for (const i of indices) {
+        if (this.cancelBatch || this.recognitionRun !== run) break;
         this.setData({ progress: `正在识别 ${i + 1}/${this.data.images.length}` });
+        const started = Date.now();
+        let entry;
         try {
-          const result = await (useCloud ? cloudOcr.recognize(this.data.images[i]) : mockOcr.recognize());
-          if (!result || typeof result.mock !== "boolean" || !Array.isArray(result.lines) || !result.lines.every(s => typeof s === "string")) throw new Error("识别结果格式异常。");
-          const raw = parser.parse(result.lines, i);
+          this.currentTask = task.start(control => useCloud ? cloudOcr.recognize(this.data.images[i], control) : mockOcr.recognize(), this.recognitionTimeoutMs);
+          const result = await this.currentTask.promise;
+          if (this.recognitionRun !== run) return;
+          if (!result || typeof result.mock !== "boolean" || !Array.isArray(result.lines) || !result.lines.every(s => typeof s === "string")) throw task.error("BAD_RESPONSE");
+          const parseStarted = Date.now();
+          const analysis = parser.analyze(result.lines, i, result.boxes);
+          const raw = analysis.records;
           const metadata = duplicates.metadata(result.lines, raw.length);
           const parsed = raw.map((r, j) => ({ ...r, ...metadata, id: `draft-${i}-${j}`, taken: false }));
-          records.push(...parsed);
-          results.push({ index: i + 1, lines: result.lines, mock: result.mock, error: "", count: parsed.length });
+          task.log("text_parse", parseStarted);
+          if (parsed.length) {
+            for (let j = records.length - 1; j >= 0; j--) if (records[j].sourceIndex === i) records.splice(j, 1);
+            records.push(...parsed);
+          }
+          entry = { index: i + 1, lines: result.lines, mock: result.mock, error: "", count: parsed.length,
+            status: analysis.status, message: analysis.message, retryable: false };
         } catch (err) {
-          results.push({ index: i + 1, lines: [], error: err.message || "识别失败，请重试。", count: 0 });
-        }
-        this.setData({ results: results.slice(), drafts: records.slice(), draftGroups: parser.group(records) });
+          const safe = task.error(err && err.code);
+          entry = { index: i + 1, lines: [], error: safe.message, count: 0, status: safe.code, retryable: true };
+          task.log("image_total", started, safe.code);
+        } finally { this.currentTask = null; }
+        if (this.recognitionRun !== run) return;
+        const old = results.findIndex(r => r.index === i + 1);
+        if (old < 0) results.push(entry); else results[old] = entry;
+        results.sort((a, b) => a.index - b.index);
+        const updateStarted = Date.now();
+        this.setData({ results: results.slice(), drafts: records.slice(), draftGroups: parser.group(records) }, () => task.log("page_update", updateStarted));
+        if (!entry.error) task.log("image_total", started);
       }
-      this.setData({ completed: true, mock: results.some(r => r.mock), progress: "", error: results.some(r => r.error) ? "部分截图识别失败，成功结果已保留。重新识别会重新处理全部截图。" : "" });
-    } finally { this.setData({ loading: false }); }
+      if (this.recognitionRun !== run) return;
+      this.setData({ completed: true, mock: results.some(r => r.mock), progress: "", error: this.cancelBatch
+        ? "已停止本批后续识别，成功结果已保留。已发出的云端请求可能仍在执行。"
+        : results.some(r => r.error) ? "部分截图未完成，成功结果已保留，可单独重试。" : "" });
+    } finally { if (this.recognitionRun === run) this.setData({ loading: false }); }
   },
   async confirmImport() {
     if (this.data.loading || this.data.choosing || this.data.importing || this.data.storageBlocked || !this.data.drafts.length) return;

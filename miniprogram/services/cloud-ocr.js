@@ -1,3 +1,4 @@
+const { error, log } = require("./recognition-task");
 const MAX_BYTES = 512 * 1024;
 
 function readImage(filePath) {
@@ -5,7 +6,7 @@ function readImage(filePath) {
     wx.getFileSystemManager().readFile({
       filePath, encoding: "base64",
       success: result => resolve(result.data),
-      fail: () => reject(new Error("无法读取图片，请重新选择。")),
+      fail: () => reject(error("IMAGE_READ")),
     });
   });
 }
@@ -14,39 +15,59 @@ function byteLength(base64) {
   return base64.length * 3 / 4 - (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0);
 }
 
-async function recognize(imagePath) {
-  let imageBase64 = await readImage(imagePath);
+async function recognize(imagePath, control = { check() {}, stage() {} }) {
+  async function measure(stage, work) {
+    control.check();
+    if (control.stage) control.stage(stage);
+    const started = Date.now();
+    try { const value = await work(); log(stage, started); control.check(); return value; }
+    catch (err) { log(stage, started, err && err.code || "OCR_FAILED"); throw err; }
+  }
+  const prepareStarted = Date.now();
+  control.check();
+  let imageBase64 = await measure("image_read", () => readImage(imagePath));
+  control.check();
   if (byteLength(imageBase64) > MAX_BYTES) {
-    const compressed = await new Promise((resolve, reject) => {
+    const compressed = await measure("image_compress", () => new Promise((resolve, reject) => {
       wx.compressImage({
         src: imagePath, quality: 70,
         success: resolve,
-        fail: () => reject(new Error("图片压缩失败，请裁剪后重新选择。")),
+        fail: () => reject(error("IMAGE_COMPRESS")),
       });
-    });
-    imageBase64 = await readImage(compressed.tempFilePath);
+    }));
+    control.check();
+    imageBase64 = await measure("compressed_read", () => readImage(compressed.tempFilePath));
+    control.check();
   }
   if (byteLength(imageBase64) > MAX_BYTES) {
-    throw new Error("图片压缩后仍超过 512 KB，请裁剪到取件信息区域后重试。");
+    throw error("IMAGE_TOO_LARGE");
   }
   if (!/^(iVBORw0KGgo|\/9j\/)/.test(imageBase64)) {
-    throw new Error("仅支持 JPEG 或 PNG 图片，请转换格式后重试。");
+    throw error("UNSUPPORTED_IMAGE");
   }
+  log("image_prepare", prepareStarted);
+  control.check();
   let response;
+  const cloudStarted = Date.now();
+  if (control.stage) control.stage("cloud_roundtrip");
   try {
     response = await wx.cloud.callFunction({
       name: "recognizePickup", data: { imageBase64 }, config: { timeout: 20000 },
     });
-  } catch (_) {
-    throw new Error("云服务连接失败，请检查网络及云函数部署状态。");
+  } catch (err) {
+    const code = /network|网络/i.test(err && err.errMsg || "") ? "NETWORK_FAILED" : "CLOUD_FAILED";
+    log("cloud_roundtrip", cloudStarted, code);
+    throw error(code);
   }
+  log("cloud_roundtrip", cloudStarted);
+  control.check();
   const result = response && response.result;
   if (result && result.ok === false) {
-    throw new Error(result.error && result.error.message || "识别失败，请稍后重试。");
+    throw error(result.error && result.error.code);
   }
   if (!result || result.ok !== true || typeof result.mock !== "boolean" ||
       !Array.isArray(result.lines) || !result.lines.every(line => typeof line === "string")) {
-    throw new Error("云服务返回结果异常，请稍后重试。");
+    throw error("BAD_RESPONSE");
   }
   return result;
 }

@@ -15,7 +15,7 @@ function service(files, result) {
     cloud: { callFunction: async options => { calls.push(options); return { result }; } },
   };
   const module = { exports: {} };
-  vm.runInNewContext(source, { wx, module, Error });
+  vm.runInNewContext(source, { wx, module, Error, require: name => require("../miniprogram/services/" + name.slice(2)) });
   return { ...module.exports, calls, wx };
 }
 test("云识别传图并保留服务器模式；错误不自动重试", async () => {
@@ -26,7 +26,7 @@ test("云识别传图并保留服务器模式；错误不自动重试", async ()
     assert.equal(s.calls[0].data.imageBase64, small);
     assert.equal(s.calls[0].name, "recognizePickup");
   }
-  const s = service({ image: small }, { ok: false, error: { message: "OCR 运行身份尚未授权" } });
+  const s = service({ image: small }, { ok: false, error: { code: "OCR_AUTH", message: "private" } });
   await assert.rejects(s.recognize("image"), /尚未授权/);
   assert.equal(s.calls.length, 1);
   s.wx.cloud.callFunction = async () => { throw new Error("private internal details"); };
@@ -42,4 +42,12 @@ test("大图压缩后再上传，仍超限或格式错误时不上传", async ()
   const invalid = service({ image: "YWJj" });
   await assert.rejects(invalid.recognize("image"), /仅支持/);
   assert.equal(invalid.calls.length, 0);
+});
+test('读图超时或取消后不能继续发送云端请求',async()=>{
+ const { start }=require('../miniprogram/services/recognition-task');
+ const s=service({image:small},{ok:true,mock:false,lines:[]}); let release;
+ s.wx.getFileSystemManager=()=>({readFile:({success})=>release=success});
+ const job=start(control=>s.recognize('image',control),5);
+ await assert.rejects(job.promise,e=>e.code==='WAIT_TIMEOUT'); release({data:small});
+ await new Promise(r=>setImmediate(r)); assert.equal(s.calls.length,0);
 });
