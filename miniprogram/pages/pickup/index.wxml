@@ -2,13 +2,14 @@
   <view wx:if="{{storageError}}" class="error" role="alert">{{storageError}}</view>
   <view wx:if="{{error && activeTab !== 'import'}}" class="error" role="alert">{{error}}</view>
   <view wx:if="{{activeTab === 'home'}}">
+    <view wx:if="{{importFeedback}}" class="import-feedback" role="status">{{importFeedback}}</view>
     <view class="page-header"><view><view class="eyebrow">校园取件助手</view><view class="heading">待取件 <text class="count">{{remaining}}</text> 件</view><view class="hint">{{locationCount}} 个取件地点{{unknownCount ? ' · ' + unknownCount + ' 件地点待确认' : ' · 按驿站找码'}}</view></view><button class="ui-button primary import-entry" data-tab="import" catchtap="switchTab">＋ 导入快递</button></view>
     <view wx:if="{{!remaining}}" class="empty"><view class="empty-symbol">✓</view><view class="section-title">暂无待取快递</view><view class="hint">有新的取件截图时，导入就能整理好。</view><button class="ui-button primary" data-tab="import" catchtap="switchTab">导入快递</button></view>
     <view wx:for="{{pendingGroups}}" wx:key="station" wx:for-item="group" class="card station-card">
       <view class="station-header" data-station="{{group.station}}" catchtap="toggleGroup" role="button" aria-label="{{group.collapsed ? '展开' : '收起'}}{{group.station}}"><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.items.length}} 件　{{group.collapsed ? '＋' : '−'}}</text></view>
       <view wx:if="{{!group.collapsed}}">
         <view wx:for="{{group.items}}" wx:key="id" class="parcel-row">
-          <view class="parcel-main"><text class="pickup-code" user-select="{{true}}">{{item.code}}</text><view class="record-meta"><text wx:if="{{item.carrier}}">{{item.carrier}} · </text><text class="text-action" data-id="{{item.id}}" catchtap="editRecord" role="button">修改</text></view></view>
+          <view class="parcel-main"><text class="pickup-code copy-code" data-id="{{item.id}}" catchtap="copyCode" role="button" aria-label="复制取件码 {{item.code}}">{{item.code}}</text><view class="record-meta"><text wx:if="{{item.carrier}}">{{item.carrier}} · </text><text class="text-action" data-id="{{item.id}}" catchtap="editRecord" role="button">{{group.station === '待确认地点' ? '补充地点' : '修改'}}</text></view></view>
           <button size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} take-button" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked}}">我已取件</button>
         </view>
       </view>
@@ -65,6 +66,25 @@
     <button class="ui-button nav-item {{activeTab === 'history' ? 'nav-active' : ''}}" data-tab="history" catchtap="switchTab"><text class="nav-symbol">✓</text><text>历史</text></button>
   </view>
   <view wx:if="{{undoAvailable}}" class="undo-bar" catchtap="recordTap"><text>{{undoMessage}} · 5 秒内可撤销</text><button class="ui-button {{(storageBlocked || importing || deleting) ? 'ui-disabled' : ''}} undo-action" size="mini" catchtap="undoDelete" disabled="{{storageBlocked || importing || deleting}}">撤销</button></view>
+  <view wx:if="{{reviewOpen}}" class="modal-mask" catchtap="noop" catchtouchmove="noop">
+    <view class="review-sheet" catchtap="noop">
+      <view class="review-header"><view class="section-title">核对重复快递</view><view class="hint">仅补全空缺信息，保留原记录状态。确认后统一保存。</view></view>
+      <scroll-view class="review-list" scroll-y="{{true}}">
+        <view wx:for="{{reviewItems}}" wx:key="id" wx:for-item="entry" class="review-item">
+          <view class="review-code">{{entry.code}}</view><view class="hint">本次地点：{{entry.station}}</view><view wx:if="{{entry.carrier}}" class="hint">本次公司：{{entry.carrier}}</view>
+          <view class="review-reason">{{entry.reason}}</view>
+          <view wx:for="{{entry.matches}}" wx:key="id" wx:for-item="match" class="match-info">
+            <view class="hint">原记录（{{match.taken ? '已取件' : '待取件'}}）：{{match.code}}</view><view class="match-station">{{match.station}}{{match.carrier ? ' · ' + match.carrier : ''}}</view>
+            <button wx:if="{{match.canUpdate}}" class="ui-button review-option {{entry.action === 'update' && entry.targetId === match.id ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="update" data-target-id="{{match.id}}" catchtap="chooseImportAction">{{entry.action === 'update' && entry.targetId === match.id ? '✓ ' : ''}}更新此记录{{entry.recommended ? '（推荐）' : ''}}<text class="option-detail">补全{{match.additions}}</text></button>
+          </view>
+          <button class="ui-button review-option {{entry.action === 'skip' ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="skip" catchtap="chooseImportAction">{{entry.action === 'skip' ? '✓ ' : ''}}保留原记录，跳过本次</button>
+          <button wx:if="{{entry.allowNew}}" class="ui-button review-option {{entry.action === 'new' ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="new" catchtap="chooseImportAction">{{entry.action === 'new' ? '✓ ' : ''}}确认是另一件包裹，新增</button>
+          <view wx:else class="hint">运单号相同，不能重复新增。</view>
+        </view>
+      </scroll-view>
+      <view class="review-footer"><view class="review-summary">{{reviewSummary}}</view><view class="actions"><button class="ui-button secondary" catchtap="cancelImportReview">返回核对</button><button class="ui-button primary" catchtap="finishImportReview">按以上选择导入</button></view></view>
+    </view>
+  </view>
   <view wx:if="{{editing}}" class="modal-mask" catchtap="cancelEdit" catchtouchmove="noop">
     <view class="edit-sheet" catchtap="noop">
       <view class="section-title">核对并修改</view>

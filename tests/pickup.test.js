@@ -19,8 +19,8 @@ test('批量选择、预览、并发识别；确认前不保存，整批确认�
   assert.equal(page(wx).data.records.length, 0);
   await p.confirmImport();
   const restarted = page(wx);
-  assert.equal(restarted.data.records.length, 2); assert.equal(restarted.data.groups.length, 1);
-  assert.equal(new Set(restarted.data.records.map(r => r.id)).size, 2);
+  assert.equal(restarted.data.records.length, 1); assert.equal(restarted.data.groups.length, 1);
+  assert.equal(new Set(restarted.data.records.map(r => r.id)).size, 1);
   assert.equal(wx.writes.filter(k => k === storage.KEY).length, 1);
   const saved = JSON.stringify(wx.values);
   for (const privateField of ['a.png', 'sourceIndex', 'lines', 'images', 'draft-']) assert.ok(!saved.includes(privateField));
@@ -37,22 +37,24 @@ test('标记已取、恢复待取、修改取件码和地点后分别重启，�
   assert.equal(p.data.records[0].id, id); assert.equal(p.data.records[0].createdAt, original.createdAt);
   assert.ok(p.data.records[0].updatedAt >= original.updatedAt);
 });
-test('重复导入截图时提示；可跳过，也可确认是不同包裹；不删除旧记录', async () => {
+test('完全重复直接跳过；历史同码集中确认后才作为不同包裹新增', async () => {
   const wx = fakeStorage(); const p = page(wx); await importOne(p);
-  const old = p.data.records[0]; const titles = [];
-  wx.showModal = async o => { titles.push(o.title); return { confirm: o.title !== '疑似重复，请确认' }; };
-  await importOne(p); assert.equal(p.data.records.length, 1); assert.ok(titles.includes('疑似重复，请确认'));
+  const old = p.data.records[0]; let modals = 0;
+  wx.showModal = async () => { modals++; return { confirm: true }; };
+  await importOne(p); assert.equal(p.data.records.length, 1); assert.equal(modals, 0);
   p.toggleTaken(event(old.id));
-  wx.showModal = async o => { if (o.title === '疑似重复，请确认') assert.match(o.content, /已取.*复用/); return { confirm: true }; };
-  await importOne(p); assert.equal(p.data.records.length, 2); assert.equal(p.data.records[0].taken, true);
+  p.data.images = ['a.png']; await p.recognizeCloud();
+  const importing = p.confirmImport(); assert.equal(p.data.reviewOpen, true);
+  p.chooseImportAction({ currentTarget: { dataset: { id: p.data.drafts[0].id, action: 'new' } } });
+  p.finishImportReview(); await importing;
+  assert.equal(p.data.records.length, 2); assert.equal(p.data.records[0].taken, true); p.onUnload();
 });
-test('可靠运单重复提示并跳过，重复检查也覆盖本批次', async () => {
-  const wx = fakeStorage(), titles = [];
-  wx.showModal = async o => { titles.push(o.title); return { confirm: true }; };
+test('可靠运单重复直接跳过，重复检查也覆盖本批次', async () => {
+  const wx = fakeStorage();
   const p = page(wx, async () => ({ mock: false, lines: ['北门驿站', '取件码1234', '运单号: SF123456789012'] }));
   p.data.images = ['a', 'a']; await p.recognizeCloud(); await p.confirmImport();
-  assert.equal(p.data.records.length, 1); assert.ok(titles.includes('运单号重复'));
-  await importOne(p); assert.equal(p.data.records.length, 1);
+  assert.equal(p.data.records.length, 1);
+  await importOne(p); assert.equal(p.data.records.length, 1); p.onUnload();
 });
 test('取消导入不保存；确认中的连点不会重复保存', async () => {
   const wx = fakeStorage(), p = page(wx); p.data.images = ['a']; await p.recognizeCloud();
@@ -85,7 +87,7 @@ test('保存失败不改变看板、不丢草稿，编辑失败保留编辑内�
   wx.failWrite = storage.KEY;
   p.editRecord(event(p.data.records[0].id)); p.data.editing.code = '9999'; p.saveEdit();
   assert.equal(p.data.records[0].code, '1-2-3456'); assert.equal(p.data.editing.code, '9999'); assert.equal(p.data.storageBlocked, true);
-  p = page(wx); await importOne(p); assert.equal(p.data.records.length, 1); assert.equal(p.data.drafts.length, 1);
+  p = page(wx); p.data.images = ['a']; await p.recognizeCloud(); p.data.drafts[0].code = '9876'; await p.confirmImport(); assert.equal(p.data.records.length, 1); assert.equal(p.data.drafts.length, 1);
   wx.values[storage.KEY] = { version: 999 }; p = page(wx);
   assert.equal(p.data.storageBlocked, true); const writes = wx.writes.length; p.toggleTaken(event('any')); await p.confirmImport(); assert.equal(wx.writes.length, writes);
 });

@@ -8,7 +8,7 @@ const fileidOcr = require("../../services/fileid-ocr");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
@@ -79,6 +79,7 @@ Page({
   onUnload() {
     this.unloaded = true;
     this.recognitionRun = null;
+    this.cancelImportReview();
     this.cancelRecognition();
     clearTimeout(this.undoTimer);
     this.undoRecord = null;
@@ -180,53 +181,86 @@ Page({
     }
   },
   async confirmImport() {
-    if (this.data.choosing || this.data.importing || this.data.deleting || this.data.storageBlocked || !this.data.drafts.length) return;
+    if (this.unloaded || this.data.choosing || this.data.importing || this.data.deleting || this.data.storageBlocked || !this.data.drafts.length) return;
     const importingDrafts = this.data.drafts.slice();
     if (importingDrafts.some(r => !r.station.trim() || r.station.trim().length > 100 ||
       !r.code.trim() || r.code.trim().length > 32)) {
       this.setData({ error: "请先修改异常记录：地点需为 1–100 字，取件码需为 1–32 字。" });
       return;
     }
-    this.setData({ importing: true, error: "", editing: null });
+    this.setData({ importing: true, error: "", importFeedback: "", editing: null });
     try {
-      const confirmation = await wx.showModal({ title: "确认导入",
-        content: `请核对地点和取件码。将检查并保存 ${importingDrafts.length} 条${this.data.mock ? "模拟示例" : "取件"}记录到本机。`,
-        confirmText: "开始导入" });
-      if (!confirmation.confirm) return;
-      const records = this.data.records.slice();
-      let added = 0, skipped = 0;
-      for (const draft of importingDrafts) {
-        const duplicate = duplicates.findDuplicate(draft, records);
-        if (duplicate) {
-          const old = duplicate.record;
-          if (duplicate.kind === "waybill") {
-            const answer = await wx.showModal({ title: "运单号重复",
-              content: `${draft.station} · ${draft.code} 的运单号已有记录（${old.taken ? "已取" : "待取"}）。将跳过此项，保留原记录。`,
-              confirmText: "跳过此项", cancelText: "取消导入" });
-            if (!answer.confirm) return;
-            skipped++;
-            continue;
-          }
-          const answer = await wx.showModal({ title: "疑似重复，请确认",
-            content: `${draft.station} · ${draft.code} 与${old.taken ? "已取" : "待取"}记录相似。${old.taken ? "取件码可能被新包裹复用。" : "可能是重复截图，也可能是不同包裹。"}确认是不同包裹才新增。`,
-            confirmText: "仍然新增", cancelText: "跳过此项" });
-          if (!answer.confirm) { skipped++; continue; }
-        }
-        records.push(storage.newRecord(draft, records));
-        added++;
+      const session = { original: this.data.records.slice(), drafts: importingDrafts, choices: {}, newRecords: new Map() };
+      let plan = duplicates.planImport(session.original, session.drafts, session.choices, session.newRecords);
+      if (plan.reviews.length) {
+        plan = await new Promise(resolve => {
+          this.importSession = { ...session, resolve };
+          this.refreshImportReview();
+        });
+        if (!plan) return;
+      } else if (plan.added || plan.updated) {
+        const confirmation = await wx.showModal({ title: "确认导入",
+          content: `将新增 ${plan.added} 件，更新 ${plan.updated} 件，跳过重复 ${plan.skipped} 件${this.data.mock ? "（模拟示例）" : ""}。取件记录仅保存在本机。`,
+          confirmText: "确认导入" });
+        if (!confirmation.confirm) return;
       }
-      if (added && !this.persistRecords(records)) return;
+      if (this.unloaded || this.data.storageBlocked) return;
+      if ((plan.added || plan.updated) && !this.persistRecords(plan.records)) return;
+      const { added, updated, skipped } = plan;
+      if (updated) {
+        this.clearUndo();
+        this.undoRecord = { kind: "merge", updates: plan.updates, until: Date.now() + 5000 };
+        this.setData({ undoAvailable: true, undoMessage: `已更新 ${updated} 件信息` });
+        this.undoTimer = setTimeout(() => this.clearUndo(), 5000);
+      }
       const drafts = this.data.drafts.filter(r => !importingDrafts.some(imported => imported.id === r.id));
       this.setData({ drafts, draftGroups: parser.group(drafts),
         ...(!this.data.loading && !drafts.length ? { images: [], results: [], completed: false } : {}),
-        error: "", activeTab: "home",
+        error: "", activeTab: "home", importFeedback: `已新增 ${added} 件，更新 ${updated} 件，跳过重复 ${skipped} 件`,
         collapsedStations: this.data.collapsedStations.filter(station => !importingDrafts.some(r => r.station === station)) });
       this.updateRecords(this.data.records);
       if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 0 });
-      if (wx.showToast) wx.showToast({ title: `已导入 ${added} 件${skipped ? `，跳过 ${skipped} 件` : ""}`, icon: "none" });
+      if (wx.showToast) wx.showToast({ title: added || updated ? "导入完成" : "该快递已存在", icon: "none" });
     } catch (_) {
       this.setData({ error: "导入未完成，待导入内容已保留，请重试。" });
-    } finally { this.setData({ importing: false }); }
+    } finally { if (!this.unloaded) this.setData({ importing: false }); }
+  },
+  refreshImportReview() {
+    const session = this.importSession;
+    if (!session || this.unloaded) return;
+    const plan = duplicates.planImport(session.original, session.drafts, session.choices, session.newRecords);
+    session.plan = plan;
+    this.setData({ reviewOpen: true, reviewItems: plan.reviews,
+      reviewSummary: `新增 ${plan.added} 件 · 更新 ${plan.updated} 件 · 跳过重复 ${plan.skipped} 件` });
+  },
+  chooseImportAction(e) {
+    if (!this.importSession) return;
+    const { id, action, targetId } = e.currentTarget.dataset;
+    if (!["update", "skip", "new"].includes(action)) return;
+    this.importSession.choices[id] = { action, targetId };
+    this.refreshImportReview();
+  },
+  finishImportReview() {
+    const session = this.importSession;
+    if (!session || this.data.storageBlocked || this.unloaded) return;
+    this.refreshImportReview();
+    this.importSession = null;
+    this.setData({ reviewOpen: false });
+    session.resolve(session.plan);
+  },
+  cancelImportReview() {
+    const session = this.importSession;
+    if (!session) return;
+    this.importSession = null;
+    if (!this.unloaded) this.setData({ reviewOpen: false });
+    session.resolve(null);
+  },
+  copyCode(e) {
+    const record = this.data.records.find(r => r.id === e.currentTarget.dataset.id && !r.taken);
+    if (!record) return;
+    wx.setClipboardData({ data: record.code,
+      success: () => wx.showToast({ title: "取件码已复制", icon: "none" }),
+      fail: () => wx.showToast({ title: "复制失败，请重试", icon: "none" }) });
   },
   noop() {},
   switchTab(e) {
@@ -336,6 +370,19 @@ Page({
     if (!undo || Date.now() >= undo.until) { this.clearUndo(); return; }
     if (this.data.deleting || this.data.importing || this.data.storageBlocked) return;
     const records = this.data.records.slice();
+    if (undo.kind === "merge") {
+      if (undo.updates.some(u => !records.some(r => r.id === u.after.id && JSON.stringify(r) === JSON.stringify(u.after)))) {
+        this.clearUndo();
+        if (wx.showToast) wx.showToast({ title: "记录已变化，请手动修改", icon: "none" });
+        return;
+      }
+      const restored = records.map(r => {
+        const update = undo.updates.find(u => u.before.id === r.id);
+        return update ? storage.updateRecord(r, { station: update.before.station, carrier: update.before.carrier, waybillNumber: update.before.waybillNumber }) : r;
+      });
+      if (this.persistRecords(restored)) { this.clearUndo(); this.setData({ importFeedback: "已撤销信息更新" }); }
+      return;
+    }
     if (undo.kind === "taken") {
       if (this.persistRecords(records.map(r => r.id === undo.record.id ? storage.updateRecord(r, { taken: false }) : r))) this.clearUndo();
       return;
@@ -388,6 +435,10 @@ Page({
       this.setData({ editError: "请填写地点和取件码，并检查内容长度。" }); return;
     }
     const changes = { station: edit.station.trim(), code: edit.code.trim(), carrier: (edit.carrier || "").trim() };
+    const original = [...this.data.records, ...this.data.drafts].find(r => r.id === edit.id);
+    if (!original) return;
+    changes.confirmedFields = [...new Set([...(original.confirmedFields || []), ...Object.keys(changes).filter(key =>
+      changes[key] !== (original[key] || "") || (changes[key] && changes[key] !== parser.UNKNOWN))])];
     if (this.data.drafts.some(r => r.id === edit.id)) {
       const drafts = this.data.drafts.map(r => r.id === edit.id ? { ...r, ...changes, needsReview: false } : r);
       this.setData({ drafts, draftGroups: parser.group(drafts) });

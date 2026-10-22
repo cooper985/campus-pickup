@@ -1,6 +1,7 @@
 const KEY = "campus-pickup.records";
 const BACKUP_KEY = `${KEY}.backup`;
 const VERSION = 1;
+const CONFIRMABLE = ["station", "code", "carrier"];
 const FIELDS = ["id", "station", "code", "carrier", "waybillNumber", "taken", "createdAt", "updatedAt", "takenAt"];
 const copy = value => JSON.parse(JSON.stringify(value));
 const time = value => Number.isSafeInteger(value) && value > 0;
@@ -23,6 +24,10 @@ function validate(value) {
         r.takenAt < r.createdAt || r.takenAt > r.updatedAt : r.takenAt !== null)) {
       throw new Error("本地记录字段异常");
     }
+    if (r.confirmedFields !== undefined && (!Array.isArray(r.confirmedFields) ||
+      r.confirmedFields.length > 3 || r.confirmedFields.some(f => CONFIRMABLE.indexOf(f) < 0))) {
+      throw new Error("本地字段确认信息异常");
+    }
     ids.add(r.id);
   }
   return value;
@@ -30,6 +35,7 @@ function validate(value) {
 function storedRecord(record) {
   const result = {};
   FIELDS.forEach(key => { result[key] = record[key]; });
+  if (record.confirmedFields !== undefined) result.confirmedFields = record.confirmedFields.slice();
   return result;
 }
 
@@ -94,7 +100,8 @@ function newRecord(draft, existing = [], now = Date.now()) {
   } while (existing.some(r => r.id === id));
   return storedRecord({ id, station: draft.station.trim(), code: draft.code.trim(),
     carrier: draft.carrier || "", waybillNumber: draft.waybillNumber || "",
-    taken: false, createdAt: now, updatedAt: now, takenAt: null });
+    taken: false, createdAt: now, updatedAt: now, takenAt: null,
+    ...(draft.confirmedFields ? { confirmedFields: draft.confirmedFields } : {}) });
 }
 function updateRecord(record, changes, now = Date.now()) {
   const updatedAt = Math.max(now, record.updatedAt);

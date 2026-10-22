@@ -61,7 +61,7 @@ test('去重优先运单；不同可靠运单允许同码；归一化、未知�
   assert.equal(findDuplicate({ station: '北门 驿站', code: '１－２－３４５６' }, [a]).kind, 'pending-code');
   assert.equal(findDuplicate({ station: '待确认地点', code: a.code }, [a]).kind, 'pending-code');
   assert.equal(findDuplicate({ ...a, waybillNumber: '' }, [{ ...a, taken: true }]).kind, 'reused-code');
-  assert.equal(findDuplicate({ station: '南门驿站', code: a.code }, [a]), null);
+  assert.equal(findDuplicate({ station: '南门驿站', code: a.code }, [a]).kind, 'location-conflict');
 });
 test('元信息仅采纳单包裹明确标注的唯一运单，不把电话或多包裹号码错误关联', () => {
   assert.deepEqual(metadata(['中通快递', '运单号: SF123456789012'], 1), { carrier: '中通快递', waybillNumber: 'SF123456789012' });

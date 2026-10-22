@@ -59,7 +59,12 @@ test('原图字节→真实压缩输入回放→云适配器→并发页面→�
   for (const c of cases) assert.deepEqual(Array.from(p.data.drafts.filter(r => r.sourceIndex === c.case - 1), r => [r.code, r.station]), c.expected);
   assert.equal(p.data.results[3].status, 'in_transit'); assert.equal(p.data.results[3].error, '');
   wx.showModal = async o => ({ confirm: o.title !== '疑似重复，请确认' });
-  await p.confirmImport();
+  const importing = p.confirmImport();
+  if (p.data.reviewOpen) {
+    for (const item of p.data.reviewItems) p.chooseImportAction({ currentTarget: { dataset: { id: item.id, action: "skip" } } });
+    p.finishImportReview();
+  }
+  await importing;
   assert.equal(page(wx).data.records.length, 15); // An unknown-place B3-4-7401 triggers duplicate review and is skipped.
 });
 test('11秒正常响应：767的10秒硬截止丢弃，稳定版与修复版接受；慢提示不会冒充超时', async t => {
