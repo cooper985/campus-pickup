@@ -34,6 +34,12 @@ test("服务端只读取校验图片并在成功/异常时删除，不返回图�
   const failed=await probe({fileID},{OPENID:"test-user"},s.options);
   assert.equal(failed.readSucceeded,false); assert.equal(failed.serverDeleted,true);
   assert.equal(failed.error.code,"PROBE_READ_FAILED");
+  s.options.cloud.downloadFile=async()=>{throw {errCode:-503002,code:'STORAGE_PERMISSION_DENIED',errMsg:'Permission denied https://private-url/token'};};
+  s.options.cloud.deleteFile=async()=>{throw {errCode:-503002,errMsg:'Permission denied private account'};};
+  const restricted=await probe({fileID},{OPENID:"test-user"},s.options);
+  assert.deepEqual(restricted.readFailure,{serviceCode:'STORAGE_PERMISSION_DENIED',sdkCode:-503002,kind:'permission'});
+  assert.deepEqual(restricted.deleteFailure,{serviceCode:null,sdkCode:-503002,kind:'permission'});
+  assert.ok(!JSON.stringify(restricted).includes('private'));
   const denied=server(); denied.options.cloud.deleteFile=async()=>({fileList:[{status:-1}]});
   const retained=await probe({fileID},{OPENID:"test-user"},denied.options);
   assert.equal(retained.serverDeleted,false); assert.equal(retained.error.code,"PROBE_DELETE_FAILED");

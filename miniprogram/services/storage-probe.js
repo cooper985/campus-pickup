@@ -4,7 +4,7 @@ const WAIT_MS = 60000;
 
 async function run(imagePath, onStage = () => {}) {
   if (!isDevelopment()) throw new Error("仅开发版可验证");
-  const report = { build: "20261022-fileid-probe-v1", env: CLOUD_ENV, ocrCalls: 0,
+  const report = { build: "20261022-fileid-probe-v2", env: CLOUD_ENV, ocrCalls: 0,
     uploadSucceeded: false, fileIdValid: false, functionReturned: false, readSucceeded: false,
     serverDeleted: false, clientDeleted: false, cleanupPending: false, timings: {} };
   let fileID, expectedPrefix, cloudPath;
@@ -70,6 +70,12 @@ async function run(imagePath, onStage = () => {}) {
     report.functionReturned = true;
     report.readSucceeded = result.readSucceeded === true && result.imageBytes === report.imageBytes;
     report.serverDeleted = result.serverDeleted === true;
+    for (const key of ["readFailure", "deleteFailure"]) {
+      const failure = result[key];
+      if (failure && ["permission", "credentials", "not_found", "sdk_response", "timeout", "other"].includes(failure.kind)) {
+        report[key] = { serviceCode: typeof failure.serviceCode === "string" && /^[A-Z][A-Z_]{1,63}$/.test(failure.serviceCode) ? failure.serviceCode : null, kind: failure.kind, sdkCode: Number.isInteger(failure.sdkCode) ? failure.sdkCode : null };
+      }
+    }
     for (const key of ["readMs", "deleteMs"]) if (Number.isFinite(result[key]) && result[key] >= 0) report.timings[key] = result[key];
     if (!report.readSucceeded) throw { code: "PROBE_READ_FAILED" };
   } catch (err) {

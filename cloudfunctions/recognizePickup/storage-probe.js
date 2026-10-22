@@ -1,5 +1,15 @@
 const MAX_BYTES = 512 * 1024;
 const failure = code => ({ protocol: 1, ok: false, error: { code } });
+function storageFailure(err) {
+  const message = String(err && (err.errMsg || err.message) || "");
+  const serviceCode = typeof (err && err.code) === "string" && /^[A-Z][A-Z_]{1,63}$/.test(err.code) ? err.code : null;
+  return { serviceCode, sdkCode: Number.isInteger(err && err.errCode) ? err.errCode : null,
+    kind: /permission|denied|unauthor|forbidden|权限|未授权|CAM_CHECK/i.test(message) ? "permission"
+      : /credential|secretId|secretKey|token|signature|签名|鉴权/i.test(message) ? "credentials"
+      : /not.?found|no.?such|不存在|not exist/i.test(message) ? "not_found"
+        : /undefined|cannot read|fileList/i.test(message) ? "sdk_response"
+          : /timeout|timed out/i.test(message) ? "timeout" : "other" };
+}
 
 async function probe(event, identity, options) {
   const openid = identity && identity.OPENID;
@@ -25,15 +35,20 @@ async function probe(event, identity, options) {
       report.readSucceeded = png || jpeg;
       if (!report.readSucceeded) report.error = { code: "INVALID_IMAGE" };
     }
-  } catch (_) {
+  } catch (err) {
     report.readMs = Date.now() - started;
+    report.readFailure = storageFailure(err);
     report.error = { code: "PROBE_READ_FAILED" };
   } finally {
     const deletionStarted = Date.now();
     try {
       const result = await options.cloud.deleteFile({ fileList: [fileID] });
       report.serverDeleted = !!(result && result.fileList && result.fileList.length === 1 && result.fileList[0].status === 0);
-    } catch (_) { /* The client and prefix lifecycle provide independent cleanup. */ }
+      if (!report.serverDeleted) {
+        const item = result && result.fileList && result.fileList[0];
+        report.deleteFailure = storageFailure(item && { errCode: item.status, errMsg: item.errMsg });
+      }
+    } catch (err) { report.deleteFailure = storageFailure(err); }
     report.deleteMs = Date.now() - deletionStarted;
   }
   report.ok = report.readSucceeded && report.serverDeleted;
