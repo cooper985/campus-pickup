@@ -1,4 +1,10 @@
-# recognizePickup 云存储鉴权问题（可提交腾讯云支持）
+# recognizePickup 云存储鉴权问题（已通过受控验证）
+
+2026-10-22 验证结论：安全诊断补丁已部署，凭证与 Token 齐全，环境和地域匹配。服务端明确拒绝 tcb:GetFileDownloadUrl 和 tcb:DeleteFile。仅为当前上海环境临时授权这两项操作后，同一 SDK 成功读取并删除 68 字节合成 PNG；未改初始化，OCR 调用为 0。原错误已确定为操作权限不足。
+
+上传 1144ms；fileID 调用 1482ms；服务端读取 447ms、删除 326ms。删除接口返回成功，未触发客户端兜底。验证后已解除策略与运行角色的临时关联，策略当前无任何关联对象。后续完整 OCR 验证需要重新启用这两项权限。Android 完整链路尚未测试，正式传输路径未切换。安全元数据见 fileid-auth-result.json。
+
+以下为验证前的问题记录，相关疑问已由上述受控验证解决。
 
 - 环境：cloud1-d8g3dicam66594fcf；上海；函数 recognizePickup；Node.js 16.13；20 秒。
 - 运行角色：campusPickupOcrRole，目前仅关联 OCR 策略。

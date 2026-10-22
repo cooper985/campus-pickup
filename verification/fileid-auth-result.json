@@ -1,0 +1,64 @@
+{
+  "environment": "cloud1-d8g3dicam66594fcf",
+  "function": "recognizePickup",
+  "gitSource": "4e11a3f",
+  "sdkVersions": {
+    "wx-server-sdk": "4.0.2",
+    "@cloudbase/node-sdk": "3.17.2",
+    "@cloudbase/signature-nodejs": "2.2.0"
+  },
+  "runtime": {
+    "credentialsComplete": true,
+    "tokenPresent": true,
+    "envMatches": true,
+    "regionMatches": true
+  },
+  "beforeAuthorization": {
+    "serviceCode": "SIGN_PARAM_INVALID",
+    "sdkCode": -1,
+    "kind": "permission",
+    "readDeniedAction": "tcb:GetFileDownloadUrl",
+    "deleteDeniedAction": "tcb:DeleteFile",
+    "readMs": 50,
+    "deleteMs": 34
+  },
+  "controlledTest": {
+    "platform": "WeChat Developer Tools",
+    "synthetic": true,
+    "imageBytes": 68,
+    "requestBytes": 184,
+    "ocrCalls": 0,
+    "uploadSucceeded": true,
+    "uploadMs": 1144,
+    "callMs": 1482,
+    "readSucceeded": true,
+    "readMs": 447,
+    "serverDeleted": true,
+    "deleteMs": 326,
+    "clientFallbackNeeded": false
+  },
+  "deployment": {
+    "changedFiles": [
+      "index.js",
+      "storage-probe.js"
+    ],
+    "dependencyChanges": 0,
+    "ocrHandlerChanged": false,
+    "timeoutSeconds": 20,
+    "sourceMatches": true
+  },
+  "authorization": {
+    "policy": "campusPickupProbeStorage",
+    "actions": [
+      "tcb:GetFileDownloadUrl",
+      "tcb:DeleteFile"
+    ],
+    "resource": "qcs::tcb:ap-shanghai:uin/100053978009:env/cloud1-d8g3dicam66594fcf",
+    "role": "campusPickupOcrRole",
+    "temporaryAssociationRevoked": true,
+    "remainingPolicyAssociations": 0
+  },
+  "androidRetested": false,
+  "fullFileidOcrTested": false,
+  "productionTransportChanged": false
+}
