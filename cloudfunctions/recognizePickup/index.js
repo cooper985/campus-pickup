@@ -11,7 +11,13 @@ exports.main = async (event) => {
   const allowedOpenids = (process.env.OCR_ALLOWED_OPENIDS || "").split(",").map(value => value.trim()).filter(Boolean);
   if (event && event.action === "storageProbe") {
     return probe(event, identity, { cloud, allowedOpenids, envId: "cloud1-d8g3dicam66594fcf",
-      ready: process.env.OCR_STORAGE_PROBE_READY === "1", bucket: process.env.OCR_STORAGE_PROBE_BUCKET });
+      ready: process.env.OCR_STORAGE_PROBE_READY === "1", bucket: process.env.OCR_STORAGE_PROBE_BUCKET,
+      runtime: {
+        credentialsComplete: !!(process.env.TENCENTCLOUD_SECRETID && process.env.TENCENTCLOUD_SECRETKEY && process.env.TENCENTCLOUD_SESSIONTOKEN),
+        tokenPresent: !!process.env.TENCENTCLOUD_SESSIONTOKEN,
+        envMatches: (process.env.TCB_ENV || process.env.SCF_NAMESPACE) === "cloud1-d8g3dicam66594fcf",
+        regionMatches: process.env.TENCENTCLOUD_REGION === "ap-shanghai",
+      } });
   }
   // 每次调用读取临时凭证，避免复用已过期凭证；不接受客户端传入凭证或模式。
   return handle(event, identity, {

@@ -37,9 +37,14 @@ test("服务端只读取校验图片并在成功/异常时删除，不返回图�
   s.options.cloud.downloadFile=async()=>{throw {errCode:-503002,code:'STORAGE_PERMISSION_DENIED',errMsg:'Permission denied https://private-url/token'};};
   s.options.cloud.deleteFile=async()=>{throw {errCode:-503002,errMsg:'Permission denied private account'};};
   const restricted=await probe({fileID},{OPENID:"test-user"},s.options);
-  assert.deepEqual(restricted.readFailure,{serviceCode:'STORAGE_PERMISSION_DENIED',sdkCode:-503002,kind:'permission'});
-  assert.deepEqual(restricted.deleteFailure,{serviceCode:null,sdkCode:-503002,kind:'permission'});
+  assert.deepEqual(restricted.readFailure,{deniedAction:null,serviceCode:'STORAGE_PERMISSION_DENIED',sdkCode:-503002,kind:'permission'});
+  assert.deepEqual(restricted.deleteFailure,{deniedAction:null,serviceCode:null,sdkCode:-503002,kind:'permission'});
   assert.ok(!JSON.stringify(restricted).includes('private'));
+  s.options.cloud.downloadFile=async()=>{throw {code:'SIGN_PARAM_INVALID',errCode:-1,
+    message:'you are not authorized to perform operation (tcb:GetFileDownloadUrl) private-url/token'};};
+  const auth=await probe({fileID},{OPENID:"test-user"},s.options);
+  assert.deepEqual(auth.readFailure,{deniedAction:'tcb:GetFileDownloadUrl',serviceCode:'SIGN_PARAM_INVALID',sdkCode:-1,kind:'permission'});
+  assert.ok(!JSON.stringify(auth).includes('private-url'));
   const denied=server(); denied.options.cloud.deleteFile=async()=>({fileList:[{status:-1}]});
   const retained=await probe({fileID},{OPENID:"test-user"},denied.options);
   assert.equal(retained.serverDeleted,false); assert.equal(retained.error.code,"PROBE_DELETE_FAILED");
@@ -62,7 +67,7 @@ function client({ready=true,callFails=false}={}) {
   const wx={ getFileSystemManager:()=>({getFileInfo:({success})=>success({size:image.length})}), cloud:{
     callFunction:async args=>{
       assert.equal(args.config.env,CLOUD_ENV); calls.push(args.data);
-      if(args.data.check)return {result:ready?{protocol:1,ok:true,openid:"test-user",filePrefix:prefix}:{ok:false}};
+      if(args.data.check)return {result:ready?{protocol:1,ok:true,openid:"test-user",filePrefix:prefix,runtime:{credentialsComplete:true,tokenPresent:true,envMatches:true,regionMatches:true,secretKey:"private-secret"}}:{ok:false}};
       if(callFails)throw {errCode:-404012,errMsg:"private text"};
       return {result:{protocol:1,ok:true,readSucceeded:true,serverDeleted:true,imageBytes:image.length,readMs:8,deleteMs:3}};
     },
@@ -77,6 +82,7 @@ function client({ready=true,callFails=false}={}) {
 test("客户端单次上传及小参数调用，未部署时不上传，云调用失败也清理，不自动重试",async()=>{
   const s=client(),report=await s.run("private-image-path");
   assert.equal(report.uploadSucceeded,true); assert.equal(report.fileIdValid,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(report.runtime)),{credentialsComplete:true,tokenPresent:true,envMatches:true,regionMatches:true});
   assert.equal(report.readSucceeded,true); assert.equal(report.serverDeleted,true); assert.equal(report.cleanupPending,false);
   assert.equal(report.timings.readMs,8); assert.ok(report.requestBytes<300); assert.equal(report.ocrCalls,0);
   assert.equal(s.calls.length,3); assert.ok(!("imageBase64" in s.calls[2]));

@@ -1,0 +1,15 @@
+{
+  "version": "2.0",
+  "statement": [
+    {
+      "effect": "allow",
+      "action": [
+        "tcb:GetFileDownloadUrl",
+        "tcb:DeleteFile"
+      ],
+      "resource": [
+        "qcs::tcb:ap-shanghai:uin/100053978009:env/cloud1-d8g3dicam66594fcf"
+      ]
+    }
+  ]
+}

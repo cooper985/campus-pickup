@@ -4,7 +4,7 @@ const WAIT_MS = 60000;
 
 async function run(imagePath, onStage = () => {}) {
   if (!isDevelopment()) throw new Error("仅开发版可验证");
-  const report = { build: "20261022-fileid-probe-v2", env: CLOUD_ENV, ocrCalls: 0,
+  const report = { build: "20261022-fileid-probe-v3", env: CLOUD_ENV, ocrCalls: 0,
     uploadSucceeded: false, fileIdValid: false, functionReturned: false, readSucceeded: false,
     serverDeleted: false, clientDeleted: false, cleanupPending: false, timings: {} };
   let fileID, expectedPrefix, cloudPath;
@@ -39,6 +39,10 @@ async function run(imagePath, onStage = () => {}) {
     if (!ready || ready.protocol !== 1 || ready.ok !== true) throw { code: "PROBE_NOT_READY" };
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(ready.openid) || typeof ready.filePrefix !== "string" ||
         !new RegExp(`^cloud://${CLOUD_ENV}\\.[a-z0-9-]+/ocr-probe/${ready.openid}/$`).test(ready.filePrefix)) throw { code: "PROBE_BAD_RESPONSE" };
+    report.runtime = {};
+    for (const key of ["credentialsComplete", "tokenPresent", "envMatches", "regionMatches"]) {
+      if (typeof (ready.runtime && ready.runtime[key]) === "boolean") report.runtime[key] = ready.runtime[key];
+    }
     expectedPrefix = ready.filePrefix;
     const preparedPath = await step("prepareMs", async () => {
       const stat = path => new Promise((resolve, reject) => wx.getFileSystemManager().getFileInfo({ filePath: path, success: resolve, fail: reject }));
@@ -73,7 +77,7 @@ async function run(imagePath, onStage = () => {}) {
     for (const key of ["readFailure", "deleteFailure"]) {
       const failure = result[key];
       if (failure && ["permission", "credentials", "not_found", "sdk_response", "timeout", "other"].includes(failure.kind)) {
-        report[key] = { serviceCode: typeof failure.serviceCode === "string" && /^[A-Z][A-Z_]{1,63}$/.test(failure.serviceCode) ? failure.serviceCode : null, kind: failure.kind, sdkCode: Number.isInteger(failure.sdkCode) ? failure.sdkCode : null };
+        report[key] = { deniedAction: ["tcb:GetFileDownloadUrl", "tcb:GetDownloadUrl", "tcb:DeleteFile", "tcb:GetFileAuthority"].includes(failure.deniedAction) ? failure.deniedAction : null, serviceCode: typeof failure.serviceCode === "string" && /^[A-Z][A-Z_]{1,63}$/.test(failure.serviceCode) ? failure.serviceCode : null, kind: failure.kind, sdkCode: Number.isInteger(failure.sdkCode) ? failure.sdkCode : null };
       }
     }
     for (const key of ["readMs", "deleteMs"]) if (Number.isFinite(result[key]) && result[key] >= 0) report.timings[key] = result[key];
