@@ -80,3 +80,16 @@ test("客户端单次上传及小参数调用，未部署时不上传，云调�
   assert.equal(failure.failedPhase,"callMs"); assert.equal(failure.sdkCode,-404012); assert.equal(failure.clientDeleted,true);
   assert.equal(failed.calls.filter(x=>x==="delete").length,1); assert.equal(failed.calls.length,4);
 });
+
+test("选图后可直接验证，重复点击只复制同一报告，不为验证调用OCR",async()=>{
+  const {page}=require('./helpers/page'),{fakeStorage}=require('./helpers/storage');
+  const task=require('../miniprogram/services/recognition-task');
+  const wx=fakeStorage();let probes=0,ocr=0,copies=0;
+  wx.showLoading=wx.hideLoading=wx.showToast=()=>{};wx.setClipboardData=()=>copies++;
+  const p=page(wx,async()=>{ocr++;},undefined,{'recognition-task':{...task,isDevelopment:()=>true},
+    'storage-probe':{run:async()=>{probes++;return {ocrCalls:0};}}});
+  p.data.images=['local-image'];
+  const event={currentTarget:{dataset:{index:'0'}}};
+  await p.verifyStoragePath(event);await p.verifyStoragePath(event);
+  assert.equal(probes,1);assert.equal(ocr,0);assert.equal(copies,2);assert.equal(p.data.probeReportReady,true);
+});

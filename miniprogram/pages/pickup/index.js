@@ -55,12 +55,13 @@ Page({
     if (!task.isDevelopment() || this.probeRunning || this.data.loading || this.data.importing) return;
     if (!this.probeReport) {
       const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId);
-      if (!result || result.state !== "failed") return;
+      const index = result ? result.index - 1 : Number(e.currentTarget.dataset.index);
+      if ((result && result.state !== "failed") || !this.data.images[index]) return;
       this.probeRunning = true;
       this.setData({ probeLoading: true });
       wx.showLoading({ title: "验证上传通道", mask: true });
       const titles = { preflightMs: "检查验证配置", prepareMs: "准备图片", uploadMs: "上传图片", callMs: "读取并删除图片", cleanupMs: "清理临时图片" };
-      try { this.probeReport = await storageProbe.run(this.data.images[result.index - 1], stage => {
+      try { this.probeReport = await storageProbe.run(this.data.images[index], stage => {
         if (!this.unloaded) wx.showLoading({ title: titles[stage] || "验证上传通道", mask: true });
       }); }
       finally { this.probeRunning = false; wx.hideLoading(); if (!this.unloaded) this.setData({ probeLoading: false, probeReportReady: !!this.probeReport }); }
