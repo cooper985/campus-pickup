@@ -24,6 +24,7 @@
       <button size="mini" data-task-id="{{item.taskId}}" bindtap="skipImage">跳过此图</button>
     </view>
     <button wx:if="{{item.retryable}}" size="mini" class="secondary" data-task-id="{{item.taskId}}" bindtap="retryImage" disabled="{{importing}}">重试</button>
+    <button wx:if="{{diagnosticEnabled && item.error && item.state === 'failed'}}" size="mini" class="secondary" data-task-id="{{item.taskId}}" bindtap="copyRecognitionDiagnostic">复制诊断信息</button>
     <view wx:if="{{item.retained}}" class="hint">本图上次的成功草稿已保留，请核对后导入。</view>
     <view wx:if="{{item.uncertainCount}}" class="hint">另有内容待核对，未加入待导入列表。</view>
     <button wx:if="{{item.uncertainCount}}" size="mini" class="secondary" data-index="{{item.index - 1}}" bindtap="previewImage">核对原图</button>

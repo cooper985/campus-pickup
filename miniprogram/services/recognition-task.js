@@ -3,6 +3,12 @@ const PREPARE_TIMEOUT_MS = 15000;
 // Roundtrip includes upload, cold start and download, not just the function's 20s execution.
 const WAIT_TIMEOUT_MS = 60000;
 const SLOW_AFTER_MS = 8000;
+const CLOUD_ENV = "cloud1-d8g3dicam66594fcf";
+const DIAGNOSTIC_BUILD = "20261021-android-d2";
+// Memory only; one batch plus retries, never persist screenshot or OCR content.
+const events = [];
+const stages = new Set(["image_prepare", "image_stat", "image_size", "image_read", "image_compress", "compressed_read",
+  "cloud_submit", "cloud_roundtrip", "cloud_return", "cloud_result", "cloud_breakdown", "cloud_late_result", "text_parse", "image_total", "queue_wait"]);
 const messages = {
   IMAGE_READ: "无法读取图片，请重新选择。",
   IMAGE_COMPRESS: "图片压缩失败，请裁剪后重新选择。",
@@ -31,11 +37,34 @@ function isDevelopment() {
 }
 function log(stage, started, code = "OK", metrics = {}) {
   if (!isDevelopment()) return;
+  if (!stages.has(stage)) return;
   const safe = {};
   for (const key of ["traceId", "imageBytes", "base64Chars", "requestBytes", "ocrMs", "overheadMs"]) {
     if (Number.isFinite(metrics[key]) && metrics[key] >= 0) safe[key] = metrics[key];
   }
-  console.info("[pickup-timing]", { stage, ms: Math.max(0, Date.now() - started), type: code === "OK" || known(code) ? code : "OCR_FAILED", ...safe });
+  if (Number.isInteger(metrics.sdkCode)) safe.sdkCode = metrics.sdkCode;
+  if (["client", "client_wait", "cloud_call", "cloud_result"].includes(metrics.origin)) safe.origin = metrics.origin;
+  if (stages.has(metrics.phase)) safe.phase = metrics.phase;
+  if (["polling_timeout", "function_timeout", "request_timeout", "network", "other"].includes(metrics.errorKind)) safe.errorKind = metrics.errorKind;
+  if (typeof metrics.requestId === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(metrics.requestId)) safe.requestId = metrics.requestId;
+  const event = { stage, ms: Math.max(0, Date.now() - started), type: code === "OK" || known(code) ? code : "OCR_FAILED", ...safe };
+  events.push({ atMs: Date.now(), ...event });
+  if (events.length > 256) events.shift();
+  console.info("[pickup-timing]", event);
+}
+function diagnostic(traceId) {
+  if (!isDevelopment()) return null;
+  let platform = "unknown", SDKVersion = "unknown", wechatVersion = "unknown";
+  try {
+    const device = wx.getDeviceInfo(), base = wx.getAppBaseInfo();
+    if (["android", "ios", "devtools", "windows", "mac", "ohos"].includes(device.platform)) platform = device.platform;
+    if (/^\d+(?:\.\d+){1,3}$/.test(base.SDKVersion)) SDKVersion = base.SDKVersion;
+    if (/^\d+(?:\.\d+){1,3}$/.test(base.version)) wechatVersion = base.version;
+  } catch (_) { /* Older base libraries may not expose these APIs. */ }
+  return { build: DIAGNOSTIC_BUILD, env: CLOUD_ENV, function: "recognizePickup", envVersion: "develop", platform, SDKVersion, wechatVersion,
+    prepareTimeoutMs: PREPARE_TIMEOUT_MS, waitTimeoutMs: WAIT_TIMEOUT_MS,
+    readIncludesBase64Encoding: true, requestBytesScope: "data_json_without_sdk_envelope",
+    events: events.filter(event => event.traceId === traceId).map(event => ({ ...event })) };
 }
 function start(work, timeoutMs, onStage = () => {}, onSlow = () => {}) {
   let active = true, timer, slowTimer, rejectWait, phase = "image_prepare", phaseStarted = Date.now();
@@ -47,14 +76,15 @@ function start(work, timeoutMs, onStage = () => {}, onSlow = () => {}) {
   };
   const check = () => { if (!active) throw error("CANCELLED"); };
   const stopped = new Promise((_, reject) => { rejectWait = reject; });
-  const stop = code => { if (active) { active = false; log(phase, phaseStarted, code); rejectWait(Object.assign(error(code), { origin: "client_wait" })); } };
+  const stop = code => { if (active) { active = false; log(phase, phaseStarted, code, { traceId: control.traceId, origin: "client_wait", phase }); rejectWait(Object.assign(error(code), { origin: "client_wait", phase })); } };
   timer = setTimeout(() => stop("WAIT_TIMEOUT"), timeoutMs === undefined ? PREPARE_TIMEOUT_MS : timeoutMs);
   slowTimer = setTimeout(() => { if (active) onSlow(); }, SLOW_AFTER_MS);
   let result;
-  try { result = work({ check, stage }); } catch (err) { result = Promise.reject(err); }
+  const control = { check, stage };
+  try { result = work(control); } catch (err) { result = Promise.reject(err); }
   const promise = Promise.race([result, stopped]).then(value => { check(); return value; }).finally(() => { active = false; clearTimeout(timer); clearTimeout(slowTimer); });
   // Keep the physical request slot until the underlying call settles, even after a UI timeout.
   const settled = Promise.resolve(result).then(() => {}, () => {});
   return { promise, settled, cancel: (code = "CANCELLED") => stop(code) };
 }
-module.exports = { start, error, log, isDevelopment, WAIT_TIMEOUT_MS, PREPARE_TIMEOUT_MS, SLOW_AFTER_MS };
+module.exports = { start, error, log, diagnostic, isDevelopment, CLOUD_ENV, WAIT_TIMEOUT_MS, PREPARE_TIMEOUT_MS, SLOW_AFTER_MS };

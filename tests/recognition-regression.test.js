@@ -45,7 +45,8 @@ test('原图字节→真实压缩输入回放→云适配器→并发页面→�
   wx.compressImage = ({ src, success }) => { compressCalls++; success({ tempFilePath: path.join(path.dirname(src), `prepared-${path.basename(src)}`) }); };
   wx.cloud = { callFunction: async options => {
     cloudCalls++; assert.equal(options.name, 'recognizePickup');
-    assert.equal(options.config, undefined);
+    assert.equal(options.config.env, task.CLOUD_ENV);
+    assert.equal(options.config.timeout, undefined);
     const result = byImage.get(options.data.imageBase64); assert.ok(result);
     return { result };
   } };

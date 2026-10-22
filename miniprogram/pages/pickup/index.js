@@ -16,6 +16,7 @@ Page({
     this.ocrQueue = createQueue();
     this.imageJobs = new Map();
     this.taskSequence = 0;
+    this.setData({ diagnosticEnabled: task.isDevelopment() });
     this.store = storage.createStore(wx);
     const loaded = this.store.load();
     this.updateRecords(loaded.records);
@@ -40,6 +41,15 @@ Page({
   },
   recognize() { return this.runRecognition(false); },
   recognizeCloud() { return this.runRecognition(true); },
+  copyRecognitionDiagnostic(e) {
+    if (!task.isDevelopment()) return;
+    const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId);
+    if (!result || result.state !== "failed" || /^(SKIPPED|CANCELLED)$/.test(result.status)) return;
+    const report = task.diagnostic(result.traceId);
+    wx.setClipboardData({ data: JSON.stringify(report),
+      success: () => wx.showToast({ title: "诊断信息已复制", icon: "none" }),
+      fail: () => wx.showToast({ title: "复制失败，请重试", icon: "none" }) });
+  },
   retryImage(e) {
     const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId ||
       r.index === Number(e.currentTarget.dataset.index));
@@ -83,6 +93,7 @@ Page({
   async startImage(i, run) {
     if (!run || this.recognitionRun !== run) return;
     const taskId = `image-${++this.taskSequence}`;
+    const traceId = Date.now() * 100 + this.taskSequence;
     const queuedAt = Date.now();
     const imagePath = this.data.images[i];
     let startedAt = 0;
@@ -91,19 +102,19 @@ Page({
       if (!current()) return;
       this.setData({ results: this.data.results.map(r => r.taskId === taskId ? { ...r, ...changes } : r) });
     };
-    const entry = { taskId, index: i + 1, state: "queued", status: "queued", message: "排队中", error: "",
+    const entry = { taskId, traceId, index: i + 1, state: "queued", status: "queued", message: "排队中", error: "",
       count: 0, uncertainCount: 0, retryable: false, mock: !run.useCloud };
     this.setData({ results: [...this.data.results.filter(r => r.index !== i + 1), entry].sort((a, b) => a.index - b.index) });
     this.refreshRecognition();
     const phases = { image_read: "识别中", image_compress: "识别中", compressed_read: "识别中", cloud_roundtrip: "识别中" };
-    const traceId = this.taskSequence;
+    let phase = "image_prepare";
     const job = this.ocrQueue.add(control => {
       control.traceId = traceId;
       return run.useCloud ? cloudOcr.recognize(imagePath, control) : mockOcr.recognize();
     }, {
       timeoutMs: this.recognitionTimeoutMs,
       onStart: () => { startedAt = Date.now(); task.log("queue_wait", queuedAt, "OK", { traceId }); update({ state: "running", message: "识别中" }); },
-      onStage: stage => update({ message: phases[stage] || "正在识别" }),
+      onStage: stage => { phase = stage; update({ message: phases[stage] || "正在识别" }); },
       onSlow: () => update({ message: "还在识别中，可先导入已完成的快递" }),
     });
     this.imageJobs.set(taskId, job);
@@ -134,7 +145,7 @@ Page({
       update({ state: "failed", status: safe.code, error: cancelled ? "" : retryMessage,
         message: cancelled ? "已跳过" : "", retryable: true,
         retained: this.data.drafts.some(r => r.sourceIndex === i) });
-      task.log("image_total", startedAt || queuedAt, safe.code);
+      task.log("image_total", startedAt || queuedAt, safe.code, { traceId, phase, origin: err && err.origin, sdkCode: err && err.sdkCode });
       if (task.isDevelopment()) console.info("[pickup-failure]", { taskId, type: safe.code,
         origin: ["client_wait", "cloud_call", "cloud_result"].includes(err && err.origin) ? err.origin : "client",
         sdkCode: Number.isInteger(err && err.sdkCode) ? err.sdkCode : null });

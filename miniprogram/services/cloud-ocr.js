@@ -1,4 +1,4 @@
-const { error, log } = require("./recognition-task");
+const { error, log, CLOUD_ENV } = require("./recognition-task");
 const MAX_BYTES = 512 * 1024;
 
 function readImage(filePath) {
@@ -57,20 +57,27 @@ async function recognize(imagePath, control = { check() {}, stage() {} }) {
   let response;
   const cloudStarted = Date.now();
   if (control.stage) control.stage("cloud_roundtrip");
+  timing("cloud_submit", cloudStarted, "OK");
   try {
     response = await wx.cloud.callFunction({
-      name: "recognizePickup", data: { imageBase64 },
+      name: "recognizePickup", data: { imageBase64 }, config: { env: CLOUD_ENV },
     });
   } catch (err) {
-    const message = err && err.errMsg || "";
+    const message = err && (err.errMsg || err.message) || "";
+    const errorKind = /polling exceed max timeout retry/i.test(message) ? "polling_timeout"
+      : /FUNCTION_TIME_LIMIT|FUNCTION_TIMEOUT|function.*(?:time.?limit|timed out)/i.test(message) ? "function_timeout"
+        : /timeout|timed out|time.?limit|超时/i.test(message) ? "request_timeout"
+          : /network|网络/i.test(message) ? "network" : "other";
     const code = /timeout|timed out|time.?limit|超时/i.test(message) ? "TIMEOUT"
       : /network|网络/i.test(message) ? "NETWORK_FAILED" : "CLOUD_FAILED";
-    timing("cloud_roundtrip", cloudStarted, code);
+    timing("cloud_roundtrip", cloudStarted, code, { origin: "cloud_call", errorKind,
+      sdkCode: err && err.errCode, requestId: err && (err.requestID || err.requestId) });
     throw Object.assign(error(code), { origin: "cloud_call", sdkCode: Number.isInteger(err && err.errCode) ? err.errCode : null });
   }
   const roundtripMs = Date.now() - cloudStarted;
   timing("cloud_roundtrip", cloudStarted);
   const result = response && response.result;
+  timing("cloud_return", cloudStarted, "OK", { requestId: response && response.requestID });
   const ocrMs = result && result.timings && result.timings.ocrMs;
   if (Number.isFinite(ocrMs) && ocrMs >= 0 && ocrMs <= roundtripMs) {
     // Residual includes cold start / serialization / dispatch, not pure network latency.
@@ -79,6 +86,7 @@ async function recognize(imagePath, control = { check() {}, stage() {} }) {
   try { control.check(); }
   catch (err) { timing("cloud_late_result", cloudStarted, "CANCELLED"); throw err; }
   if (result && result.ok === false) {
+    timing("cloud_result", cloudStarted, result.error && result.error.code, { origin: "cloud_result" });
     throw Object.assign(error(result.error && result.error.code), { origin: "cloud_result" });
   }
   if (!result || result.ok !== true || typeof result.mock !== "boolean" ||
