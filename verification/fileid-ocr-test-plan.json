@@ -1,0 +1,58 @@
+{
+  "status": "awaiting_approval_not_deployed",
+  "environment": "cloud1-d8g3dicam66594fcf",
+  "function": "recognizePickup",
+  "changedServerFiles": [
+    "index.js",
+    "storage-probe.js"
+  ],
+  "dependenciesChanged": false,
+  "handlerChanged": false,
+  "timeoutSeconds": 20,
+  "testAction": "fileidOcr",
+  "temporaryEnvironmentChanges": {
+    "OCR_FILEID_TEST_READY": "1",
+    "OCR_FILEID_TEST_UNTIL": "deployment-time plus 30 minutes, Unix milliseconds"
+  },
+  "temporaryRolePolicy": "verification/storage-probe-policy.json",
+  "maxLiveOcrCalls": 3,
+  "samples": [
+    {
+      "case": "603402",
+      "dimensions": [
+        1216,
+        2688
+      ],
+      "preparedBytes": 221138,
+      "sha256": "d19ae2eb6e803cc1635cea0706ce315b65705f8d1572d953c06d935c063bc1ff"
+    },
+    {
+      "case": "B3-4-7401",
+      "dimensions": [
+        1216,
+        2688
+      ],
+      "preparedBytes": 311254,
+      "sha256": "12c58b6ff957f18a516c560c2689d21637571f289073c520b7e50029eb498f87"
+    },
+    {
+      "case": "in_transit",
+      "dimensions": [
+        1216,
+        2688
+      ],
+      "preparedBytes": 277205,
+      "sha256": "974fe6551a26391f9ef62d101517b12e2ce7e1ae126933b4d6458fa771bd3437"
+    }
+  ],
+  "cleanup": {
+    "prefix": "ocr-probe/",
+    "strictCallerOwnPrefix": true,
+    "serverFinally": true,
+    "clientFallbackAndLateUploadCleanup": true,
+    "existingLifecycleDays": 1,
+    "disableTestAndRevokeRoleAssociationAfterSession": true
+  },
+  "productionTransportChanged": false,
+  "androidVerified": false
+}

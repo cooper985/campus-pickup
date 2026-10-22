@@ -2,21 +2,32 @@ const { CLOUD_ENV, isDevelopment } = require("./recognition-task");
 const MAX_BYTES = 512 * 1024;
 const WAIT_MS = 60000;
 
-async function run(imagePath, onStage = () => {}) {
+async function run(imagePath, onStage = () => {}, options = {}) {
+  const control = options.control || { check() {} };
+  const startedAt = Date.now();
+  const action = options.ocr ? "fileidOcr" : "storageProbe";
   if (!isDevelopment()) throw new Error("仅开发版可验证");
   const report = { build: "20261022-fileid-probe-v3", env: CLOUD_ENV, ocrCalls: 0,
     uploadSucceeded: false, fileIdValid: false, functionReturned: false, readSucceeded: false,
     serverDeleted: false, clientDeleted: false, cleanupPending: false, timings: {} };
   let fileID, expectedPrefix, cloudPath;
   const owns = id => typeof id === "string" && id === expectedPrefix + cloudPath.split("/").pop();
-  async function cleanup(id) {
+  let cleanupPromise;
+  function cleanup(id) {
+    if (cleanupPromise) return cleanupPromise;
+    cleanupPromise = performCleanup(id);
+    return cleanupPromise;
+  }
+  async function performCleanup(id) {
     try {
       const result = await wx.cloud.deleteFile({ fileList: [id], config: { env: CLOUD_ENV } });
       report.clientDeleted = !!(result && result.fileList && result.fileList.length === 1 && result.fileList[0].status === 0);
     } catch (_) { /* Prefix lifecycle is required before enabling the server probe. */ }
     report.cleanupPending = !report.clientDeleted && !report.serverDeleted;
   }
+  const unsubscribe = control.onStop && control.onStop(() => fileID ? cleanup(fileID) : undefined);
   async function step(stage, work, onLate) {
+    if (stage !== "cleanupMs") control.check();
     let timer, expired = false;
     const started = Date.now();
     report.phase = stage;
@@ -34,7 +45,7 @@ async function run(imagePath, onStage = () => {}) {
   try {
     // A small preflight confirms the deployed probe is enabled before uploading any screenshot.
     const preflight = await step("preflightMs", () => wx.cloud.callFunction({ name: "recognizePickup",
-      config: { env: CLOUD_ENV }, data: { action: "storageProbe", check: true } }));
+      config: { env: CLOUD_ENV }, data: { action, check: true } }));
     const ready = preflight && preflight.result;
     if (!ready || ready.protocol !== 1 || ready.ok !== true) throw { code: "PROBE_NOT_READY" };
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(ready.openid) || typeof ready.filePrefix !== "string" ||
@@ -65,7 +76,8 @@ async function run(imagePath, onStage = () => {}) {
     if (!report.fileIdValid) throw { code: "PROBE_INVALID_FILE_ID" };
     fileID = uploaded.fileID;
     report.uploadSucceeded = true;
-    const data = { action: "storageProbe", fileID };
+    control.check();
+    const data = { action, fileID };
     report.requestBytes = JSON.stringify(data).length;
     report.callAtMs = Date.now();
     const response = await step("callMs", () => wx.cloud.callFunction({ name: "recognizePickup", data, config: { env: CLOUD_ENV } }));
@@ -82,15 +94,24 @@ async function run(imagePath, onStage = () => {}) {
     }
     for (const key of ["readMs", "deleteMs"]) if (Number.isFinite(result[key]) && result[key] >= 0) report.timings[key] = result[key];
     if (!report.readSucceeded) throw { code: "PROBE_READ_FAILED" };
+    if (options.ocr) {
+      control.check();
+      report.ocrCalls = result.ocr ? 1 : 0;
+      if (!result.ocr || result.ocr.ok !== true) throw { code: result.ocr && result.ocr.error && result.ocr.error.code || result.error && result.error.code || "BAD_RESPONSE" };
+      if (Number.isFinite(result.ocr.timings && result.ocr.timings.ocrMs)) report.timings.ocrMs = result.ocr.timings.ocrMs;
+      options.onResult(result.ocr);
+    }
   } catch (err) {
     report.failedPhase = report.phase;
-    const codes = ["PROBE_NOT_READY", "PROBE_BAD_RESPONSE", "PROBE_WAIT_TIMEOUT", "INVALID_IMAGE", "PROBE_INVALID_FILE_ID", "PROBE_READ_FAILED"];
+    const codes = ["PROBE_NOT_READY", "PROBE_BAD_RESPONSE", "PROBE_WAIT_TIMEOUT", "INVALID_IMAGE", "PROBE_INVALID_FILE_ID", "PROBE_READ_FAILED", "CANCELLED", "SKIPPED", "OCR_FAILED", "OCR_AUTH", "OCR_UNAVAILABLE", "TIMEOUT", "BAD_RESPONSE", "FORBIDDEN", "UNAUTHORIZED", "CONFIG_ERROR"];
     report.error = codes.includes(err && err.code) ? err.code : "PROBE_FAILED";
     if (Number.isInteger(err && err.errCode)) report.sdkCode = err.errCode;
   } finally {
+    if (unsubscribe) unsubscribe();
     if (fileID && !report.serverDeleted) await step("cleanupMs", () => cleanup(fileID)).catch(() => {});
     report.cleanupPending = report.cleanupPending && !report.serverDeleted && !report.clientDeleted;
   }
+  report.timings.totalMs = Date.now() - startedAt;
   return report;
 }
 

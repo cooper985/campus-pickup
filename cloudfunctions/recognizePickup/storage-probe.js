@@ -36,11 +36,12 @@ async function probe(event, identity, options) {
       report.imageBytes = fileContent.length;
       report.readSucceeded = png || jpeg;
       if (!report.readSucceeded) report.error = { code: "INVALID_IMAGE" };
+      else if (options.recognize) report.ocr = await options.recognize(fileContent.toString("base64"));
     }
   } catch (err) {
     report.readMs = Date.now() - started;
     report.readFailure = storageFailure(err);
-    report.error = { code: "PROBE_READ_FAILED" };
+    report.error = { code: report.readSucceeded ? "OCR_FAILED" : "PROBE_READ_FAILED" };
   } finally {
     const deletionStarted = Date.now();
     try {

@@ -4,11 +4,11 @@ const PREPARE_TIMEOUT_MS = 15000;
 const WAIT_TIMEOUT_MS = 60000;
 const SLOW_AFTER_MS = 8000;
 const CLOUD_ENV = "cloud1-d8g3dicam66594fcf";
-const DIAGNOSTIC_BUILD = "20261021-android-d2";
+const DIAGNOSTIC_BUILD = "20261022-fileid-ocr-v1";
 // Memory only; one batch plus retries, never persist screenshot or OCR content.
 const events = [];
 const stages = new Set(["image_prepare", "image_stat", "image_size", "image_read", "image_compress", "compressed_read",
-  "cloud_submit", "cloud_roundtrip", "cloud_return", "cloud_result", "cloud_breakdown", "cloud_late_result", "text_parse", "image_total", "queue_wait"]);
+  "fileid_preflight", "fileid_upload", "fileid_call", "fileid_cleanup", "fileid_read", "fileid_delete", "fileid_ocr", "selection_total", "cloud_submit", "cloud_roundtrip", "cloud_return", "cloud_result", "cloud_breakdown", "cloud_late_result", "text_parse", "image_total", "queue_wait"]);
 const messages = {
   IMAGE_READ: "无法读取图片，请重新选择。",
   IMAGE_COMPRESS: "图片压缩失败，请裁剪后重新选择。",
@@ -39,9 +39,10 @@ function log(stage, started, code = "OK", metrics = {}) {
   if (!isDevelopment()) return;
   if (!stages.has(stage)) return;
   const safe = {};
-  for (const key of ["traceId", "imageBytes", "base64Chars", "requestBytes", "ocrMs", "overheadMs"]) {
+  for (const key of ["traceId", "imageBytes", "base64Chars", "requestBytes", "ocrMs", "overheadMs", "selectedToResultMs"]) {
     if (Number.isFinite(metrics[key]) && metrics[key] >= 0) safe[key] = metrics[key];
   }
+  for (const key of ["serverDeleted", "clientDeleted", "cleanupPending"]) if (typeof metrics[key] === "boolean") safe[key] = metrics[key];
   if (Number.isInteger(metrics.sdkCode)) safe.sdkCode = metrics.sdkCode;
   if (["client", "client_wait", "cloud_call", "cloud_result"].includes(metrics.origin)) safe.origin = metrics.origin;
   if (stages.has(metrics.phase)) safe.phase = metrics.phase;
@@ -76,13 +77,22 @@ function start(work, timeoutMs, onStage = () => {}, onSlow = () => {}) {
   };
   const check = () => { if (!active) throw error("CANCELLED"); };
   const stopped = new Promise((_, reject) => { rejectWait = reject; });
-  const stop = code => { if (active) { active = false; log(phase, phaseStarted, code, { traceId: control.traceId, origin: "client_wait", phase }); rejectWait(Object.assign(error(code), { origin: "client_wait", phase })); } };
+  const stop = code => {
+    if (!active) return;
+    active = false;
+    for (const listener of stopListeners) {
+      try { Promise.resolve(listener()).catch(() => {}); } catch (_) {}
+    }
+    log(phase, phaseStarted, code, { traceId: control.traceId, origin: "client_wait", phase });
+    rejectWait(Object.assign(error(code), { origin: "client_wait", phase }));
+  };
   timer = setTimeout(() => stop("WAIT_TIMEOUT"), timeoutMs === undefined ? PREPARE_TIMEOUT_MS : timeoutMs);
   slowTimer = setTimeout(() => { if (active) onSlow(); }, SLOW_AFTER_MS);
+  const stopListeners = new Set();
   let result;
-  const control = { check, stage };
+  const control = { check, stage, onStop(callback) { stopListeners.add(callback); return () => stopListeners.delete(callback); } };
   try { result = work(control); } catch (err) { result = Promise.reject(err); }
-  const promise = Promise.race([result, stopped]).then(value => { check(); return value; }).finally(() => { active = false; clearTimeout(timer); clearTimeout(slowTimer); });
+  const promise = Promise.race([result, stopped]).then(value => { check(); return value; }).finally(() => { active = false; stopListeners.clear(); clearTimeout(timer); clearTimeout(slowTimer); });
   // Keep the physical request slot until the underlying call settles, even after a UI timeout.
   const settled = Promise.resolve(result).then(() => {}, () => {});
   return { promise, settled, cancel: (code = "CANCELLED") => stop(code) };

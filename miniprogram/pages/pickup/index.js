@@ -5,6 +5,7 @@ const storage = require("../../services/pickup-store");
 const duplicates = require("../../services/pickup-duplicates");
 const task = require("../../services/recognition-task");
 const { createQueue } = require("../../services/recognition-queue");
+const fileidOcr = require("../../services/fileid-ocr");
 const storageProbe = require("../../services/storage-probe");
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -31,6 +32,7 @@ Page({
       const files = result.tempFiles || [];
       if (!files.length || files.some(f => !f.path || !Number.isFinite(f.size) || f.size <= 0)) throw new Error("无法读取图片，请重新选择。");
       if (files.some(f => f.size > MAX_BYTES)) throw new Error("有图片超过 5 MB，请先裁剪或压缩。");
+      this.imagesSelectedAt = Date.now();
       this.setData({ images: files.slice(0, 9).map(f => f.path), results: [], drafts: [], draftGroups: [], completed: false, editing: null });
     } catch (err) {
       if (!/cancel/i.test(err && err.errMsg || "")) this.setData({ error: err.message || "无法打开相册，请重试。" });
@@ -42,11 +44,14 @@ Page({
   },
   recognize() { return this.runRecognition(false); },
   recognizeCloud() { return this.runRecognition(true); },
+  recognizeFileId() { if (task.isDevelopment()) return this.runRecognition(true, "fileid"); },
   copyRecognitionDiagnostic(e) {
     if (!task.isDevelopment()) return;
     const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId);
-    if (!result || result.state !== "failed" || /^(SKIPPED|CANCELLED)$/.test(result.status)) return;
-    const report = task.diagnostic(result.traceId);
+    if (!result || !["done", "failed"].includes(result.state) || /^(SKIPPED|CANCELLED)$/.test(result.status)) return;
+    const report = result.transport === "fileid"
+      ? this.data.results.filter(r => r.transport === "fileid").map(r => task.diagnostic(r.traceId))
+      : task.diagnostic(result.traceId);
     wx.setClipboardData({ data: JSON.stringify(report),
       success: () => wx.showToast({ title: "诊断信息已复制", icon: "none" }),
       fail: () => wx.showToast({ title: "复制失败，请重试", icon: "none" }) });
@@ -102,10 +107,10 @@ Page({
       mock: results.some(r => r.mock),
       error: "" });
   },
-  runRecognition(useCloud) {
+  runRecognition(useCloud, transport = "base64") {
     if (!this.data.images.length || this.data.loading || this.data.choosing || this.data.importing) return;
-    const changedMode = this.recognitionRun && this.recognitionRun.useCloud !== useCloud;
-    const run = { startedAt: Date.now(), useCloud };
+    const changedMode = this.recognitionRun && (this.recognitionRun.useCloud !== useCloud || this.recognitionRun.transport !== transport);
+    const run = { startedAt: Date.now(), selectedAt: this.imagesSelectedAt || Date.now(), useCloud, transport };
     this.recognitionRun = run;
     this.setData({ results: [], loading: true, error: "", completed: false, editing: null,
       ...(changedMode ? { drafts: [], draftGroups: [] } : {}) });
@@ -123,7 +128,7 @@ Page({
       if (!current()) return;
       this.setData({ results: this.data.results.map(r => r.taskId === taskId ? { ...r, ...changes } : r) });
     };
-    const entry = { taskId, traceId, index: i + 1, state: "queued", status: "queued", message: "排队中", error: "",
+    const entry = { taskId, traceId, index: i + 1, transport: run.transport, state: "queued", status: "queued", message: "排队中", error: "",
       count: 0, uncertainCount: 0, retryable: false, mock: !run.useCloud };
     this.setData({ results: [...this.data.results.filter(r => r.index !== i + 1), entry].sort((a, b) => a.index - b.index) });
     this.refreshRecognition();
@@ -131,7 +136,7 @@ Page({
     let phase = "image_prepare";
     const job = this.ocrQueue.add(control => {
       control.traceId = traceId;
-      return run.useCloud ? cloudOcr.recognize(imagePath, control) : mockOcr.recognize();
+      return run.useCloud ? (run.transport === "fileid" ? fileidOcr : cloudOcr).recognize(imagePath, control) : mockOcr.recognize();
     }, {
       timeoutMs: this.recognitionTimeoutMs,
       onStart: () => { startedAt = Date.now(); task.log("queue_wait", queuedAt, "OK", { traceId }); update({ state: "running", message: "识别中" }); },
@@ -179,6 +184,7 @@ Page({
         this.setData({ results: this.data.results.slice() }, () => {
           if (!current()) return;
           const appearedMs = Date.now() - run.startedAt;
+          task.log("selection_total", run.selectedAt, "OK", { traceId, selectedToResultMs: Date.now() - run.selectedAt });
           update({ appearedMs });
           const response = this.data.results.find(r => r.taskId === taskId);
           if (task.isDevelopment()) console.info("[pickup-batch]", { taskId, status, appearedMs, elapsedMs: startedAt ? finishedAt - startedAt : 0,
