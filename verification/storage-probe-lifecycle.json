@@ -1,0 +1,10 @@
+{
+  "Rules": [
+    {
+      "ID": "campus-pickup-probe-expiry",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "ocr-probe/" },
+      "Expiration": { "Days": 1 }
+    }
+  ]
+}

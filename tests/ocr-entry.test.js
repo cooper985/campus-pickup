@@ -12,6 +12,7 @@ test("真实适配器每次读取临时凭证，调用固定接口和区域", as
   vm.runInNewContext(fs.readFileSync("cloudfunctions/recognizePickup/index.js", "utf8"), {
     exports, process: { env }, require(name) {
       if (name === "./handler") return { handle };
+      if (name === "./storage-probe") return require("../cloudfunctions/recognizePickup/storage-probe");
       if (name === "wx-server-sdk") return { DYNAMIC_CURRENT_ENV: "test", init() {}, getWXContext: () => ({ OPENID: "test-user" }) };
       assert.equal(name, "tencentcloud-sdk-nodejs-ocr");
       return { ocr: { v20181119: { Client: class {
@@ -21,6 +22,11 @@ test("真实适配器每次读取临时凭证，调用固定接口和区域", as
     },
   });
   assert.equal((await exports.main({ action: "identity", openid: "forged" })).openid, "test-user");
+  assert.equal(seen.length, 0);
+  assert.equal((await exports.main({ action: "storageProbe", check: true })).error.code, "PROBE_NOT_READY");
+  assert.equal(seen.length, 0);
+  env.OCR_STORAGE_PROBE_READY = "1"; env.OCR_STORAGE_PROBE_BUCKET = "test-bucket";
+  assert.equal((await exports.main({ action: "storageProbe", check: true })).ok, true);
   assert.equal(seen.length, 0);
   assert.equal((await exports.main({ imageBase64 })).ok, true);
   env.TENCENTCLOUD_SESSIONTOKEN = "rotated-token";
