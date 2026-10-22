@@ -37,7 +37,8 @@ test('点击才读剪贴板；经旧导入去重、落盘不含原文；失败�
   p.data.drafts = [{ id: 'keep', code: '1111', station: '测试' }];
   await p.pasteNotification(); assert.equal(p.data.drafts[0].id, 'keep');
   wx.getClipboardData = async () => ({ data: '运单号123456789012' });
-  await p.pasteNotification(); assert.equal(p.data.editing.code, '');
+  await p.pasteNotification(); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.editing, null);
+  p.addManualDraft(); assert.equal(p.data.editing.code, '');
   await p.confirmImport(); assert.equal(p.data.records.length, 1);
   p.data.editing.code = '8888'; p.data.editing.station = '西门驿站'; p.saveEdit();
   await p.confirmImport(); assert.equal(p.data.records.length, 2); p.onUnload();

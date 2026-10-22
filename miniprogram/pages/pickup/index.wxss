@@ -87,10 +87,10 @@
 .review-footer .actions { margin-top: 16rpx; }
 .review-footer .ui-button { font-size: 25rpx; padding: 0 12rpx; }
 
-.station-tools { display: flex; justify-content: flex-end; margin: -8rpx 0 16rpx; }
+.station-tools { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin: -8rpx 0 16rpx; }
 .station-tools .ui-button { font-size: 24rpx; }
 .batch-row { display: flex; justify-content: flex-end; padding: 0 16rpx 8rpx; }
-.batch-row .ui-button { font-size: 23rpx; line-height: 60rpx; }
+.batch-row .ui-button { font-size: 23rpx; line-height: 64rpx; padding: 0 20rpx; border: 1rpx solid #d9e6dd; margin: 0; }
 .station-setting { padding: 24rpx; }
 .station-setting-top { display: flex; align-items: center; gap: 12rpx; }
 .station-setting-top .ui-button { flex-shrink: 0; }
@@ -102,3 +102,16 @@
 
 .station-select { margin: 0; min-width: 100rpx; padding: 0 12rpx; font-size: 23rpx; border: 2rpx solid transparent; }
 .station-select.option-selected { border-color: #216b48; }
+
+.manage-stations { margin: 0 0 0 auto; padding: 0 22rpx; border: 1rpx solid #d9e6dd; }
+.drag-hint { margin: 0; font-size: 22rpx; }
+.home-station { position: relative; }
+.station-sorting { transition: transform 140ms ease; will-change: transform; }
+.station-lifted { z-index: 3; box-shadow: 0 12rpx 32rpx rgba(32,58,48,.2); transition: none; }
+.drag-handle { flex-shrink: 0; padding: 4rpx 12rpx; margin: -8rpx -8rpx -8rpx -12rpx; color: #7b8b80; font-size: 38rpx; line-height: 1.3; }
+.draft-actions { display: flex; flex-direction: column; gap: 4rpx; }
+.draft-actions .text-button { line-height: 60rpx; font-size: 23rpx; }
+.manual-entry { font-size: 25rpx; margin: -16rpx auto 16rpx; }
+.import-result-actions { margin-top: 24rpx; }
+.import-result-actions .text-button { font-size: 25rpx; }
+@media (prefers-reduced-motion: reduce) { .station-sorting { transition: none; } }
