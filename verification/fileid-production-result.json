@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-22",
+  "sourceCommit": "d0514de",
+  "environment": "cloud1-d8g3dicam66594fcf",
+  "function": "recognizePickup",
+  "deployment": {
+    "status": "Active",
+    "version": "$LATEST",
+    "mode": "exact ZIP without installing dependencies",
+    "zipSha256": "459944f7dd017d71103cbb48eaed6ed4ee24bc57e188ba0acc1621f6f51f2b5a",
+    "downloadedFiles": 6016,
+    "fileHashMismatches": 0,
+    "changedFilesVersusPreviousDeployment": ["index.js"],
+    "indexSha256": "d77dc918708ecc90ff93c70c0dafc043909ae3a4661d8e545a0d72d5e7881288",
+    "handlerSha256": "a8a2e59a4d821f3610c0cd6d93d8b28b7c39eeb21857637c0e8349acf21ca093",
+    "dependencyChanges": 0,
+    "timeoutSeconds": 20,
+    "runtime": "Nodejs16.13",
+    "memoryMb": 256
+  },
+  "authorization": {
+    "role": "campusPickupOcrRole",
+    "policyId": "290819550",
+    "policyName": "campusPickupProbeStorage",
+    "persistentAssociationVerified": true,
+    "actions": ["tcb:GetFileDownloadUrl", "tcb:DeleteFile"],
+    "resource": "qcs::tcb:ap-shanghai:uin/100053978009:env/cloud1-d8g3dicam66594fcf",
+    "rolePoliciesVerified": ["campusPickupGeneralBasicOCR", "campusPickupProbeStorage"],
+    "otherPolicyOrTrustChanges": false,
+    "note": "CAM is environment-wide; server runtime identity, existing allowlist and exact caller-owned fileID validation restrict file access"
+  },
+  "configuration": {
+    "OCR_FILEID_READY": "1",
+    "OCR_TEMP_BUCKET": "636c-cloud1-d8g3dicam66594fcf-1511210960",
+    "OCR_MODE": "real",
+    "existingAllowedOpenidsUnchanged": true,
+    "obsoleteTestVariablesRemoved": ["OCR_FILEID_TEST_READY", "OCR_FILEID_TEST_UNTIL", "OCR_STORAGE_PROBE_READY", "OCR_STORAGE_PROBE_BUCKET"],
+    "privateCreatorAndAdministratorStorageRulesVerified": true,
+    "lifecycle": {"name": "campus-pickup-probe-expiry", "prefix": "ocr-probe/", "expirationDays": 1, "enabled": true}
+  },
+  "zeroOcrChecks": {
+    "normalPreflightSucceeded": true,
+    "invalidFileIdRejected": true,
+    "oldFileidOcrTestClosed": true,
+    "oldStorageProbeClosed": true,
+    "ownedSyntheticInvalidImage": {
+      "bytes": 23,
+      "downloadSucceeded": true,
+      "invalidImageRejectedBeforeOcr": true,
+      "serverDeleted": true,
+      "readMs": 480,
+      "deleteMs": 387,
+      "clientFallbackNeeded": false,
+      "localTemporaryFileRemoved": true
+    },
+    "realOcrCalls": 0
+  },
+  "cleanupMechanismsPreserved": ["server finally deletion", "client failure and cancellation fallback", "late upload deletion", "existing asynchronous lifecycle expiry"],
+  "legacyBase64ServerCompatibilityPreserved": true,
+  "pickupRecordsOrDatabaseModified": false,
+  "miniProgramPublished": false,
+  "remoteGitPushed": false,
+  "androidNormalEntryVerifiedAfterDeployment": false,
+  "rollback": {
+    "tag": "rollback/base64-before-fileid-20261022",
+    "commit": "6d32a8e7aacc7f2ea5a016e903d8cef0d39112f4",
+    "priorCloudPackageSavedLocally": true,
+    "cloudRollbackRequiresSeparatePackageAndConfigurationRestore": true
+  }
+}

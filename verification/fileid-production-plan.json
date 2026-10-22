@@ -1,5 +1,5 @@
 {
-  "status": "local_ready_awaiting_cloud_approval",
+  "status": "deployed_verified_awaiting_android_normal_entry_acceptance",
   "environment": "cloud1-d8g3dicam66594fcf",
   "region": "ap-shanghai",
   "function": "recognizePickup",
