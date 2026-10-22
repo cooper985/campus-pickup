@@ -5,9 +5,9 @@ const WAIT_MS = 60000;
 async function run(imagePath, onStage = () => {}, options = {}) {
   const control = options.control || { check() {} };
   const startedAt = Date.now();
-  const action = options.ocr ? "fileidOcr" : "storageProbe";
-  if (!isDevelopment()) throw new Error("仅开发版可验证");
-  const report = { build: "20261022-fileid-probe-v3", env: CLOUD_ENV, ocrCalls: 0,
+  const action = options.ocr ? "recognizeFile" : "storageProbe";
+  if (!options.ocr && !isDevelopment()) throw new Error("仅开发版可验证");
+  const report = { build: "20261022-fileid-default-v1", env: CLOUD_ENV, ocrCalls: 0,
     uploadSucceeded: false, fileIdValid: false, functionReturned: false, readSucceeded: false,
     serverDeleted: false, clientDeleted: false, cleanupPending: false, timings: {} };
   let fileID, expectedPrefix, cloudPath;
@@ -47,7 +47,7 @@ async function run(imagePath, onStage = () => {}, options = {}) {
     const preflight = await step("preflightMs", () => wx.cloud.callFunction({ name: "recognizePickup",
       config: { env: CLOUD_ENV }, data: { action, check: true } }));
     const ready = preflight && preflight.result;
-    if (!ready || ready.protocol !== 1 || ready.ok !== true) throw { code: "PROBE_NOT_READY" };
+    if (!ready || ready.protocol !== 1 || ready.ok !== true) throw { code: options.ocr ? ready && ready.error && ready.error.code || "CONFIG_ERROR" : "PROBE_NOT_READY" };
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(ready.openid) || typeof ready.filePrefix !== "string" ||
         !new RegExp(`^cloud://${CLOUD_ENV}\\.[a-z0-9-]+/ocr-probe/${ready.openid}/$`).test(ready.filePrefix)) throw { code: "PROBE_BAD_RESPONSE" };
     report.runtime = {};
@@ -56,14 +56,14 @@ async function run(imagePath, onStage = () => {}, options = {}) {
     }
     expectedPrefix = ready.filePrefix;
     const preparedPath = await step("prepareMs", async () => {
-      const stat = path => new Promise((resolve, reject) => wx.getFileSystemManager().getFileInfo({ filePath: path, success: resolve, fail: reject }));
+      const stat = path => new Promise((resolve, reject) => wx.getFileSystemManager().getFileInfo({ filePath: path, success: resolve, fail: () => reject({ code: "IMAGE_READ" }) }));
       let prepared = imagePath;
       if ((await stat(imagePath)).size > MAX_BYTES) {
-        const result = await new Promise((resolve, reject) => wx.compressImage({ src: imagePath, quality: 70, success: resolve, fail: reject }));
+        const result = await new Promise((resolve, reject) => wx.compressImage({ src: imagePath, quality: 70, success: resolve, fail: () => reject({ code: "IMAGE_COMPRESS" }) }));
         prepared = result.tempFilePath;
       }
       report.imageBytes = (await stat(prepared)).size;
-      if (!Number.isFinite(report.imageBytes) || report.imageBytes <= 0 || report.imageBytes > MAX_BYTES) throw { code: "INVALID_IMAGE" };
+      if (!Number.isFinite(report.imageBytes) || report.imageBytes <= 0 || report.imageBytes > MAX_BYTES) throw { code: options.ocr ? "IMAGE_TOO_LARGE" : "INVALID_IMAGE" };
       return prepared;
     });
     const random = () => Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, "0");
@@ -103,8 +103,11 @@ async function run(imagePath, onStage = () => {}, options = {}) {
     }
   } catch (err) {
     report.failedPhase = report.phase;
-    const codes = ["PROBE_NOT_READY", "PROBE_BAD_RESPONSE", "PROBE_WAIT_TIMEOUT", "INVALID_IMAGE", "PROBE_INVALID_FILE_ID", "PROBE_READ_FAILED", "CANCELLED", "SKIPPED", "OCR_FAILED", "OCR_AUTH", "OCR_UNAVAILABLE", "TIMEOUT", "BAD_RESPONSE", "FORBIDDEN", "UNAUTHORIZED", "CONFIG_ERROR"];
-    report.error = codes.includes(err && err.code) ? err.code : "PROBE_FAILED";
+    const codes = ["PROBE_NOT_READY", "PROBE_BAD_RESPONSE", "PROBE_WAIT_TIMEOUT", "INVALID_IMAGE", "PROBE_INVALID_FILE_ID", "PROBE_READ_FAILED", "CANCELLED", "SKIPPED", "OCR_FAILED", "OCR_AUTH", "OCR_UNAVAILABLE", "TIMEOUT", "BAD_RESPONSE", "FORBIDDEN", "UNAUTHORIZED", "CONFIG_ERROR", "IMAGE_READ", "IMAGE_COMPRESS", "IMAGE_TOO_LARGE", "NETWORK_FAILED", "CLOUD_FAILED"];
+    const message = String(err && (err.errMsg || err.message) || "");
+    report.error = codes.includes(err && err.code) ? err.code : !options.ocr ? "PROBE_FAILED"
+      : /timeout|timed out|time.?limit|超时/i.test(message) ? "TIMEOUT"
+        : /network|网络/i.test(message) ? "NETWORK_FAILED" : "CLOUD_FAILED";
     if (Number.isInteger(err && err.errCode)) report.sdkCode = err.errCode;
   } finally {
     if (unsubscribe) unsubscribe();

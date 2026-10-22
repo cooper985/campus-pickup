@@ -5,7 +5,7 @@
   "sdkVersion": "3.17.4",
   "wechatVersion": "8.0.76",
   "environment": "cloud1-d8g3dicam66594fcf",
-  "sampleBusinessResultsConfirmed": false,
+  "sampleBusinessResultsConfirmed": true,
   "samples": [
     {
       "imageBytes": 235820,

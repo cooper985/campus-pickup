@@ -1,0 +1,59 @@
+{
+  "status": "local_ready_awaiting_cloud_approval",
+  "environment": "cloud1-d8g3dicam66594fcf",
+  "region": "ap-shanghai",
+  "function": "recognizePickup",
+  "changedDeployedServerFiles": ["index.js"],
+  "preparedPackage": {
+    "path": "/private/tmp/campus-pickup-fileid-default.zip",
+    "fileCount": 6016,
+    "sha256": "459944f7dd017d71103cbb48eaed6ed4ee24bc57e188ba0acc1621f6f51f2b5a",
+    "deploymentMode": "Upload exact ZIP without installing dependencies"
+  },
+  "dependenciesChanged": false,
+  "ocrHandlerChanged": false,
+  "timeoutSeconds": 20,
+  "role": "campusPickupOcrRole",
+  "persistentPolicyAssociation": {
+    "name": "campusPickupProbeStorage",
+    "id": "290819550",
+    "source": "verification/storage-probe-policy.json",
+    "actions": ["tcb:GetFileDownloadUrl", "tcb:DeleteFile"],
+    "resource": "qcs::tcb:ap-shanghai:uin/100053978009:env/cloud1-d8g3dicam66594fcf",
+    "scope": "Environment-wide CAM permission; path restrictions are enforced by the function, not CAM"
+  },
+  "environmentVariablesToSet": {
+    "OCR_FILEID_READY": "1",
+    "OCR_TEMP_BUCKET": "636c-cloud1-d8g3dicam66594fcf-1511210960"
+  },
+  "obsoleteEnvironmentVariablesToRemove": [
+    "OCR_FILEID_TEST_READY", "OCR_FILEID_TEST_UNTIL",
+    "OCR_STORAGE_PROBE_READY", "OCR_STORAGE_PROBE_BUCKET"
+  ],
+  "preserveExistingOcrModeAndAllowedOpenids": true,
+  "fileAccess": {
+    "privateCreatorAndAdministratorRulesUnchanged": true,
+    "requiredCaller": "Runtime OPENID must match existing OCR_ALLOWED_OPENIDS",
+    "allowedPath": "ocr-probe/<runtime OPENID>/<13-digit timestamp>-<16 lowercase hex digits>.img",
+    "validateEnvironmentBucketAndImageSignature": true,
+    "maxBytes": 524288,
+    "serverFinallyDelete": true,
+    "clientFallbackCancelAndLateUploadDelete": true,
+    "existingLifecycleRule": "campus-pickup-probe-expiry",
+    "existingLifecyclePrefix": "ocr-probe/",
+    "existingLifecycleExpirationDays": 1,
+    "lifecycleNote": "Asynchronous expiry fallback; not an exact 24-hour deletion guarantee"
+  },
+  "oldTestActionsDisabled": true,
+  "oldBase64ServerCompatibility": "Retained only for installed old clients and rollback; no normal client entry",
+  "postDeploymentChecks": [
+    "Download deployed package and compare every file hash; no dependency changes",
+    "Verify 20-second timeout, runtime role, environment variables and exact policy",
+    "Zero-OCR small preflight and invalid-file rejection",
+    "Recheck private storage rules and existing lifecycle"
+  ],
+  "additionalLiveOcrCalls": 0,
+  "miniProgramPublicationAuthorized": false,
+  "rollbackTag": "rollback/base64-before-fileid-20261022",
+  "rollbackNote": "Git rollback alone does not roll back cloud deployment; restore the saved cloud package and prior variables separately"
+}

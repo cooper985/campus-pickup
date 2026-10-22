@@ -1,12 +1,10 @@
 const mockOcr = require("../../services/mock-ocr");
-const cloudOcr = require("../../services/cloud-ocr");
 const parser = require("../../services/pickup-parser");
 const storage = require("../../services/pickup-store");
 const duplicates = require("../../services/pickup-duplicates");
 const task = require("../../services/recognition-task");
 const { createQueue } = require("../../services/recognition-queue");
 const fileidOcr = require("../../services/fileid-ocr");
-const storageProbe = require("../../services/storage-probe");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
@@ -44,12 +42,6 @@ Page({
   },
   recognize() { return this.runRecognition(false); },
   recognizeCloud() { return this.runRecognition(true); },
-  recognizeFileId() {
-    if (!task.isDevelopment() || this.data.loading || this.data.choosing || this.data.importing || this.data.fileidTestStarted) return;
-    if (this.data.images.length !== 3) { wx.showToast({ title: "请选择三张测试截图", icon: "none" }); return; }
-    this.setData({ fileidTestStarted: true });
-    return this.runRecognition(true, "fileid");
-  },
   copyRecognitionDiagnostic(e) {
     if (!task.isDevelopment()) return;
     const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId);
@@ -61,30 +53,9 @@ Page({
       success: () => wx.showToast({ title: "诊断信息已复制", icon: "none" }),
       fail: () => wx.showToast({ title: "复制失败，请重试", icon: "none" }) });
   },
-  async verifyStoragePath(e) {
-    if (!task.isDevelopment() || this.probeRunning || this.data.loading || this.data.importing) return;
-    if (!this.probeReport) {
-      const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId);
-      const index = result ? result.index - 1 : Number(e.currentTarget.dataset.index);
-      if ((result && result.state !== "failed") || !this.data.images[index]) return;
-      this.probeRunning = true;
-      this.setData({ probeLoading: true });
-      wx.showLoading({ title: "验证上传通道", mask: true });
-      const titles = { preflightMs: "检查验证配置", prepareMs: "准备图片", uploadMs: "上传图片", callMs: "读取并删除图片", cleanupMs: "清理临时图片" };
-      try { this.probeReport = await storageProbe.run(this.data.images[index], stage => {
-        if (!this.unloaded) wx.showLoading({ title: titles[stage] || "验证上传通道", mask: true });
-      }); }
-      finally { this.probeRunning = false; wx.hideLoading(); if (!this.unloaded) this.setData({ probeLoading: false, probeReportReady: !!this.probeReport }); }
-    }
-    if (this.unloaded || !this.probeReport) return;
-    wx.setClipboardData({ data: JSON.stringify(this.probeReport),
-      success: () => wx.showToast({ title: "验证信息已复制", icon: "none" }),
-      fail: () => wx.showToast({ title: "请再次点击复制", icon: "none" }) });
-  },
   retryImage(e) {
     const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId ||
       r.index === Number(e.currentTarget.dataset.index));
-    if (result && result.transport === "fileid") return;
     if (result && result.retryable && !this.data.importing && !this.data.choosing) {
       return this.startImage(result.index - 1, this.recognitionRun);
     }
@@ -113,7 +84,8 @@ Page({
       mock: results.some(r => r.mock),
       error: "" });
   },
-  runRecognition(useCloud, transport = "base64") {
+  runRecognition(useCloud) {
+    const transport = useCloud ? "fileid" : "mock";
     if (!this.data.images.length || this.data.loading || this.data.choosing || this.data.importing) return;
     const changedMode = this.recognitionRun && (this.recognitionRun.useCloud !== useCloud || this.recognitionRun.transport !== transport);
     const run = { startedAt: Date.now(), selectedAt: this.imagesSelectedAt || Date.now(), useCloud, transport };
@@ -142,7 +114,7 @@ Page({
     let phase = "image_prepare";
     const job = this.ocrQueue.add(control => {
       control.traceId = traceId;
-      return run.useCloud ? (run.transport === "fileid" ? fileidOcr : cloudOcr).recognize(imagePath, control) : mockOcr.recognize();
+      return run.useCloud ? fileidOcr.recognize(imagePath, control) : mockOcr.recognize();
     }, {
       timeoutMs: this.recognitionTimeoutMs,
       onStart: () => { startedAt = Date.now(); task.log("queue_wait", queuedAt, "OK", { traceId }); update({ state: "running", message: "识别中" }); },

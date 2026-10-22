@@ -1,9 +1,8 @@
 const task = require("./recognition-task");
 const storage = require("./storage-probe");
 
-// Development verification only; the normal OCR button still uses Base64.
+// Upload binary; only the small, owner-scoped file ID crosses callFunction.
 async function recognize(imagePath, control) {
-  if (!task.isDevelopment()) throw task.error("FORBIDDEN");
   let result;
   const report = await storage.run(imagePath, phase => {
     const stages = { preflightMs: "fileid_preflight", prepareMs: "image_prepare",

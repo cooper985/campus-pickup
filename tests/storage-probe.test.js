@@ -93,15 +93,20 @@ test("客户端单次上传及小参数调用，未部署时不上传，云调�
   assert.equal(failed.calls.filter(x=>x==="delete").length,1); assert.equal(failed.calls.length,4);
 });
 
-test("选图后可直接验证，重复点击只复制同一报告，不为验证调用OCR",async()=>{
+test("正式页面默认 fileID、单图可手动重试，开发测试按钮退出普通流程",async()=>{
   const {page}=require('./helpers/page'),{fakeStorage}=require('./helpers/storage');
   const task=require('../miniprogram/services/recognition-task');
-  const wx=fakeStorage();let probes=0,ocr=0,copies=0;
-  wx.showLoading=wx.hideLoading=wx.showToast=()=>{};wx.setClipboardData=()=>copies++;
-  const p=page(wx,async()=>{ocr++;},undefined,{'recognition-task':{...task,isDevelopment:()=>true},
-    'storage-probe':{run:async()=>{probes++;return {ocrCalls:0};}}});
-  p.data.images=['local-image'];
-  const event={currentTarget:{dataset:{index:'0'}}};
-  await p.verifyStoragePath(event);await p.verifyStoragePath(event);
-  assert.equal(probes,1);assert.equal(ocr,0);assert.equal(copies,2);assert.equal(p.data.probeReportReady,true);
+  const wx=fakeStorage(); let calls=0,copies=0;
+  wx.setClipboardData=()=>copies++;
+  const p=page(wx,async()=>{calls++;if(calls===1)throw {code:"NETWORK_FAILED"};return {mock:false,lines:["取件码:603402"]};},
+    undefined,{'recognition-task':{...task,isDevelopment:()=>false}});
+  p.data.images=['local-image']; await p.recognizeCloud();
+  assert.equal(p.data.results[0].transport,"fileid"); assert.equal(p.data.results[0].status,"NETWORK_FAILED");
+  await p.retryImage({currentTarget:{dataset:{taskId:p.data.results[0].taskId}}});
+  assert.equal(calls,2); assert.equal(p.data.drafts[0].code,"603402");
+  p.copyRecognitionDiagnostic({currentTarget:{dataset:{taskId:p.data.results[0].taskId}}});
+  assert.equal(copies,0); assert.equal(p.recognizeFileId,undefined); assert.equal(p.verifyStoragePath,undefined);
+  const wxml=fs.readFileSync('miniprogram/pages/pickup/index.wxml','utf8');
+  assert.ok(!/fileID 完整识别测试|验证上传通道|Base64/.test(wxml));
+  assert.equal((wxml.match(/bindtap="recognizeCloud"/g)||[]).length,1);
 });

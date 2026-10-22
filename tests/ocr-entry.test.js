@@ -23,10 +23,10 @@ test("真实适配器每次读取临时凭证，调用固定接口和区域", as
   });
   assert.equal((await exports.main({ action: "identity", openid: "forged" })).openid, "test-user");
   assert.equal(seen.length, 0);
-  assert.equal((await exports.main({ action: "storageProbe", check: true })).error.code, "PROBE_NOT_READY");
+  assert.equal((await exports.main({ action: "storageProbe", check: true })).error.code, "CONFIG_ERROR");
   assert.equal(seen.length, 0);
   env.OCR_STORAGE_PROBE_READY = "1"; env.OCR_STORAGE_PROBE_BUCKET = "test-bucket";
-  assert.equal((await exports.main({ action: "storageProbe", check: true })).ok, true);
+  assert.equal((await exports.main({ action: "storageProbe", check: true })).error.code, "CONFIG_ERROR");
   assert.equal(seen.length, 0);
   assert.equal((await exports.main({ imageBase64 })).ok, true);
   env.TENCENTCLOUD_SESSIONTOKEN = "rotated-token";

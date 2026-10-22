@@ -24,8 +24,7 @@ test("真实截图字节经 fileID 完整本地回放，原 OCR 返回及解析�
     getWXContext: () => ({ OPENID: "test-user" }),
     downloadFile: async ({ fileID }) => { reads++; return { fileContent: files.get(fileID) }; },
     deleteFile: async ({ fileList }) => { deletes++; files.delete(fileList[0]); return { fileList: [{ status: 0 }] }; } };
-  const env = { OCR_MODE: "real", OCR_ALLOWED_OPENIDS: "test-user", OCR_STORAGE_PROBE_READY: "1",
-    OCR_STORAGE_PROBE_BUCKET: "test-bucket", TENCENTCLOUD_SECRETID: "fake-id",
+  const env = { OCR_MODE: "real", OCR_ALLOWED_OPENIDS: "test-user", OCR_TEMP_BUCKET: "test-bucket", TCB_ENV: task.CLOUD_ENV, TENCENTCLOUD_REGION: "ap-shanghai", TENCENTCLOUD_SECRETID: "fake-id",
     TENCENTCLOUD_SECRETKEY: "fake-key", TENCENTCLOUD_SESSIONTOKEN: "fake-token" };
   for (const c of cases) {
     const bytes = fs.readFileSync(path.join(privateDir, `prepared-0${c.case}.jpg`));
@@ -48,12 +47,13 @@ test("真实截图字节经 fileID 完整本地回放，原 OCR 返回及解析�
       }
     } } } };
   }, { process: { env } });
-  assert.equal((await entry.main({ action: "fileidOcr", check: true })).error.code, "PROBE_NOT_READY");
+  assert.equal((await entry.main({ action: "recognizeFile", check: true })).error.code, "CONFIG_ERROR");
   assert.equal(reads, 0); assert.equal(ocr, 0);
-  env.OCR_FILEID_TEST_READY = "1";
-  env.OCR_FILEID_TEST_UNTIL = String(Date.now() - 1);
-  assert.equal((await entry.main({ action: "fileidOcr", check: true })).error.code, "PROBE_NOT_READY");
-  env.OCR_FILEID_TEST_UNTIL = String(Date.now() + 30 * 60 * 1000);
+  env.OCR_FILEID_READY = "1";
+  env.TENCENTCLOUD_REGION = "ap-guangzhou";
+  assert.equal((await entry.main({ action: "recognizeFile", check: true })).error.code, "CONFIG_ERROR");
+  env.TENCENTCLOUD_REGION = "ap-shanghai";
+  assert.equal((await entry.main({ action: "recognizeFile", check: true })).ok, true);
   const wx = { getFileSystemManager: () => ({ getFileInfo: ({ filePath, success }) => success({ size: fs.statSync(filePath).size }) }),
     compressImage: ({ src, success }) => success({ tempFilePath: path.join(path.dirname(src), `prepared-${path.basename(src)}`) }),
     cloud: {
@@ -67,13 +67,13 @@ test("真实截图字节经 fileID 完整本地回放，原 OCR 返回及解析�
       },
       deleteFile: async () => { throw Error("server deletion should suffice"); },
     } };
-  const t = { ...task, isDevelopment: () => true, log: (...args) => logs.push(args) };
+  const t = { ...task, isDevelopment: () => false, log: (...args) => logs.push(args) };
   const storage = load("miniprogram/services/storage-probe.js", () => t, { wx });
   const fileid = load("miniprogram/services/fileid-ocr.js", name => name === "./storage-probe" ? storage : t);
   const p = page(undefined, undefined, undefined, { "fileid-ocr": fileid, "recognition-task": t });
   p.data.images = cases.map(c => path.join(privateDir, `0${c.case}.jpg`));
   p.imagesSelectedAt = Date.now() - 200;
-  await p.runRecognition(true, "fileid");
+  await p.recognizeCloud();
   assert.equal(uploads, cases.length); assert.equal(ocr, cases.length);
   assert.equal(reads, cases.length); assert.equal(deletes, cases.length); assert.equal(files.size, 0);
   for (let i = 0; i < cases.length; i++) {
@@ -87,19 +87,12 @@ test("真实截图字节经 fileID 完整本地回放，原 OCR 返回及解析�
   let failOnce = true;
   const download = sdk.downloadFile;
   sdk.downloadFile = async args => { if (failOnce) { failOnce = false; throw Error("read failed"); } return download(args); };
-  await p.runRecognition(true, "fileid");
+  await p.recognizeCloud();
   assert.equal(p.data.results[0].state, "failed");
   assert.equal(p.data.results[0].retained, true);
   assert.ok(p.data.results.slice(1).every(r => r.state === "done"));
   assert.equal(files.size, 0);
-  const ui = page(undefined, undefined, undefined, { "fileid-ocr": fileid, "recognition-task": t });
-  ui.data.images = ["one", "two", "three"];
-  let batches = 0; ui.runRecognition = () => { batches++; };
-  ui.recognizeFileId(); ui.recognizeFileId();
-  assert.equal(batches, 1);
-  ui.data.results = [{ taskId: "one", transport: "fileid", retryable: true }];
-  ui.startImage = () => { throw Error("unapproved extra OCR attempt"); };
-  ui.retryImage({ currentTarget: { dataset: { taskId: "one" } } });
+  assert.equal(p.data.diagnosticEnabled, false);
 });
 
 test("fileID 在 OCR 错误和 OCR 超时时仍执行服务端删除，不触碰其他用户路径", async () => {
@@ -134,7 +127,7 @@ test("取消期间上传迟到仍清理，取消云调用立即兜底删除且�
       },
       deleteFile: async () => { deletes++; return { fileList: [{ status: 0 }] }; },
     } };
-    const storage = load("miniprogram/services/storage-probe.js", () => ({ ...task, isDevelopment: () => true }), { wx });
+    const storage = load("miniprogram/services/storage-probe.js", () => ({ ...task, isDevelopment: () => false }), { wx });
     const running = storage.run("private-path", () => {}, { ocr: true,
       control: { check() { if (cancelled) throw { code: "CANCELLED" }; }, onStop(fn) { stop = fn; } }, onResult() { accepted++; } });
     await new Promise(resolve => setImmediate(resolve));

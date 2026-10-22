@@ -4,7 +4,7 @@ const PREPARE_TIMEOUT_MS = 15000;
 const WAIT_TIMEOUT_MS = 60000;
 const SLOW_AFTER_MS = 8000;
 const CLOUD_ENV = "cloud1-d8g3dicam66594fcf";
-const DIAGNOSTIC_BUILD = "20261022-fileid-ocr-v1";
+const DIAGNOSTIC_BUILD = "20261022-fileid-default-v1";
 // Memory only; one batch plus retries, never persist screenshot or OCR content.
 const events = [];
 const stages = new Set(["image_prepare", "image_stat", "image_size", "image_read", "image_compress", "compressed_read",
@@ -64,7 +64,7 @@ function diagnostic(traceId) {
   } catch (_) { /* Older base libraries may not expose these APIs. */ }
   return { build: DIAGNOSTIC_BUILD, env: CLOUD_ENV, function: "recognizePickup", envVersion: "develop", platform, SDKVersion, wechatVersion,
     prepareTimeoutMs: PREPARE_TIMEOUT_MS, waitTimeoutMs: WAIT_TIMEOUT_MS,
-    readIncludesBase64Encoding: true, requestBytesScope: "data_json_without_sdk_envelope",
+    readIncludesBase64Encoding: !events.some(event => event.traceId === traceId && event.stage === "fileid_preflight"), requestBytesScope: "data_json_without_sdk_envelope",
     events: events.filter(event => event.traceId === traceId).map(event => ({ ...event })) };
 }
 function start(work, timeoutMs, onStage = () => {}, onSlow = () => {}) {

@@ -42,7 +42,7 @@ test('开发版失败后只复制一次脱敏诊断，正式版不显示入口�
  p.data.images=['private-path']; await p.recognizeCloud();
  assert.equal(p.data.diagnosticEnabled,true);
  p.copyRecognitionDiagnostic({currentTarget:{dataset:{taskId:p.data.results[0].taskId}}});
- const report=JSON.parse(copied);
+ const report=JSON.parse(copied)[0];
  assert.equal(report.platform,'android'); assert.equal(report.SDKVersion,'3.17.4');
  assert.equal(report.env,task.CLOUD_ENV);
  assert.ok(report.events.some(e=>e.stage==='image_total'&&e.phase==='cloud_roundtrip'&&e.sdkCode===-404012));
