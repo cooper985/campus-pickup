@@ -14,7 +14,7 @@
     <view class="hint" wx:if="{{images.length}}">点击缩略图可查看原图</view>
   </view>
   <button wx:if="{{diagnosticEnabled && images.length === 1}}" size="mini" class="secondary" data-index="0" bindtap="verifyStoragePath" disabled="{{probeLoading || loading || importing}}">{{probeReportReady ? '复制通道验证信息' : '验证上传通道（不调用 OCR）'}}</button>
-  <button wx:if="{{diagnosticEnabled}}" size="mini" class="secondary" bindtap="recognizeFileId" disabled="{{!images.length || loading || choosing || importing || probeLoading}}">fileID 完整识别测试</button>
+  <button wx:if="{{diagnosticEnabled}}" size="mini" class="secondary" bindtap="recognizeFileId" disabled="{{!images.length || loading || choosing || importing || probeLoading || fileidTestStarted}}">fileID 完整识别测试</button>
   <button class="primary" bindtap="recognizeCloud" disabled="{{!images.length || loading || choosing || importing}}" loading="{{loading}}">{{loading ? progress : '云端识别所选截图'}}</button>
   <view wx:if="{{loading}}" class="actions"><button bindtap="cancelRecognition">取消本批识别</button></view>
   <view wx:if="{{loading}}" class="hint">识别结果会逐张显示，已完成的快递可以先导入。</view>

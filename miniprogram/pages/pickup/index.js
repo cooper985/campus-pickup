@@ -44,7 +44,12 @@ Page({
   },
   recognize() { return this.runRecognition(false); },
   recognizeCloud() { return this.runRecognition(true); },
-  recognizeFileId() { if (task.isDevelopment()) return this.runRecognition(true, "fileid"); },
+  recognizeFileId() {
+    if (!task.isDevelopment() || this.data.loading || this.data.choosing || this.data.importing || this.data.fileidTestStarted) return;
+    if (this.data.images.length !== 3) { wx.showToast({ title: "请选择三张测试截图", icon: "none" }); return; }
+    this.setData({ fileidTestStarted: true });
+    return this.runRecognition(true, "fileid");
+  },
   copyRecognitionDiagnostic(e) {
     if (!task.isDevelopment()) return;
     const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId);
@@ -79,6 +84,7 @@ Page({
   retryImage(e) {
     const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId ||
       r.index === Number(e.currentTarget.dataset.index));
+    if (result && result.transport === "fileid") return;
     if (result && result.retryable && !this.data.importing && !this.data.choosing) {
       return this.startImage(result.index - 1, this.recognitionRun);
     }

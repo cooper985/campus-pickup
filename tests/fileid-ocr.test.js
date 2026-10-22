@@ -73,7 +73,7 @@ test("真实截图字节经 fileID 完整本地回放，原 OCR 返回及解析�
   const p = page(undefined, undefined, undefined, { "fileid-ocr": fileid, "recognition-task": t });
   p.data.images = cases.map(c => path.join(privateDir, `0${c.case}.jpg`));
   p.imagesSelectedAt = Date.now() - 200;
-  await p.recognizeFileId();
+  await p.runRecognition(true, "fileid");
   assert.equal(uploads, cases.length); assert.equal(ocr, cases.length);
   assert.equal(reads, cases.length); assert.equal(deletes, cases.length); assert.equal(files.size, 0);
   for (let i = 0; i < cases.length; i++) {
@@ -87,12 +87,19 @@ test("真实截图字节经 fileID 完整本地回放，原 OCR 返回及解析�
   let failOnce = true;
   const download = sdk.downloadFile;
   sdk.downloadFile = async args => { if (failOnce) { failOnce = false; throw Error("read failed"); } return download(args); };
-  await p.recognizeFileId();
+  await p.runRecognition(true, "fileid");
   assert.equal(p.data.results[0].state, "failed");
   assert.equal(p.data.results[0].retained, true);
   assert.ok(p.data.results.slice(1).every(r => r.state === "done"));
   assert.equal(files.size, 0);
-
+  const ui = page(undefined, undefined, undefined, { "fileid-ocr": fileid, "recognition-task": t });
+  ui.data.images = ["one", "two", "three"];
+  let batches = 0; ui.runRecognition = () => { batches++; };
+  ui.recognizeFileId(); ui.recognizeFileId();
+  assert.equal(batches, 1);
+  ui.data.results = [{ taskId: "one", transport: "fileid", retryable: true }];
+  ui.startImage = () => { throw Error("unapproved extra OCR attempt"); };
+  ui.retryImage({ currentTarget: { dataset: { taskId: "one" } } });
 });
 
 test("fileID 在 OCR 错误和 OCR 超时时仍执行服务端删除，不触碰其他用户路径", async () => {
