@@ -8,7 +8,7 @@ const fileidOcr = require("../../services/fileid-ocr");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
@@ -25,16 +25,23 @@ Page({
   async chooseImage() {
     if (this.data.loading || this.data.choosing || this.data.importing) return;
     this.setData({ choosing: true, error: "" });
+    let selected = false;
     try {
+      if (this.data.drafts.length) {
+        const answer = await wx.showModal({ title: "重新选择截图？", content: "当前尚未导入的结果会被替换。", confirmText: "重新选择" });
+        if (!answer.confirm) return;
+      }
       const result = await wx.chooseImage({ count: 9, sizeType: ["original"], sourceType: ["album"] });
       const files = result.tempFiles || [];
       if (!files.length || files.some(f => !f.path || !Number.isFinite(f.size) || f.size <= 0)) throw new Error("无法读取图片，请重新选择。");
       if (files.some(f => f.size > MAX_BYTES)) throw new Error("有图片超过 5 MB，请先裁剪或压缩。");
+      selected = true;
       this.imagesSelectedAt = Date.now();
       this.setData({ images: files.slice(0, 9).map(f => f.path), results: [], drafts: [], draftGroups: [], completed: false, editing: null });
     } catch (err) {
       if (!/cancel/i.test(err && err.errMsg || "")) this.setData({ error: err.message || "无法打开相册，请重试。" });
     } finally { this.setData({ choosing: false }); }
+    if (selected) return this.recognizeCloud();
   },
   previewImage(e) {
     const index = Number(e && e.currentTarget.dataset.index || 0);
@@ -212,16 +219,42 @@ Page({
       const drafts = this.data.drafts.filter(r => !importingDrafts.some(imported => imported.id === r.id));
       this.setData({ drafts, draftGroups: parser.group(drafts),
         ...(!this.data.loading && !drafts.length ? { images: [], results: [], completed: false } : {}),
-        error: `已保存 ${added} 条，跳过 ${skipped} 条。` });
+        error: "", activeTab: "home",
+        collapsedStations: this.data.collapsedStations.filter(station => !importingDrafts.some(r => r.station === station)) });
+      this.updateRecords(this.data.records);
+      if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+      if (wx.showToast) wx.showToast({ title: `已导入 ${added} 件${skipped ? `，跳过 ${skipped} 件` : ""}`, icon: "none" });
     } catch (_) {
       this.setData({ error: "导入未完成，待导入内容已保留，请重试。" });
     } finally { this.setData({ importing: false }); }
   },
-  toggleTaken(e) {
-    if (this.data.loading || this.data.importing || this.data.deleting || this.data.storageBlocked || Date.now() < (this.suppressTapUntil || 0)) return;
+  noop() {},
+  switchTab(e) {
+    const activeTab = e.currentTarget.dataset.tab;
+    if (!["home", "import", "history"].includes(activeTab) || this.data.importing || this.data.deleting) return;
     this.closeDelete();
-    const records = this.data.records.map(r => r.id === e.currentTarget.dataset.id ? storage.updateRecord(r, { taken: !r.taken }) : r);
-    this.persistRecords(records);
+    this.setData({ activeTab, editing: null, editError: "" });
+    if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+  },
+  toggleGroup(e) {
+    const station = e.currentTarget.dataset.station;
+    const collapsed = this.data.collapsedStations;
+    this.setData({ collapsedStations: collapsed.includes(station) ? collapsed.filter(s => s !== station) : [...collapsed, station] });
+    this.updateRecords(this.data.records);
+  },
+  toggleTaken(e) {
+    if (this.data.importing || this.data.deleting || this.data.storageBlocked || Date.now() < (this.suppressTapUntil || 0)) return;
+    const record = this.data.records.find(r => r.id === e.currentTarget.dataset.id);
+    if (!record) return;
+    this.closeDelete();
+    const records = this.data.records.map(r => r.id === record.id ? storage.updateRecord(r, { taken: !r.taken }) : r);
+    if (!this.persistRecords(records)) return;
+    this.clearUndo();
+    if (!record.taken) {
+      this.undoRecord = { record, kind: "taken", until: Date.now() + 5000 };
+      this.setData({ undoAvailable: true, undoMessage: "已取件" });
+      this.undoTimer = setTimeout(() => this.clearUndo(), 5000);
+    } else if (wx.showToast) wx.showToast({ title: "已恢复待取", icon: "none" });
   },
   closeDelete() { if (this.data.openDeleteId) this.setData({ openDeleteId: "" }); },
   onPageScroll() { this.closeDelete(); },
@@ -292,7 +325,7 @@ Page({
       if (!this.persistRecords(this.data.records.filter(r => r.id !== id))) return;
       this.clearUndo();
       this.undoRecord = { record, index, until: Date.now() + 5000 };
-      this.setData({ openDeleteId: "", undoAvailable: true, editing: this.data.editing && this.data.editing.id === id ? null : this.data.editing });
+      this.setData({ openDeleteId: "", undoAvailable: true, undoMessage: "已删除", editing: this.data.editing && this.data.editing.id === id ? null : this.data.editing });
       this.undoTimer = setTimeout(() => this.clearUndo(), 5000);
     } catch (_) {
       this.setData({ error: "删除未完成，请重试。" });
@@ -303,6 +336,10 @@ Page({
     if (!undo || Date.now() >= undo.until) { this.clearUndo(); return; }
     if (this.data.deleting || this.data.importing || this.data.storageBlocked) return;
     const records = this.data.records.slice();
+    if (undo.kind === "taken") {
+      if (this.persistRecords(records.map(r => r.id === undo.record.id ? storage.updateRecord(r, { taken: false }) : r))) this.clearUndo();
+      return;
+    }
     if (records.some(r => r.id === undo.record.id)) return;
     records.splice(Math.min(undo.index, records.length), 0, undo.record);
     if (this.persistRecords(records)) this.clearUndo();
@@ -317,22 +354,40 @@ Page({
     }
   },
   updateRecords(records) {
-    this.setData({ records, groups: parser.group(records), remaining: records.filter(r => !r.taken).length });
+    const pending = records.filter(r => !r.taken);
+    const pendingGroups = parser.group(pending).map(g => ({ ...g,
+      collapsed: this.data.collapsedStations.includes(g.station),
+      items: g.items.slice().sort((a, b) => {
+        const x = a.code.match(/\d+|\D+/g) || [], y = b.code.match(/\d+|\D+/g) || [];
+        for (let i = 0; i < Math.min(x.length, y.length); i++) {
+          const diff = /^\d+$/.test(x[i]) && /^\d+$/.test(y[i]) ? Number(x[i]) - Number(y[i]) : x[i].localeCompare(y[i]);
+          if (diff) return diff;
+        }
+        return x.length - y.length;
+      })
+    }));
+    this.setData({ records, groups: parser.group(records), pendingGroups,
+      locationCount: pendingGroups.filter(g => g.station !== parser.UNKNOWN).length,
+      unknownCount: pending.filter(r => r.station === parser.UNKNOWN).length,
+      history: records.filter(r => r.taken).sort((a, b) => b.takenAt - a.takenAt), remaining: pending.length });
   },
   editRecord(e) {
-    if (this.data.loading || this.data.importing || this.data.deleting || Date.now() < (this.suppressTapUntil || 0)) return;
+    if (this.data.importing || this.data.deleting || Date.now() < (this.suppressTapUntil || 0)) return;
     this.closeDelete();
     const record = [...this.data.records, ...this.data.drafts].find(r => r.id === e.currentTarget.dataset.id);
-    if (record) this.setData({ editing: { ...record } });
+    if (record) this.setData({ editing: { ...record }, editError: "" });
   },
   editStation(e) { this.setData({ "editing.station": e.detail.value }); },
+  editCarrier(e) { this.setData({ "editing.carrier": e.detail.value }); },
   editCode(e) { this.setData({ "editing.code": e.detail.value }); },
   cancelEdit() { this.setData({ editing: null }); },
   saveEdit() {
-    if (this.data.loading || this.data.importing || this.data.deleting) return;
+    if (this.data.importing || this.data.deleting) return;
     const edit = this.data.editing;
-    if (!edit || !edit.station.trim() || !edit.code.trim() || edit.station.trim().length > 100 || edit.code.trim().length > 32) return;
-    const changes = { station: edit.station.trim(), code: edit.code.trim() };
+    if (!edit || !edit.station.trim() || !edit.code.trim() || edit.station.trim().length > 100 || edit.code.trim().length > 32 || (edit.carrier || "").trim().length > 40) {
+      this.setData({ editError: "请填写地点和取件码，并检查内容长度。" }); return;
+    }
+    const changes = { station: edit.station.trim(), code: edit.code.trim(), carrier: (edit.carrier || "").trim() };
     if (this.data.drafts.some(r => r.id === edit.id)) {
       const drafts = this.data.drafts.map(r => r.id === edit.id ? { ...r, ...changes, needsReview: false } : r);
       this.setData({ drafts, draftGroups: parser.group(drafts) });

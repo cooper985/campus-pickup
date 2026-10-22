@@ -108,5 +108,6 @@ test("正式页面默认 fileID、单图可手动重试，开发测试按钮退�
   assert.equal(copies,0); assert.equal(p.recognizeFileId,undefined); assert.equal(p.verifyStoragePath,undefined);
   const wxml=fs.readFileSync('miniprogram/pages/pickup/index.wxml','utf8');
   assert.ok(!/fileID 完整识别测试|验证上传通道|Base64/.test(wxml));
-  assert.equal((wxml.match(/bindtap="recognizeCloud"/g)||[]).length,1);
+  assert.equal((wxml.match(/bindtap="chooseImage"/g)||[]).length,1);
+  assert.ok(!/复制诊断信息|bindtap="recognizeCloud"/.test(wxml));
 });
