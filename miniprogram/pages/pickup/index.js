@@ -5,10 +5,12 @@ const duplicates = require("../../services/pickup-duplicates");
 const task = require("../../services/recognition-task");
 const { createQueue } = require("../../services/recognition-queue");
 const fileidOcr = require("../../services/fileid-ocr");
+const stations = require("../../services/stations");
+const notifications = require("../../services/notification-parser");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
@@ -19,8 +21,137 @@ Page({
     this.setData({ diagnosticEnabled: task.isDevelopment() });
     this.store = storage.createStore(wx);
     const loaded = this.store.load();
-    this.updateRecords(loaded.records);
+    this.stationStore = stations.createStore(wx);
+    const settings = this.stationStore.load();
+    this.stationState = settings.state;
+    this.setData({ stationError: settings.error, stationBlocked: !!settings.error });
     this.setData({ storageError: loaded.error, storageBlocked: loaded.blocked });
+    this.updateRecords(loaded.records);
+  },
+  async pasteNotification() {
+    if (this.data.loading || this.data.choosing || this.data.importing) return;
+    this.setData({ choosing: true, error: "" });
+    try {
+      if (this.data.drafts.length) {
+        const answer = await wx.showModal({ title: "替换待导入内容？", content: "当前尚未导入的结果会被替换。", confirmText: "继续粘贴" });
+        if (!answer.confirm || this.unloaded) return;
+      }
+      const result = await wx.getClipboardData();
+      if (this.unloaded) return;
+      if (typeof result.data !== "string" || !result.data.trim()) {
+        this.setData({ error: "剪贴板没有文字，请先复制取件通知。" }); return;
+      }
+      if (result.data.length > 20000) { this.setData({ error: "文字过长，请只复制需要导入的取件通知。" }); return; }
+      const parsed = notifications.parse(result.data);
+      this.recognitionRun = null;
+      const entries = parsed.length ? parsed : [{ code: "", station: parser.UNKNOWN, carrier: "", sourceType: "text", sourceIndex: -1, needsReview: true }];
+      const drafts = entries.map((r, i) => ({ ...r, id: `text-${Date.now()}-${i}`, taken: false }));
+      this.setData({ drafts, draftGroups: parser.group(drafts), images: [], results: [], mock: false, completed: true, editing: null,
+        error: parsed.length ? "请核对取件码和地点，缺失信息可点修改补充。" : "未找到可靠的取件码，请手动补充后导入。" });
+      if (!parsed.length) this.editRecord({ currentTarget: { dataset: { id: drafts[0].id } } });
+    } catch (_) { if (!this.unloaded) this.setData({ error: "未能读取剪贴板，请重试或检查微信的剪贴板权限。" }); }
+    finally { if (!this.unloaded) this.setData({ choosing: false }); }
+  },
+  openStations() {
+    if (this.data.importing || this.data.deleting || this.data.stationBusy) return;
+    this.closeDelete();
+    this.setData({ activeTab: "stations", stationSelection: [] });
+  },
+  saveStations(state) {
+    if (this.data.stationBlocked || this.data.storageBlocked) return false;
+    try {
+      this.stationState = this.stationStore.save(state);
+      this.setData({ stationError: "" });
+      this.updateRecords(this.data.records);
+      return true;
+    } catch (err) { this.setData({ stationError: err.message, stationBlocked: true }); return false; }
+  },
+  selectStation(e) {
+    if (this.data.stationBusy) return;
+    const id = e.currentTarget.dataset.id, selected = this.data.stationSelection;
+    if (selected.includes(id)) this.setData({ stationSelection: selected.filter(s => s !== id) });
+    else if (selected.length < 2) this.setData({ stationSelection: [...selected, id] });
+    else wx.showToast({ title: "每次选择两个驿站", icon: "none" });
+  },
+  moveStation(e) {
+    if (this.data.stationBusy) return;
+    const groups = this.stationState.groups.slice(), index = groups.findIndex(g => g.id === e.currentTarget.dataset.id);
+    const target = index + Number(e.currentTarget.dataset.direction);
+    if (index < 0 || target < 0 || target >= groups.length) return;
+    [groups[index], groups[target]] = [groups[target], groups[index]];
+    this.saveStations({ version: 1, groups });
+  },
+  editStationName(e) {
+    const id = e.currentTarget.dataset.id;
+    const group = this.stationState.groups.find(g => g.id === id);
+    if (group) this.setData({ stationEditor: { id, name: group.name, mode: "rename" } });
+  },
+  beginStationMerge() {
+    const ids = this.data.stationSelection.slice();
+    if (ids.length !== 2) return;
+    this.setData({ stationEditor: { ids, name: this.stationState.groups.find(g => g.id === ids[0]).name, mode: "merge" } });
+  },
+  stationNameInput(e) { this.setData({ "stationEditor.name": e.detail.value }); },
+  cancelStationEdit() { if (!this.data.stationBusy) this.setData({ stationEditor: null }); },
+  async confirmStationEdit() {
+    const edit = this.data.stationEditor;
+    if (!edit || this.data.stationBusy || this.data.stationBlocked || this.data.storageBlocked) return;
+    this.setData({ stationBusy: true });
+    try {
+      let state;
+      if (edit.mode === "merge") {
+        state = stations.merge(this.stationState, edit.ids, edit.name);
+        const answer = await wx.showModal({ title: "确认属于同一驿站？", content: `将所选两个地点统一显示为「${edit.name.trim()}」，以后识别到这些别名也会归入此处。原记录地点保留。`, confirmText: "确认合并" });
+        if (!answer.confirm || this.unloaded) return;
+      } else {
+        const name = edit.name.trim();
+        if (!stations.known(name) || name.length > 100) throw Error("请填写有效驿站名称（1–100 字）。");
+        if (this.stationState.groups.some(g => g.id !== edit.id && [g.name, ...g.aliases].some(a => stations.normalize(a) === stations.normalize(name)))) throw Error("名称已属于其他驿站，请选择两个驿站合并。");
+        state = { version: 1, groups: this.stationState.groups.map(g => g.id === edit.id ? { ...g, name,
+          aliases: g.aliases.some(a => stations.normalize(a) === stations.normalize(g.name)) ? g.aliases : [...g.aliases, g.name] } : g) };
+      }
+      if (this.saveStations(state)) this.setData({ stationEditor: null, stationSelection: [] });
+    } catch (err) { this.setData({ stationError: err.message }); }
+    finally { if (!this.unloaded) this.setData({ stationBusy: false }); }
+  },
+  async unlinkStation(e) {
+    if (this.data.stationBusy || this.data.stationBlocked || this.data.storageBlocked) return;
+    const { id, alias } = e.currentTarget.dataset;
+    const group = this.stationState.groups.find(g => g.id === id);
+    if (!group || group.aliases.length < 2 || !group.aliases.includes(alias)) return;
+    this.setData({ stationBusy: true });
+    try {
+      const answer = await wx.showModal({ title: "取消别名关联？", content: `「${alias}」将独立显示，原记录会重新分组；如它是当前统一名称，剩余驿站将使用其第一个别名。`, confirmText: "取消关联" });
+      if (!answer.confirm || this.unloaded) return;
+      const aliases = group.aliases.filter(a => a !== alias);
+      const groups = this.stationState.groups.map(g => g.id === id ? { ...g, aliases,
+        name: stations.normalize(g.name) === stations.normalize(alias) ? aliases[0] : g.name } : g);
+      let newId = stations.normalize(alias);
+      while (groups.some(g => g.id === newId)) newId += "-split";
+      groups.push({ id: newId, name: alias, aliases: [alias] });
+      this.saveStations({ version: 1, groups });
+      this.setData({ stationSelection: [] });
+    } catch (_) { this.setData({ stationError: "取消关联未完成，请重试。" }); }
+    finally { if (!this.unloaded) this.setData({ stationBusy: false }); }
+  },
+  async takeStation(e) {
+    if (this.data.deleting || this.data.importing || this.data.storageBlocked) return;
+    const group = this.data.pendingGroups.find(g => g.id === e.currentTarget.dataset.id);
+    if (!group || !group.items.length) return;
+    const ids = group.items.map(r => r.id);
+    this.setData({ deleting: true });
+    try {
+      const answer = await wx.showModal({ title: "全部已取", content: `确认将「${group.station}」的 ${ids.length} 件快递全部标记为已取？`, confirmText: "全部已取" });
+      if (!answer.confirm || this.unloaded || this.data.storageBlocked) return;
+      const before = this.data.records.filter(r => ids.includes(r.id) && !r.taken);
+      const records = this.data.records.map(r => before.some(b => b.id === r.id) ? storage.updateRecord(r, { taken: true }) : r);
+      if (!before.length || !this.persistRecords(records)) return;
+      this.clearUndo();
+      this.undoRecord = { kind: "batch-taken", updates: before.map(b => ({ before: b, after: records.find(r => r.id === b.id) })), until: Date.now() + 5000 };
+      this.setData({ undoAvailable: true, undoMessage: `已取 ${before.length} 件` });
+      this.undoTimer = setTimeout(() => this.clearUndo(), 5000);
+    } catch (_) { if (!this.unloaded) this.setData({ error: "批量核销未完成，请重试。" }); }
+    finally { if (!this.unloaded) this.setData({ deleting: false }); }
   },
   async chooseImage() {
     if (this.data.loading || this.data.choosing || this.data.importing) return;
@@ -181,7 +312,7 @@ Page({
     }
   },
   async confirmImport() {
-    if (this.unloaded || this.data.choosing || this.data.importing || this.data.deleting || this.data.storageBlocked || !this.data.drafts.length) return;
+    if (this.unloaded || this.data.choosing || this.data.importing || this.data.deleting || this.data.stationBusy || this.data.storageBlocked || !this.data.drafts.length) return;
     const importingDrafts = this.data.drafts.slice();
     if (importingDrafts.some(r => !r.station.trim() || r.station.trim().length > 100 ||
       !r.code.trim() || r.code.trim().length > 32)) {
@@ -265,7 +396,7 @@ Page({
   noop() {},
   switchTab(e) {
     const activeTab = e.currentTarget.dataset.tab;
-    if (!["home", "import", "history"].includes(activeTab) || this.data.importing || this.data.deleting) return;
+    if (!["home", "import", "history"].includes(activeTab) || this.data.importing || this.data.deleting || this.data.stationBusy) return;
     this.closeDelete();
     this.setData({ activeTab, editing: null, editError: "" });
     if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 0 });
@@ -277,7 +408,7 @@ Page({
     this.updateRecords(this.data.records);
   },
   toggleTaken(e) {
-    if (this.data.importing || this.data.deleting || this.data.storageBlocked || Date.now() < (this.suppressTapUntil || 0)) return;
+    if (this.data.importing || this.data.deleting || this.data.stationBusy || this.data.storageBlocked || Date.now() < (this.suppressTapUntil || 0)) return;
     const record = this.data.records.find(r => r.id === e.currentTarget.dataset.id);
     if (!record) return;
     this.closeDelete();
@@ -370,6 +501,16 @@ Page({
     if (!undo || Date.now() >= undo.until) { this.clearUndo(); return; }
     if (this.data.deleting || this.data.importing || this.data.storageBlocked) return;
     const records = this.data.records.slice();
+    if (undo.kind === "batch-taken") {
+      if (undo.updates.some(u => !records.some(r => r.id === u.after.id && JSON.stringify(r) === JSON.stringify(u.after)))) {
+        this.clearUndo(); wx.showToast({ title: "记录已变化，请在历史中恢复", icon: "none" }); return;
+      }
+      if (this.persistRecords(records.map(r => {
+        const update = undo.updates.find(u => u.before.id === r.id);
+        return update ? update.before : r;
+      }))) this.clearUndo();
+      return;
+    }
     if (undo.kind === "merge") {
       if (undo.updates.some(u => !records.some(r => r.id === u.after.id && JSON.stringify(r) === JSON.stringify(u.after)))) {
         this.clearUndo();
@@ -402,20 +543,18 @@ Page({
   },
   updateRecords(records) {
     const pending = records.filter(r => !r.taken);
-    const pendingGroups = parser.group(pending).map(g => ({ ...g,
-      collapsed: this.data.collapsedStations.includes(g.station),
-      items: g.items.slice().sort((a, b) => {
-        const x = a.code.match(/\d+|\D+/g) || [], y = b.code.match(/\d+|\D+/g) || [];
-        for (let i = 0; i < Math.min(x.length, y.length); i++) {
-          const diff = /^\d+$/.test(x[i]) && /^\d+$/.test(y[i]) ? Number(x[i]) - Number(y[i]) : x[i].localeCompare(y[i]);
-          if (diff) return diff;
-        }
-        return x.length - y.length;
-      })
-    }));
-    this.setData({ records, groups: parser.group(records), pendingGroups,
+    const next = stations.sync(this.stationState, records);
+    if (!this.data.stationBlocked && !this.data.storageBlocked && JSON.stringify(next) !== JSON.stringify(this.stationState)) {
+      try { this.stationState = this.stationStore.save(next); }
+      catch (err) { this.setData({ stationError: err.message, stationBlocked: true }); }
+    }
+    const pendingGroups = stations.group(this.stationState, pending).map(g => ({ ...g,
+      collapsed: this.data.collapsedStations.includes(g.station) }));
+    const stationList = this.stationState.groups.map(g => ({ ...g,
+      count: pending.filter(r => stations.resolve(this.stationState, r.station).id === g.id).length }));
+    this.setData({ records, groups: parser.group(records), pendingGroups, stationList, stationSuggestions: stations.suggestions(this.stationState),
       locationCount: pendingGroups.filter(g => g.station !== parser.UNKNOWN).length,
-      unknownCount: pending.filter(r => r.station === parser.UNKNOWN).length,
+      unknownCount: pendingGroups.filter(g => g.id === "__unknown").reduce((sum, g) => sum + g.items.length, 0),
       history: records.filter(r => r.taken).sort((a, b) => b.takenAt - a.takenAt), remaining: pending.length });
   },
   editRecord(e) {
@@ -429,7 +568,7 @@ Page({
   editCode(e) { this.setData({ "editing.code": e.detail.value }); },
   cancelEdit() { this.setData({ editing: null }); },
   saveEdit() {
-    if (this.data.importing || this.data.deleting) return;
+    if (this.data.importing || this.data.deleting || this.data.stationBusy) return;
     const edit = this.data.editing;
     if (!edit || !edit.station.trim() || !edit.code.trim() || edit.station.trim().length > 100 || edit.code.trim().length > 32 || (edit.carrier || "").trim().length > 40) {
       this.setData({ editError: "请填写地点和取件码，并检查内容长度。" }); return;

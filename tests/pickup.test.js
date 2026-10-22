@@ -61,7 +61,7 @@ test('取消导入不保存；确认中的连点不会重复保存', async () =>
   wx.showModal = async () => ({ confirm: false }); await p.confirmImport(); assert.equal(p.data.records.length, 0); assert.equal(p.data.drafts.length, 1);
   let release; wx.showModal = () => new Promise(r => { release = r; });
   const run = p.confirmImport(); await p.confirmImport(); release({ confirm: true }); await run;
-  assert.equal(p.data.records.length, 1); assert.equal(wx.writes.length, 1);
+  assert.equal(p.data.records.length, 1); assert.equal(wx.writes.filter(key => key === storage.KEY).length, 1);
 });
 test('取消和超限选图保留原批次；成功选图和 OCR 失败均不影响已保存记录', async () => {
   const wx = fakeStorage(); let p = page(wx); await importOne(p); const before = JSON.stringify(wx.values);

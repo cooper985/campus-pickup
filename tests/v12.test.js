@@ -1,0 +1,106 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const notifications = require('../miniprogram/services/notification-parser');
+const stations = require('../miniprogram/services/stations');
+const storage = require('../miniprogram/services/pickup-store');
+const { page } = require('./helpers/page');
+const { fakeStorage } = require('./helpers/storage');
+const event = (id, rest = {}) => ({ currentTarget: { dataset: { id, ...rest } } });
+const record = (station, code) => storage.newRecord({ station, code });
+
+test('本地通知解析：菜鸟多码、邮政凭码、京东字母码及独立通知地点', () => {
+  const result = notifications.parse('【菜鸟驿站】您的中通快递已派送至31号楼驿站，取件码：1-1-25、1-1-8，请及时取件。\n【中国邮政】包裹已送至西门服务站，请凭603402取件。\n【京东物流】取件码为B3-4-7401，请到西门快递柜领取。');
+  assert.deepEqual(result.map(r => r.code), ['1-1-25', '1-1-8', '603402', 'B3-4-7401']);
+  assert.deepEqual(result.map(r => r.station), ['31号楼驿站', '31号楼驿站', '西门服务站', '西门快递柜']);
+  assert.deepEqual(result.map(r => r.carrier), ['中通快递', '中通快递', '中国邮政', '京东物流']);
+  assert.equal(notifications.parse('【菜鸟】包裹已到31号楼驿站；\n取件码：\n1234')[0].station, '31号楼驿站');
+  assert.equal(notifications.parse('【中通】已放至【31号楼驿站】，取件码1234')[0].station, '31号楼驿站');
+  assert.equal(notifications.parse('【中通】已放至【31号楼驿站】，取件码1234')[0].carrier, '中通快递');
+  assert.equal(notifications.parse('取货码【73-3-4003】，取货码313-3-3308')[1].code, '313-3-3308');
+});
+test('普通数字、电话、运单、日期、时间、金额及无效标签不冒充取件码；歧义地点待补充', () => {
+  assert.equal(notifications.parse('电话13812345678，运单号123456789012，2026-10-22 18:30，普通数字1234').length, 0);
+  assert.equal(notifications.parse('取件码：2026-10-22，取件码：13812345678，取件码：18:30，取件码：123456789012，取件码：1234元，暂无取件码1234').length, 0);
+  assert.equal(notifications.parse('取件码：456789')[0].station, '待确认地点');
+  assert.equal(notifications.parse('取件码：456789，取件地址：东门驿站，取件地点：西门驿站')[0].station, '待确认地点');
+});
+test('点击才读剪贴板；经旧导入去重、落盘不含原文；失败保留旧草稿，无可靠结果可手工补全', async () => {
+  const wx = fakeStorage(); let reads = 0;
+  wx.getClipboardData = async () => { reads++; return { data: '【菜鸟】已派送至31号楼驿站，取件码1-1-8。私人无关内容不保存' }; };
+  const p = page(wx); assert.equal(reads, 0);
+  await p.pasteNotification(); assert.equal(reads, 1); assert.equal(p.data.records.length, 0);
+  assert.equal(p.data.drafts[0].code, '1-1-8'); await p.confirmImport();
+  assert.equal(p.data.records.length, 1);
+  await p.pasteNotification(); await p.confirmImport(); assert.equal(p.data.records.length, 1);
+  assert.ok(!JSON.stringify(wx.values).includes('私人无关内容'));
+  wx.getClipboardData = async () => { throw Error('denied'); };
+  p.data.drafts = [{ id: 'keep', code: '1111', station: '测试' }];
+  await p.pasteNotification(); assert.equal(p.data.drafts[0].id, 'keep');
+  wx.getClipboardData = async () => ({ data: '运单号123456789012' });
+  await p.pasteNotification(); assert.equal(p.data.editing.code, '');
+  await p.confirmImport(); assert.equal(p.data.records.length, 1);
+  p.data.editing.code = '8888'; p.data.editing.station = '西门驿站'; p.saveEdit();
+  await p.confirmImport(); assert.equal(p.data.records.length, 2); p.onUnload();
+});
+test('别名仅确认后合并，修改名称、取消关联、重启与未来导入兼容，原记录字段保留', async () => {
+  const wx = fakeStorage(), p = page(wx);
+  const original = [record('洗浴中心北侧', '1111'), record('宏达洗浴中心北侧三角驿站', '2222'), record('待确认地点', '3333')];
+  p.persistRecords(original); assert.equal(p.data.pendingGroups.length, 3); assert.equal(p.data.stationSuggestions.length, 1);
+  const ids = p.data.stationList.map(g => g.id);
+  p.data.stationSelection = ids; p.beginStationMerge(); p.data.stationEditor.name = '北侧驿站';
+  await p.confirmStationEdit(); assert.equal(p.data.pendingGroups.length, 2); assert.equal(JSON.stringify(p.data.records), JSON.stringify(original));
+  const q = page(wx); assert.equal(q.data.pendingGroups[0].station, '北侧驿站');
+  q.persistRecords([...q.data.records, record('洗浴中心北侧', '4444')]); assert.equal(q.data.pendingGroups[0].items.length, 3);
+  q.editStationName(event(ids[0])); q.data.stationEditor.name = '我的驿站'; await q.confirmStationEdit();
+  assert.equal(page(wx).data.pendingGroups[0].station, '我的驿站');
+  await q.unlinkStation(event(ids[0], { alias: '洗浴中心北侧' }));
+  assert.equal(q.data.pendingGroups.length, 3); assert.equal(page(wx).data.pendingGroups.length, 3);
+  assert.equal(q.data.records[0].station, '洗浴中心北侧'); q.onUnload(); p.onUnload();
+});
+test('标点空格自动统一，部分相似不自动合并；取消确认不写入设置', async () => {
+  assert.notEqual(stations.normalize('31-1号楼驿站'), stations.normalize('311号楼驿站'));
+  const wx = fakeStorage(), p = page(wx);
+  p.persistRecords([record('31 号楼（驿站）', '1111'), record('31号楼驿站', '2222'), record('31号楼南侧驿站', '3333')]);
+  assert.equal(p.data.pendingGroups.length, 2);
+  const before = JSON.stringify(wx.values);
+  p.data.stationSelection = p.data.stationList.map(g => g.id); p.beginStationMerge();
+  wx.showModal = async () => ({ confirm: false }); await p.confirmStationEdit();
+  assert.equal(JSON.stringify(wx.values), before); p.onUnload();
+});
+test('驿站顺序重启保持、新站追加、空站隐藏；同站自然排序与稳定兜底不改记录', () => {
+  const wx = fakeStorage(), p = page(wx);
+  const codes = ['1-1-100', '1-1-25', '1-1-8', '313-3-3308', '73-3-4003', 'B3-4-7401', 'B3-4-25', '未知码', '1-1-08'];
+  const original = [...codes.map(code => record('A驿站', code)), record('B驿站', '2222')];
+  p.persistRecords(original);
+  p.moveStation(event(p.data.stationList[1].id, { direction: '-1' }));
+  const q = page(wx); assert.equal(q.data.pendingGroups[0].station, 'B驿站');
+  q.persistRecords([...q.data.records, record('C驿站', '3333')]);
+  assert.deepEqual(Array.from(q.data.pendingGroups, g => g.station), ['B驿站', 'A驿站', 'C驿站']);
+  const sorted = q.data.pendingGroups[1].items;
+  assert.deepEqual(Array.from(sorted, r => r.code), ['1-1-8', '1-1-08', '1-1-25', '1-1-100', '73-3-4003', '313-3-3308', 'B3-4-25', 'B3-4-7401', '未知码']);
+  assert.equal(JSON.stringify(q.data.records.slice(0, original.length)), JSON.stringify(original));
+  q.persistRecords(q.data.records.map(r => r.station === 'B驿站' ? storage.updateRecord(r, { taken: true }) : r));
+  assert.equal(q.data.pendingGroups[0].station, 'A驿站'); assert.equal(q.data.stationList[0].name, 'B驿站'); q.onUnload(); p.onUnload();
+});
+test('统一驿站批量只核销当前待取件，取消不变、五秒内撤销、过期不撤销且落盘', async () => {
+  const wx = fakeStorage(), p = page(wx);
+  const previous = storage.updateRecord(record('A站', '1000'), { taken: true });
+  p.persistRecords([record('A站', '1111'), record('A站别名', '2222'), record('B站', '3333'), previous]);
+  p.saveStations(stations.merge(p.stationState, p.data.stationList.slice(0, 2).map(g => g.id), 'A站'));
+  const id = p.data.pendingGroups[0].id, before = JSON.stringify(p.data.records);
+  wx.showModal = async () => ({ confirm: false }); await p.takeStation(event(id)); assert.equal(JSON.stringify(p.data.records), before);
+  wx.showModal = async () => ({ confirm: true }); await p.takeStation(event(id));
+  assert.equal(p.data.remaining, 1); assert.equal(p.data.history.length, 3); assert.equal(page(wx).data.remaining, 1);
+  assert.equal(JSON.stringify(p.data.records.find(r => r.id === previous.id)), JSON.stringify(previous));
+  p.undoDelete(); assert.equal(JSON.stringify(p.data.records), before); assert.equal(page(wx).data.remaining, 3);
+  await p.takeStation(event(id)); p.undoRecord.until = Date.now() - 1; p.undoDelete(); assert.equal(p.data.remaining, 1); p.onUnload();
+});
+test('核销/撤销及设置保存失败不假装成功，独立保护不覆盖旧数据', async () => {
+  const wx = fakeStorage(), p = page(wx); p.persistRecords([record('A站', '1111'), record('B站', '2222')]);
+  const id = p.data.pendingGroups[0].id;
+  wx.failWrite = storage.KEY; await p.takeStation(event(id)); assert.equal(p.data.remaining, 2); assert.equal(p.data.undoAvailable, false); p.onUnload();
+  wx.failWrite = ''; const q = page(wx); await q.takeStation(event(id)); wx.failWrite = storage.KEY; q.undoDelete(); assert.equal(q.data.remaining, 1); q.onUnload();
+  wx.failWrite = ''; const r = page(wx), before = JSON.stringify(r.stationState), records = JSON.stringify(r.data.records);
+  wx.failWrite = stations.KEY; r.moveStation(event(r.data.stationList[1].id, { direction: '-1' }));
+  assert.equal(JSON.stringify(r.stationState), before); assert.equal(r.data.stationBlocked, true); assert.equal(JSON.stringify(r.data.records), records); r.onUnload();
+});

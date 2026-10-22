@@ -86,3 +86,19 @@
 .review-summary { font-size: 24rpx; color: #216b48; line-height: 1.6; }
 .review-footer .actions { margin-top: 16rpx; }
 .review-footer .ui-button { font-size: 25rpx; padding: 0 12rpx; }
+
+.station-tools { display: flex; justify-content: flex-end; margin: -8rpx 0 16rpx; }
+.station-tools .ui-button { font-size: 24rpx; }
+.batch-row { display: flex; justify-content: flex-end; padding: 0 16rpx 8rpx; }
+.batch-row .ui-button { font-size: 23rpx; line-height: 60rpx; }
+.station-setting { padding: 24rpx; }
+.station-setting-top { display: flex; align-items: center; gap: 12rpx; }
+.station-setting-top .ui-button { flex-shrink: 0; }
+.station-alias { display: flex; align-items: center; justify-content: space-between; font-size: 23rpx; line-height: 1.7; color: #748078; margin-top: 12rpx; gap: 16rpx; }
+.station-alias text { flex: 1; min-width: 0; word-break: break-all; }
+.station-alias .ui-button { flex-shrink: 0; font-size: 23rpx; }
+.station-order { display: flex; justify-content: flex-end; gap: 20rpx; margin-top: 16rpx; }
+.station-order .ui-button { margin: 0; font-size: 24rpx; }
+
+.station-select { margin: 0; min-width: 100rpx; padding: 0 12rpx; font-size: 23rpx; border: 2rpx solid transparent; }
+.station-select.option-selected { border-color: #216b48; }
