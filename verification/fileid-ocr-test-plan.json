@@ -1,5 +1,5 @@
 {
-  "status": "awaiting_approval_not_deployed",
+  "status": "android_diagnostics_received_test_closed",
   "environment": "cloud1-d8g3dicam66594fcf",
   "function": "recognizePickup",
   "changedServerFiles": [
@@ -54,5 +54,6 @@
     "disableTestAndRevokeRoleAssociationAfterSession": true
   },
   "productionTransportChanged": false,
-  "androidVerified": false
+  "androidVerified": true,
+  "businessResultsConfirmed": false
 }
