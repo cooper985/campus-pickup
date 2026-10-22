@@ -133,10 +133,10 @@ Page({
       const parsed = analysis.records.map((r, j) => ({ ...r, ...metadata, id: `draft-${taskId}-${j}`, taken: false }));
       // A valid no-code response must also replace old drafts from this image.
       const drafts = [...this.data.drafts.filter(r => r.sourceIndex !== i), ...parsed];
-      task.log("text_parse", parseStarted, "OK", { traceId });
+      task.log("text_parse", parseStarted, "OK", { traceId, parseReason: analysis.reason, recordCount: parsed.length, uncertainCount: analysis.uncertainCount });
       this.setData({ drafts, draftGroups: parser.group(drafts) });
       update({ state: "done", mock: result.mock, count: parsed.length, uncertainCount: analysis.uncertainCount,
-        status: analysis.status, message: analysis.message, retryable: analysis.status === "unrecognized" });
+        status: analysis.status, parseReason: analysis.reason, message: analysis.message, retryable: analysis.status === "unrecognized" });
     } catch (err) {
       if (!current()) return;
       const safe = task.error(err && err.code);

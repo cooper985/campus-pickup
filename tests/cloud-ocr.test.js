@@ -68,12 +68,16 @@ test('开发诊断拆分云端OCR与往返剩余耗时，只记录数值，不�
   requestID:'12345678-1234-1234-1234-123456789abc'};};
  await assert.rejects(module.exports.recognize('image',{check(){},stage(){},traceId:8}),e=>e.code==='TIMEOUT');
  const report=taskModule.exports.diagnostic(8), failure=report.events.find(e=>e.errorKind==='polling_timeout');
- assert.equal(report.build,'20261022-fileid-default-v1'); assert.equal(failure.sdkCode,-404012);
+ assert.equal(report.build,'20261022-cainiao-parser-v1'); assert.equal(failure.sdkCode,-404012);
  assert.equal(failure.origin,'cloud_call'); assert.equal(failure.requestId,'12345678-1234-1234-1234-123456789abc');
  assert.ok(report.events.some(e=>e.stage==='cloud_submit'&&e.atMs>0));
  assert.ok(!report.events.some(e=>e.stage==='cloud_return'));
  assert.ok(!JSON.stringify(report).includes(small)); assert.ok(!JSON.stringify(report).includes('private text'));
  s.wx.cloud.callFunction=async()=>({result:{ok:true,mock:false,lines:[]}});
+ taskModule.exports.log('text_parse',Date.now(),'OK',{traceId:8,parseReason:'candidate_unparsed',recordCount:0,uncertainCount:2,lines:['private text']});
+ const parseEvent=taskModule.exports.diagnostic(8).events.find(e=>e.stage==='text_parse');
+ assert.equal(parseEvent.parseReason,'candidate_unparsed'); assert.equal(parseEvent.uncertainCount,2); assert.equal(parseEvent.recordCount,0);
+ assert.equal(parseEvent.lines,undefined);
  wx.getAccountInfoSync=()=>({miniProgram:{envVersion:'release'}});
  const count=logs.length; await module.exports.recognize('image'); assert.equal(logs.length,count);
  assert.equal(taskModule.exports.diagnostic(8),null);

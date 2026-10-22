@@ -4,7 +4,7 @@ const PREPARE_TIMEOUT_MS = 15000;
 const WAIT_TIMEOUT_MS = 60000;
 const SLOW_AFTER_MS = 8000;
 const CLOUD_ENV = "cloud1-d8g3dicam66594fcf";
-const DIAGNOSTIC_BUILD = "20261022-fileid-default-v1";
+const DIAGNOSTIC_BUILD = "20261022-cainiao-parser-v1";
 // Memory only; one batch plus retries, never persist screenshot or OCR content.
 const events = [];
 const stages = new Set(["image_prepare", "image_stat", "image_size", "image_read", "image_compress", "compressed_read",
@@ -39,10 +39,11 @@ function log(stage, started, code = "OK", metrics = {}) {
   if (!isDevelopment()) return;
   if (!stages.has(stage)) return;
   const safe = {};
-  for (const key of ["traceId", "imageBytes", "base64Chars", "requestBytes", "ocrMs", "overheadMs", "selectedToResultMs"]) {
+  for (const key of ["traceId", "imageBytes", "base64Chars", "requestBytes", "ocrMs", "overheadMs", "selectedToResultMs", "recordCount", "uncertainCount"]) {
     if (Number.isFinite(metrics[key]) && metrics[key] >= 0) safe[key] = metrics[key];
   }
   for (const key of ["serverDeleted", "clientDeleted", "cleanupPending"]) if (typeof metrics[key] === "boolean") safe[key] = metrics[key];
+  if (["ocr_empty", "no_valid_code", "candidate_unparsed", "code_found"].includes(metrics.parseReason)) safe.parseReason = metrics.parseReason;
   if (Number.isInteger(metrics.sdkCode)) safe.sdkCode = metrics.sdkCode;
   if (["client", "client_wait", "cloud_call", "cloud_result"].includes(metrics.origin)) safe.origin = metrics.origin;
   if (stages.has(metrics.phase)) safe.phase = metrics.phase;
