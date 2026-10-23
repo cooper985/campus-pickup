@@ -12,7 +12,7 @@ const stationDrag = require("../../services/station-drag");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { swipeId: "", swipeStyle: "", reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
@@ -54,7 +54,7 @@ Page({
       if (grouped) {
         visible = next.map(g => ({ ...g, items: retain((previous.find(old => (old.id || old.station) === (g.id || g.station)) || { items: [] }).items, g.items) }));
         previous.forEach((g, index) => {
-          if (!next.some(n => (n.id || n.station) === (g.id || g.station))) visible.splice(Math.min(index, visible.length), 0, { ...g, items: g.items.map(r => ({ ...r, leaving: true })) });
+          if (!next.some(n => (n.id || n.station) === (g.id || g.station))) visible.splice(Math.min(index, visible.length), 0, { ...g, leaving: true, items: g.items.map(r => ({ ...r, leaving: true })) });
         });
       } else visible = retain(previous, next);
     }
@@ -193,6 +193,7 @@ Page({
   moveStationDrag(e) {
     if (!e.touches || e.touches.length !== 1) { this.cancelStationDrag(); return; }
     const touch = e.touches[0];
+    if (this.stationDragging && this.stationDragging.settling) return;
     if (!this.stationDragging) {
       if (this.stationTouch && Math.max(Math.abs(touch.clientX - this.stationTouch.startX), Math.abs(touch.clientY - this.stationTouch.startY)) > 8) this.stationTouch.moved = true;
       return;
@@ -202,15 +203,17 @@ Page({
   },
   renderStationDrag() {
     const drag = this.stationDragging;
-    if (!drag) return;
+    if (!drag || drag.settling) return;
     this.lastDragFrame = Date.now();
     const preview = stationDrag.preview(drag.rects, drag.from, drag.clientY + (this.pageScrollTop || 0) - drag.startPageY);
     drag.target = preview.target;
-    this.setData({ pendingGroups: this.data.pendingGroups.map(g => {
+    const patch = {};
+    this.data.visiblePendingGroups.forEach((g, index) => {
       const i = drag.ids.indexOf(g.id);
-      return { ...g, dragStyle: i < 0 ? "" : `transform: translateY(${preview.offsets[i]}px)${g.id === this.data.dragId ? " scale(1.02)" : ""};` };
-    }) });
-    this.setData({ visiblePendingGroups: this.data.pendingGroups });
+      const style = i < 0 ? "" : `transform: translateY(${preview.offsets[i]}px)${g.id === this.data.dragId ? " scale(1.02)" : ""};`;
+      if (g.dragStyle !== style) patch[`visiblePendingGroups[${index}].dragStyle`] = style;
+    });
+    if (Object.keys(patch).length) this.setData(patch);
   },
   scrollStationDrag() {
     const drag = this.stationDragging;
@@ -225,18 +228,38 @@ Page({
     if (!drag) { this.stationTouch = null; return; }
     if (e && e.changedTouches && e.changedTouches[0]) drag.clientY = e.changedTouches[0].clientY;
     this.renderStationDrag();
-    const next = stationDrag.reorder(this.stationState, drag.ids, drag.from, drag.target);
+    if (drag.settling) return;
     this.suppressGroupTapUntil = Date.now() + 350;
-    this.cancelStationDrag();
-    if (drag.target !== drag.from && this.saveStations(next) && wx.showToast) wx.showToast({ title: "驿站顺序已保存", icon: "none" });
+    try {
+      if (drag.target !== drag.from) {
+        const next = stationDrag.reorder(this.stationState, drag.ids, drag.from, drag.target);
+        this.stationState = this.stationStore.save(next);
+      }
+    } catch (err) {
+      this.cancelStationDrag();
+      this.setData({ stationError: err.message, stationBlocked: true });
+      return;
+    }
+    // Persist first, then settle the view without delaying or guessing save success.
+    clearTimeout(this.dragScrollTimer);
+    drag.settling = true;
+    const offset = drag.target > drag.from
+      ? drag.rects[drag.target].bottom - drag.rects[drag.from].bottom
+      : drag.rects[drag.target].top - drag.rects[drag.from].top;
+    const index = this.data.visiblePendingGroups.findIndex(g => g.id === this.data.dragId);
+    this.setData({ [`visiblePendingGroups[${index}].dragStyle`]: `transform: translateY(${offset}px) scale(1); transition: transform ${this.data.reduceMotion ? 0 : 180}ms ease-out;` });
+    if (this.data.reduceMotion) this.cancelStationDrag();
+    else this.dragSettleTimer = setTimeout(() => this.cancelStationDrag(), 180);
   },
   cancelStationDrag() {
     clearTimeout(this.stationHoldTimer);
     clearTimeout(this.dragScrollTimer);
+    clearTimeout(this.dragSettleTimer);
+    const settled = this.stationDragging && this.stationDragging.settling;
     this.stationTouch = null;
     this.stationDragging = null;
-    if (!this.unloaded && this.data.dragId) this.setData({ dragId: "", pendingGroups: this.data.pendingGroups.map(g => ({ ...g, dragStyle: "" })) });
-    if (!this.unloaded) this.setData({ visiblePendingGroups: this.data.pendingGroups });
+    if (!this.unloaded && this.data.dragId) this.setData({ dragId: "", ...(settled ? {} : { visiblePendingGroups: this.data.pendingGroups.map(g => ({ ...g, dragStyle: "" })) }) });
+    if (!this.unloaded && settled) this.updateRecords(this.data.records);
   },
   moveStation(e) {
     if (this.data.stationBusy) return;
@@ -588,12 +611,17 @@ Page({
     const station = e.currentTarget.dataset.station;
     const collapsed = this.data.collapsedStations;
     this.setData({ collapsedStations: collapsed.includes(station) ? collapsed.filter(s => s !== station) : [...collapsed, station] });
-    this.updateRecords(this.data.records);
+    const patch = {};
+    ["pendingGroups", "visiblePendingGroups"].forEach(field => this.data[field].forEach((g, index) => {
+      if (g.station === station) patch[`${field}[${index}].collapsed`] = !collapsed.includes(station);
+    }));
+    this.setData(patch);
   },
   toggleTaken(e) {
     if (this.data.dragId || this.data.importing || this.data.deleting || this.data.stationBusy || this.data.storageBlocked || Date.now() < (this.suppressTapUntil || 0)) return;
     const record = this.data.records.find(r => r.id === e.currentTarget.dataset.id);
-    if (!record) return;
+    if (!record || this.lastTakenId === record.id && Date.now() - this.lastTakenAt < 350) return;
+    this.lastTakenId = record.id; this.lastTakenAt = Date.now();
     this.closeDelete();
     const records = this.data.records.map(r => r.id === record.id ? storage.updateRecord(r, { taken: !r.taken }) : r);
     if (!this.persistRecords(records)) return;
@@ -604,7 +632,7 @@ Page({
       this.undoTimer = setTimeout(() => this.clearUndo(), 5000);
     } else if (wx.showToast) wx.showToast({ title: "已恢复待取", icon: "none" });
   },
-  closeDelete() { if (this.data.openDeleteId) this.setData({ openDeleteId: "" }); },
+  closeDelete() { if (this.data.openDeleteId || this.data.swipeId) this.setData({ openDeleteId: "", swipeId: "", swipeStyle: "" }); },
   onPageScroll(e) { this.closeDelete(); this.pageScrollTop = e && e.scrollTop || 0; if (this.stationDragging) this.renderStationDrag(); },
   onHide() { this.closeDelete(); this.swipe = null; this.cancelStationDrag(); },
   recordTap() { if (Date.now() >= (this.suppressTapUntil || 0)) this.closeDelete(); },
@@ -614,16 +642,21 @@ Page({
     if (this.data.deleting || this.data.storageBlocked || e.touches.length !== 1 ||
       !this.data.records.some(r => r.id === id && r.taken)) return;
     const t = e.touches[0];
-    this.swipe = { id, x: t.clientX, y: t.clientY, axis: "" };
+    this.swipe = { id, x: t.clientX, y: t.clientY, axis: "", offset: this.data.openDeleteId === id ? -80 : 0 };
     if (this.data.openDeleteId !== id) this.closeDelete();
   },
   touchMove(e) {
     const swipe = this.swipe;
     if (!swipe) return;
-    if (e.touches.length !== 1) { this.swipe = null; return; }
+    if (e.touches.length !== 1) { this.touchCancel(); return; }
     const dx = Math.abs(e.touches[0].clientX - swipe.x), dy = Math.abs(e.touches[0].clientY - swipe.y);
     if (!swipe.axis && Math.max(dx, dy) >= 12) swipe.axis = dx > dy * 1.5 ? "x" : "y";
     if (swipe.axis === "y") this.closeDelete();
+    if (swipe.axis === "x" && Date.now() - (swipe.frame || 0) >= 16) {
+      swipe.frame = Date.now();
+      const offset = Math.max(-80, Math.min(0, swipe.offset + e.touches[0].clientX - swipe.x));
+      this.setData({ swipeId: swipe.id, swipeStyle: `transform: translateX(${offset}px); transition: none;` });
+    }
   },
   touchEnd(e) {
     const swipe = this.swipe;
@@ -634,6 +667,7 @@ Page({
       this.suppressTapUntil = Date.now() + 350;
       this.setData({ openDeleteId: dx < 0 ? swipe.id : "" });
     }
+    this.setData({ swipeId: "", swipeStyle: "" });
   },
   touchCancel() { this.swipe = null; this.closeDelete(); },
   revealDelete(e) {
@@ -666,7 +700,7 @@ Page({
     this.setData({ deleting: true });
     try {
       const answer = await wx.showModal({ title: "删除已取记录？", content: `${record.station} · ${record.code}。删除后可在 5 秒内撤销，之后无法从页面恢复。${this.data.undoAvailable ? "继续删除将结束上次撤销机会。" : ""}`,
-        confirmText: "删除", confirmColor: "#D99B95" });
+        confirmText: "删除", confirmColor: "#FF453A" });
       if (!answer.confirm || this.data.storageBlocked || this.unloaded) return;
       const index = this.data.records.findIndex(r => r.id === id && r.taken);
       if (index < 0) return;
@@ -733,9 +767,10 @@ Page({
       catch (err) { this.setData({ stationError: err.message, stationBlocked: true }); }
     }
     const pendingGroups = stations.group(this.stationState, pending).map(g => ({ ...g,
+      tone: g.id === "__unknown" ? "orange" : ["blue", "purple", "cyan", "orange"][Array.from(g.id).reduce((hash, c) => (hash * 31 + c.charCodeAt(0)) >>> 0, 0) % 4],
       collapsed: this.data.collapsedStations.includes(g.station) }));
     const stationList = this.stationState.groups.map(g => ({ ...g,
-      count: pending.filter(r => stations.resolve(this.stationState, r.station).id === g.id).length }));
+      count: (pendingGroups.find(p => p.id === g.id) || { items: [] }).items.length }));
     this.setData({ records, groups: parser.group(records), pendingGroups, stationList, stationSuggestions: stations.suggestions(this.stationState),
       locationCount: pendingGroups.filter(g => g.station !== parser.UNKNOWN).length,
       unknownCount: pendingGroups.filter(g => g.id === "__unknown").reduce((sum, g) => sum + g.items.length, 0),

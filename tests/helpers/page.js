@@ -8,7 +8,12 @@ function page(wx = fakeStorage(), recognize = async () => ({ mock: true, lines: 
     require: name => services[name.split('/').pop()] || (/(?:cloud|fileid|mock)-ocr$/.test(name) ? { recognize } : require('../../miniprogram/services/' + name.split('/').pop())),
     wx, setTimeout, clearTimeout, console: { info() {} }, Page: p => { result = p; },
   });
-  result.setData = function(data) { Object.assign(this.data, data); if (arguments[1]) arguments[1](); };
+  result.setData = function(data) { for (const [path, value] of Object.entries(data)) {
+    const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+    let target = this.data;
+    parts.slice(0, -1).forEach(key => { target = target[key]; });
+    target[parts[parts.length - 1]] = value;
+  } if (arguments[1]) arguments[1](); };
   result.onLoad();
   return result;
 }

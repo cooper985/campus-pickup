@@ -3,11 +3,15 @@ page {
   --card: #23272E;
   --surface: #2F343D;
   --line: #39404A;
-  --accent: #9AAFC3;
+  --accent: #0A84FF;
   --text: #F5F6F8;
   --secondary: #AAB0BA;
   --muted: #939BA6;
-  --danger: #D99B95;
+  --orange: #FF9F0A;
+  --purple: #BF5AF2;
+  --cyan: #64D2FF;
+  --success: #30D158;
+  --danger: #FF453A;
   background: var(--page);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;

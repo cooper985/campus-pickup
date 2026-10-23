@@ -124,12 +124,11 @@
 
 /* All product colors come from app.wxss. */
 .heading { font-weight: 600; }
-.app-title { color: var(--secondary); font-size: 26rpx; margin-bottom: 12rpx; }
 .count, .pickup-code, .review-code { color: var(--text); }
 .pickup-code { font-weight: 600; }
 .review-code { font-size: 48rpx; }
 .ui-button { border-radius: 18rpx; min-height: 88rpx; }
-.ui-button[disabled] { background: var(--surface); color: var(--muted); opacity: .65; }
+.ui-button.ui-disabled { background: var(--surface); color: var(--muted); opacity: .65; }
 .text-action { min-height: 64rpx; line-height: 64rpx; padding: 0 16rpx 0 0; }
 .parcel-row .ui-button, .parcel-row .draft-actions .ui-button, .batch-row .ui-button { line-height: 88rpx; }
 .parcel-row { flex-wrap: wrap; }
@@ -138,9 +137,7 @@
 .station-count { color: var(--muted); }
 .station-tools { align-items: center; justify-content: space-between; margin-bottom: 24rpx; }
 .ui-button.manage-stations { width: auto; line-height: 88rpx; padding: 0 24rpx; }
-.motion-toggle { font-size: 22rpx; color: var(--muted); }
 .drag-handle { min-width: 64rpx; min-height: 88rpx; line-height: 88rpx; text-align: center; margin-top: -16rpx; }
-.home-station { transition: transform 200ms ease; }
 .station-lifted { transition: none; }
 .batch-row .ui-button { border: 0; background: transparent; color: var(--accent); }
 .bottom-nav { background: var(--page); align-items: center; padding-top: 12rpx; }
@@ -176,3 +173,43 @@
   .page-panel, .notification-composer, .edit-sheet, .draft-section, .row-leaving { animation: none; }
   .group-content, .swipe-content, .home-station { transition: none; }
 }
+
+/* V2.1: restrained color, immediate press feedback, shared motion timing. */
+.primary, .take-button { background: var(--accent); color: #fff; }
+.nav-import .nav-symbol, .delete-label { color: #fff; }
+.success, .history-state { color: var(--success); }
+.review, .notice { color: var(--orange); }
+.card { box-shadow: none; border-color: transparent; }
+.page-header { margin: 8rpx 0 28rpx; align-items: center; }
+.heading { font-size: 36rpx; }
+.ui-button.manage-stations { color: var(--accent); border: 0; padding: 0 8rpx; font-size: 25rpx; }
+.station-header { align-items: center; gap: 12rpx; }
+.station-name { line-height: 1.45; }
+.station-mark { width: 44rpx; height: 44rpx; line-height: 44rpx; text-align: center; border-radius: 12rpx; flex-shrink: 0; font-size: 29rpx; background: var(--surface); }
+.tone-blue { color: var(--accent); }
+.tone-purple { color: var(--purple); }
+.tone-cyan { color: var(--cyan); }
+.tone-orange { color: var(--orange); }
+.station-count { color: var(--secondary); }
+.drag-handle { min-width: 44rpx; padding-left: 0; padding-right: 0; margin-right: 0; }
+.parcel-row .take-button { min-height: 72rpx; line-height: 72rpx; font-size: 24rpx; padding: 0 20rpx; }
+.batch-row { padding: 14rpx 24rpx; }
+.batch-row .ui-button { background: var(--surface); min-height: 72rpx; line-height: 72rpx; }
+.ui-button { transition: transform 160ms ease-out, opacity 160ms ease-out; }
+.ui-button.button-pressed, .delete-button.button-pressed { transform: scale(.975); opacity: .8; transition-duration: 100ms; }
+.station-lifted { box-shadow: 0 8rpx 24rpx rgba(0,0,0,.22); }
+.station-exit { display: grid; grid-template-rows: 1fr; }
+.station-exit-inner { min-height: 0; }
+.station-leaving { pointer-events: none; animation: row-out 200ms ease forwards; }
+.station-leaving .station-exit-inner { overflow: hidden; }
+.station-leaving .row-leaving { animation: none; }
+.reduce-motion .station-leaving { animation: none; }
+.reduce-motion .ui-button { transition: none; }
+.reduce-motion .button-pressed { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .station-leaving { animation: none; }
+  .ui-button { transition: none; }
+  .ui-button.button-pressed { transform: none; }
+}
+
+.text-action.button-pressed { opacity: .65; }

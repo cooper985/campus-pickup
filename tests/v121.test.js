@@ -71,7 +71,7 @@ function dragPage() {
   wx.getWindowInfo = () => ({ windowHeight: 800 });
   return { p, wx, rects };
 }
-test('长按前移动视为滚动；长按预览让位、取消不存盘；松手落盘且不影响站内排序', () => {
+test('长按前移动视为滚动；长按预览让位、取消不存盘；松手落盘且不影响站内排序', async () => {
   const { p, wx, rects } = dragPage();
   const ids = p.data.pendingGroups.map(g => g.id), before = JSON.stringify(p.data.records);
   p.stationTouchStart(touch(ids[0], 20, 120)); p.moveStationDrag(touch(ids[0], 20, 145)); p.beginStationDrag(); assert.equal(p.data.dragId, '');
@@ -79,8 +79,11 @@ test('长按前移动视为滚动；长按预览让位、取消不存盘；松�
   const preview = drag.preview(rects, 0, 350); assert.equal(preview.target, 2); assert.equal(preview.offsets[1], -130);
   p.moveStationDrag(touch(ids[0], 20, 470)); p.cancelStationDrag(); assert.equal(p.stationState.groups[0].id, ids[0]);
   p.stationTouchStart(touch(ids[0], 20, 120)); p.beginStationDrag(); p.finishStationDrag(touch(ids[0], 20, 470, true));
-  assert.deepEqual(Array.from(p.data.pendingGroups, g => g.id), [ids[1], ids[2], ids[0]]);
   assert.deepEqual(Array.from(page(wx).data.pendingGroups, g => g.id), [ids[1], ids[2], ids[0]]);
+  assert.equal(p.stationDragging.settling, true);
+  await new Promise(resolve => setTimeout(resolve, 210));
+  assert.deepEqual(Array.from(p.data.pendingGroups, g => g.id), [ids[1], ids[2], ids[0]]);
+  assert.equal(p.data.dragId, '');
   assert.equal(JSON.stringify(p.data.records), before); p.onUnload();
 });
 test('拖动保存失败恢复原顺序，触摸取消和隐藏页面退出拖动；隐藏驿站保留原槽位', () => {
