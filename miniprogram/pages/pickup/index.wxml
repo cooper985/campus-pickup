@@ -1,27 +1,29 @@
 <page-meta page-style="{{dragId ? 'overflow: hidden;' : ''}}" />
-<view class="pickup" bindtap="closeDelete">
+<view class="pickup {{reduceMotion ? 'reduce-motion' : ''}}" bindtap="closeDelete">
   <view wx:if="{{storageError}}" class="error" role="alert">{{storageError}}</view>
   <view wx:if="{{error && activeTab !== 'import' && errorScope !== 'import'}}" class="error" role="alert">{{error}}</view>
   <view wx:if="{{stationError}}" class="error" role="alert">{{stationError}}</view>
-  <view wx:if="{{activeTab === 'home'}}">
+  <view class="page-panel" wx:if="{{activeTab === 'home'}}">
     <view wx:if="{{importFeedback}}" class="import-feedback" role="status">{{importFeedback}}</view>
-    <view class="page-header"><view><view class="heading">待取件 <text class="count">{{remaining}}</text> 件</view><view class="hint">{{locationCount}} 个驿站{{unknownCount ? ' · ' + unknownCount + ' 件地点待确认' : ''}}</view></view><button class="ui-button primary import-entry" data-tab="import" catchtap="switchTab">＋ 导入快递</button></view>
-    <view class="station-tools"><button size="mini" class="ui-button secondary manage-stations" catchtap="openStations">⚙ 管理驿站</button></view>
+    <view class="app-title">校园取件助手</view>
+    <view class="page-header"><view><view class="heading">待取件 <text class="count">{{remaining}}</text> 件</view><view class="hint">{{locationCount}} 个取件地点{{unknownCount ? ' · ' + unknownCount + ' 件地点待确认' : ''}}</view></view></view>
+    <view class="station-tools"><button class="ui-button text-button motion-toggle" catchtap="toggleMotion">{{reduceMotion ? '动效已减少' : '减少动效'}}</button><button class="ui-button secondary manage-stations" catchtap="openStations">管理驿站</button></view>
     <view wx:if="{{!remaining}}" class="empty">暂无待取快递</view>
-    <view wx:for="{{pendingGroups}}" wx:key="id" wx:for-item="group" class="card station-card home-station {{group.id !== '__unknown' ? 'sortable-station' : ''}} {{dragId === group.id ? 'station-lifted' : ''}} {{dragId ? 'station-sorting' : ''}}" style="{{group.dragStyle}}">
+    <view wx:for="{{visiblePendingGroups}}" wx:key="id" wx:for-item="group" class="card station-card home-station {{group.id !== '__unknown' ? 'sortable-station' : ''}} {{dragId === group.id ? 'station-lifted' : ''}} {{dragId ? 'station-sorting' : ''}}" style="{{group.dragStyle}}">
       <view class="station-header" data-station="{{group.station}}" catchtap="toggleGroup" role="button" aria-label="{{group.collapsed ? '展开' : '收起'}}{{group.station}}"><view wx:if="{{group.id !== '__unknown' && locationCount > 1}}" class="drag-handle" data-id="{{group.id}}" bindtouchstart="stationTouchStart" bindtouchmove="moveStationDrag" bindtouchend="finishStationDrag" bindtouchcancel="cancelStationDrag" catchlongpress="beginStationDrag" catchtap="noop" role="button" aria-label="长按拖动{{group.station}}排序">⠿</view><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.items.length}} 件　{{group.collapsed ? '＋' : '−'}}</text></view>
 
-      <view wx:if="{{!group.collapsed}}">
-        <view wx:for="{{group.items}}" wx:key="id" class="parcel-row">
+      <view class="group-content {{group.collapsed ? 'is-collapsed' : ''}}" aria-hidden="{{group.collapsed}}"><view class="group-inner">
+        <view wx:for="{{group.items}}" wx:key="id" class="exit-row {{item.leaving ? 'row-leaving' : ''}}"><view class="exit-inner"><view class="parcel-row">
           <view class="parcel-main"><text class="pickup-code copy-code" data-id="{{item.id}}" catchtap="copyCode" role="button" aria-label="复制取件码 {{item.code}}">{{item.code}}</text><view class="record-meta"><text wx:if="{{item.carrier}}">{{item.carrier}} · </text><text class="text-action" data-id="{{item.id}}" catchtap="editRecord" role="button">{{group.station === '待确认地点' ? '补充地点' : '修改'}}</text></view></view>
           <button size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} take-button" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked || dragId}}">我已取件</button>
-        </view>
+        </view></view></view>
       </view>
-      <view class="batch-row"><button size="mini" class="ui-button secondary batch-take-button" data-id="{{group.id}}" catchtap="takeStation" disabled="{{importing || deleting || storageBlocked || dragId}}">✓ 全部标记已取</button></view>
+      </view>
+      <view wx:if="{{group.items.length > 1}}" class="batch-row"><button size="mini" class="ui-button secondary batch-take-button" data-id="{{group.id}}" catchtap="takeStation" disabled="{{importing || deleting || storageBlocked || dragId}}">全部标记已取</button></view>
     </view>
   </view>
 
-  <view wx:if="{{activeTab === 'import'}}">
+  <view class="page-panel" wx:if="{{activeTab === 'import'}}">
     <view class="heading">{{notificationOpen ? '粘贴通知' : '导入快递'}}</view>
     <view wx:if="{{notificationOpen}}" class="notification-composer">
       <textarea class="notification-input" value="{{notificationText}}" bindinput="notificationInput" placeholder="请粘贴完整的快递取件通知" maxlength="20000" disabled="{{choosing || importing}}" adjust-position="{{true}}" aria-label="完整快递取件通知" />
@@ -37,15 +39,15 @@
       </view>
       <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
       <view wx:if="{{loading}}" class="progress-line"><text>{{progress}}</text><button size="mini" class="ui-button text-button" bindtap="cancelRecognition">停止本批</button></view>
-      <view wx:if="{{drafts.length}}" class="draft-section">
+      <view wx:if="{{visibleDraftGroups.length}}" class="draft-section">
         <view class="result-heading"><view class="section-heading">核对结果 <text class="hint inline">{{validDraftCount}} 件</text></view><button wx:if="{{notificationText}}" size="mini" class="ui-button text-button" bindtap="openNotification" disabled="{{importing}}">修改文字</button></view>
         <view wx:if="{{mock}}" class="notice">模拟示例，与截图内容无关。</view>
-        <view wx:for="{{draftGroups}}" wx:key="station" wx:for-item="group" class="card station-card">
+        <view wx:for="{{visibleDraftGroups}}" wx:key="station" wx:for-item="group" class="card station-card">
           <view class="station-header"><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.validCount}} 件</text></view>
-          <view wx:for="{{group.items}}" wx:key="id" class="parcel-row">
+          <view wx:for="{{group.items}}" wx:key="id" class="exit-row {{item.leaving ? 'row-leaving' : ''}}"><view class="exit-inner"><view class="parcel-row">
             <view class="parcel-main"><text class="pickup-code" user-select="{{true}}">{{item.code || '号码缺失'}}</text><view wx:if="{{item.carrier}}" class="record-meta">{{item.carrier}}</view></view>
             <view class="draft-actions"><button size="mini" class="ui-button secondary" data-id="{{item.id}}" bindtap="editRecord" disabled="{{importing}}">修改</button><button size="mini" class="ui-button text-button" data-id="{{item.id}}" bindtap="removeDraft" disabled="{{importing}}">移除</button></view>
-          </view>
+          </view></view></view>
         </view>
       </view>
       <view wx:if="{{drafts.length || results.length || loading || completed}}" class="import-result-actions">
@@ -63,22 +65,22 @@
     <button class="ui-button text-button privacy-link" bindtap="showImportPrivacy">隐私说明</button>
   </view>
 
-  <view wx:if="{{activeTab === 'history'}}">
-    <view class="page-header"><view class="heading">已取件</view><text class="station-count">{{history.length}} 件</text></view>
+  <view class="page-panel" wx:if="{{activeTab === 'history'}}">
+    <view class="page-header"><view class="heading">历史记录</view><text class="station-count">{{history.length}} 件</text></view>
     <view wx:if="{{!history.length}}" class="empty">暂无已取件记录</view>
-    <view class="card history-card" wx:if="{{history.length}}">
-      <view wx:for="{{history}}" wx:key="id" class="swipe-shell" data-id="{{item.id}}" bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel" catchtap="recordTap">
-        <view wx:if="{{openDeleteId === item.id}}" class="delete-button" role="button" aria-label="删除已取件记录" data-id="{{item.id}}" catchtap="deleteRecord"><text class="delete-label">删除</text></view>
+    <view class="card history-card" wx:if="{{visibleHistory.length}}">
+      <view wx:for="{{visibleHistory}}" wx:key="id" class="swipe-shell exit-row {{item.leaving ? 'row-leaving' : ''}}" data-id="{{item.id}}" bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel" catchtap="recordTap">
+        <view class="exit-inner"><view wx:if="{{openDeleteId === item.id}}" class="delete-button" role="button" aria-label="删除已取件记录" data-id="{{item.id}}" catchtap="deleteRecord"><text class="delete-label">删除</text></view>
         <view class="swipe-content {{openDeleteId === item.id ? 'swipe-open' : ''}}">
-          <view class="history-top"><text class="pickup-code" user-select="{{true}}">{{item.code}}</text></view>
+          <view class="history-top"><text class="pickup-code" user-select="{{true}}">{{item.code}}</text><text class="history-state">已取件</text></view>
           <view class="history-station">{{item.station}}</view>
-          <view class="history-bottom"><text class="hint">{{item.carrier}}</text><button size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} secondary" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked}}">恢复待取</button></view>
-        </view>
+          <view class="history-bottom"><text class="hint">{{item.takenTimeLabel}}{{item.carrier ? ' · ' + item.carrier : ''}}</text><button size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} secondary" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked}}">恢复待取</button></view>
+        </view></view>
       </view>
     </view>
   </view>
 
-  <view wx:if="{{activeTab === 'stations'}}">
+  <view class="page-panel" wx:if="{{activeTab === 'stations'}}">
     <view class="heading">管理驿站</view>
     <view class="subtitle">选择两个驿站可合并</view>
     <view wx:if="{{!stationList.length}}" class="empty">导入快递后，这里会列出已知取件地点。</view>
@@ -107,7 +109,7 @@
 
   <view class="bottom-nav" catchtap="closeDelete">
     <button class="ui-button nav-item {{activeTab === 'home' ? 'nav-active' : ''}}" data-tab="home" catchtap="switchTab"><text class="nav-symbol">▤</text><text>待取件</text></button>
-    <button class="ui-button nav-item {{activeTab === 'import' ? 'nav-active' : ''}}" data-tab="import" catchtap="switchTab"><text class="nav-symbol">＋</text><text>导入{{validDraftCount ? ' · ' + validDraftCount : loading ? ' · 识别中' : ''}}</text></button>
+    <button class="ui-button nav-item nav-import {{activeTab === 'import' ? 'nav-active' : ''}}" data-tab="import" catchtap="switchTab"><text class="nav-symbol">＋</text><text>导入{{validDraftCount ? ' · ' + validDraftCount : loading ? ' · 识别中' : ''}}</text></button>
     <button class="ui-button nav-item {{activeTab === 'history' ? 'nav-active' : ''}}" data-tab="history" catchtap="switchTab"><text class="nav-symbol">✓</text><text>历史</text></button>
   </view>
   <view wx:if="{{undoAvailable}}" class="undo-bar" catchtap="recordTap"><text>{{undoMessage}} · 5 秒内可撤销</text><button class="ui-button {{(storageBlocked || importing || deleting) ? 'ui-disabled' : ''}} undo-action" size="mini" catchtap="undoDelete" disabled="{{storageBlocked || importing || deleting}}">撤销</button></view>

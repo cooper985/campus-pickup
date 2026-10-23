@@ -12,7 +12,7 @@ const stationDrag = require("../../services/station-drag");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
@@ -30,6 +30,39 @@ Page({
     this.setData({ stationError: settings.error, stationBlocked: !!settings.error });
     this.setData({ storageError: loaded.error, storageBlocked: loaded.blocked });
     this.updateRecords(loaded.records);
+  },
+  toggleMotion() {
+    this.setData({ reduceMotion: !this.data.reduceMotion });
+    this.presentRows("visiblePendingGroups", this.data.pendingGroups, true);
+    this.presentRows("visibleDraftGroups", this.data.draftGroups, true);
+    this.presentRows("visibleHistory", this.data.history);
+  },
+  // Exit snapshots are view-only; saves and the five-second undo never wait for animation.
+  presentRows(field, next, grouped = false) {
+    this.presentationTimers = this.presentationTimers || {};
+    clearTimeout(this.presentationTimers[field]);
+    const retain = (before, after) => {
+      const rows = after.slice();
+      before.forEach((row, index) => {
+        if (!rows.some(r => r.id === row.id)) rows.splice(Math.min(index, rows.length), 0, { ...row, leaving: true });
+      });
+      return rows;
+    };
+    const previous = this.data[field] || [];
+    let visible = next;
+    if (!this.data.reduceMotion) {
+      if (grouped) {
+        visible = next.map(g => ({ ...g, items: retain((previous.find(old => (old.id || old.station) === (g.id || g.station)) || { items: [] }).items, g.items) }));
+        previous.forEach((g, index) => {
+          if (!next.some(n => (n.id || n.station) === (g.id || g.station))) visible.splice(Math.min(index, visible.length), 0, { ...g, items: g.items.map(r => ({ ...r, leaving: true })) });
+        });
+      } else visible = retain(previous, next);
+    }
+    this.setData({ [field]: visible });
+    const hasExit = grouped ? visible.some(g => g.items.some(r => r.leaving)) : visible.some(r => r.leaving);
+    if (hasExit) this.presentationTimers[field] = setTimeout(() => {
+      if (!this.unloaded) this.setData({ [field]: next });
+    }, 200);
   },
   openNotification() {
     if (this.data.loading || this.data.choosing || this.data.importing) return;
@@ -72,6 +105,7 @@ Page({
   },
   setDrafts(drafts, extra = {}) {
     this.setData({ drafts, draftGroups: parser.group(drafts).map(g => ({ ...g, validCount: g.items.filter(r => validCode(r.code)).length })), validDraftCount: drafts.filter(r => validCode(r.code)).length, ...extra });
+    this.presentRows("visibleDraftGroups", this.data.draftGroups, true);
   },
   removeDraft(e) {
     if (this.data.importing) return;
@@ -126,9 +160,14 @@ Page({
     if (this.data.dragId) { this.cancelStationDrag(); return; }
     if (!e.touches || e.touches.length !== 1) return;
     const touch = e.touches[0];
+    clearTimeout(this.stationHoldTimer);
+    this.stationHoldTimer = setTimeout(() => this.beginStationDrag(), 350);
     this.stationTouch = { id: e.currentTarget.dataset.id, startX: touch.clientX, startY: touch.clientY, lastY: touch.clientY, moved: false };
   },
   beginStationDrag() {
+    clearTimeout(this.stationHoldTimer);
+    if (this.stationDragging) return;
+    clearTimeout((this.presentationTimers || {}).visiblePendingGroups);
     const touch = this.stationTouch;
     if (!touch || touch.moved || this.data.stationBusy || this.data.importing || this.data.deleting || this.data.storageBlocked || this.data.stationBlocked) return;
     const ids = this.data.pendingGroups.filter(g => this.stationState.groups.some(s => s.id === g.id)).map(g => g.id);
@@ -169,8 +208,9 @@ Page({
     drag.target = preview.target;
     this.setData({ pendingGroups: this.data.pendingGroups.map(g => {
       const i = drag.ids.indexOf(g.id);
-      return { ...g, dragStyle: i < 0 ? "" : `transform: translateY(${preview.offsets[i]}px)${g.id === this.data.dragId ? " scale(1.012)" : ""};` };
+      return { ...g, dragStyle: i < 0 ? "" : `transform: translateY(${preview.offsets[i]}px)${g.id === this.data.dragId ? " scale(1.02)" : ""};` };
     }) });
+    this.setData({ visiblePendingGroups: this.data.pendingGroups });
   },
   scrollStationDrag() {
     const drag = this.stationDragging;
@@ -180,6 +220,7 @@ Page({
     this.dragScrollTimer = setTimeout(() => this.scrollStationDrag(), 32);
   },
   finishStationDrag(e) {
+    clearTimeout(this.stationHoldTimer);
     const drag = this.stationDragging;
     if (!drag) { this.stationTouch = null; return; }
     if (e && e.changedTouches && e.changedTouches[0]) drag.clientY = e.changedTouches[0].clientY;
@@ -190,10 +231,12 @@ Page({
     if (drag.target !== drag.from && this.saveStations(next) && wx.showToast) wx.showToast({ title: "驿站顺序已保存", icon: "none" });
   },
   cancelStationDrag() {
+    clearTimeout(this.stationHoldTimer);
     clearTimeout(this.dragScrollTimer);
     this.stationTouch = null;
     this.stationDragging = null;
     if (!this.unloaded && this.data.dragId) this.setData({ dragId: "", pendingGroups: this.data.pendingGroups.map(g => ({ ...g, dragStyle: "" })) });
+    if (!this.unloaded) this.setData({ visiblePendingGroups: this.data.pendingGroups });
   },
   moveStation(e) {
     if (this.data.stationBusy) return;
@@ -333,6 +376,7 @@ Page({
   cancelRecognition() { this.imageJobs.forEach(job => job.cancel()); },
   onUnload() {
     this.unloaded = true;
+    Object.values(this.presentationTimers || {}).forEach(clearTimeout);
     this.data.notificationText = "";
     this.recognitionRun = null;
     this.cancelImportReview();
@@ -622,7 +666,7 @@ Page({
     this.setData({ deleting: true });
     try {
       const answer = await wx.showModal({ title: "删除已取记录？", content: `${record.station} · ${record.code}。删除后可在 5 秒内撤销，之后无法从页面恢复。${this.data.undoAvailable ? "继续删除将结束上次撤销机会。" : ""}`,
-        confirmText: "删除", confirmColor: "#c43d35" });
+        confirmText: "删除", confirmColor: "#D99B95" });
       if (!answer.confirm || this.data.storageBlocked || this.unloaded) return;
       const index = this.data.records.findIndex(r => r.id === id && r.taken);
       if (index < 0) return;
@@ -695,7 +739,13 @@ Page({
     this.setData({ records, groups: parser.group(records), pendingGroups, stationList, stationSuggestions: stations.suggestions(this.stationState),
       locationCount: pendingGroups.filter(g => g.station !== parser.UNKNOWN).length,
       unknownCount: pendingGroups.filter(g => g.id === "__unknown").reduce((sum, g) => sum + g.items.length, 0),
-      history: records.filter(r => r.taken).sort((a, b) => b.takenAt - a.takenAt), remaining: pending.length });
+      history: records.filter(r => r.taken).sort((a, b) => b.takenAt - a.takenAt).map(r => {
+        const date = new Date(r.takenAt);
+        const pad = n => String(n).padStart(2, "0");
+        return { ...r, takenTimeLabel: r.takenAt && Number.isFinite(date.getTime()) ? `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}` : "取件时间未记录" };
+      }), remaining: pending.length });
+    this.presentRows("visiblePendingGroups", pendingGroups, true);
+    this.presentRows("visibleHistory", this.data.history);
   },
   editRecord(e) {
     if (this.data.dragId || this.data.importing || this.data.deleting || Date.now() < (this.suppressTapUntil || 0)) return;
