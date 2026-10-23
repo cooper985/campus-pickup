@@ -113,6 +113,7 @@ Page({
     this.setDrafts(this.data.drafts.filter(r => r.id !== id), { error: "", editing: this.data.editing && this.data.editing.id === id ? null : this.data.editing });
   },
   resetImport() {
+    this.reviewResume = null;
     this.importEpoch++;
     this.recognitionRun = null;
     this.cancelRecognition();
@@ -403,6 +404,7 @@ Page({
     this.data.notificationText = "";
     this.recognitionRun = null;
     this.cancelImportReview();
+    this.reviewResume = null;
     this.cancelRecognition();
     clearTimeout(this.undoTimer);
     clearTimeout(this.feedbackTimer);
@@ -519,9 +521,19 @@ Page({
     }
     this.setData({ importing: true, error: "", errorScope: "import", importFeedback: "", editing: null });
     try {
-      const session = { original: this.data.records.slice(), drafts: importingDrafts, choices: {}, newRecords: new Map() };
+      const original = this.data.records.slice(), choices = {};
+      const resume = this.reviewResume;
+      // Reuse explicit choices only while the history and the individual draft are unchanged.
+      if (resume && JSON.stringify(resume.original) === JSON.stringify(original)) {
+        importingDrafts.forEach(draft => {
+          const previous = resume.drafts.find(r => r.id === draft.id);
+          if (previous && JSON.stringify(previous) === JSON.stringify(draft) && resume.choices[draft.id]) choices[draft.id] = resume.choices[draft.id];
+        });
+      }
+      const session = { original, drafts: importingDrafts, choices, newRecords: new Map() };
       let plan = duplicates.planImport(session.original, session.drafts, session.choices, session.newRecords);
       if (plan.reviews.length) {
+        this.reviewResume = session;
         plan = await new Promise(resolve => {
           this.importSession = { ...session, resolve };
           this.refreshImportReview();
@@ -536,6 +548,7 @@ Page({
       if (this.unloaded || this.data.storageBlocked) return;
       if (importingDrafts.some(r => !validCode(r.code))) { this.setData({ error: "取件码无效，请重新核对。" }); return; }
       if ((plan.added || plan.updated) && !this.persistRecords(plan.records)) return;
+      this.reviewResume = null;
       const { added, updated, skipped } = plan;
       if (updated) {
         this.clearUndo();

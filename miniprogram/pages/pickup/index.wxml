@@ -1,5 +1,6 @@
-<page-meta page-style="{{dragId ? 'overflow: hidden;' : ''}}" />
+<page-meta page-style="{{(dragId || reviewOpen || editing || stationEditor) ? 'overflow: hidden;' : ''}}" />
 <view class="pickup {{reduceMotion ? 'reduce-motion' : ''}}" bindtap="closeDelete">
+  <view hidden="{{reviewOpen}}">
   <view wx:if="{{storageError}}" class="error" role="alert">{{storageError}}</view>
   <view wx:if="{{error && activeTab !== 'import' && errorScope !== 'import'}}" class="error" role="alert">{{error}}</view>
   <view wx:if="{{stationError}}" class="error" role="alert">{{stationError}}</view>
@@ -93,7 +94,7 @@
     <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" wx:if="{{stationList.length > 1}}" class="ui-button primary" catchtap="beginStationMerge" disabled="{{stationSelection.length !== 2 || stationBusy || stationBlocked || storageBlocked}}">合并两个驿站（{{stationSelection.length}}/2）</button>
     <button hover-class="{{(stationBusy) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(stationBusy) ? 'ui-disabled' : ''}} secondary" data-tab="home" catchtap="switchTab" disabled="{{stationBusy}}">返回待取件</button>
   </view>
-  <view wx:if="{{stationEditor}}" class="modal-mask" catchtap="cancelStationEdit" catchtouchmove="noop">
+  <view wx:if="{{stationEditor}}" class="modal-mask" catchtap="cancelStationEdit">
     <view class="edit-sheet" catchtap="noop">
       <view class="section-title">{{stationEditor.mode === 'merge' ? '统一驿站名称' : '修改显示名称'}}</view>
       <input class="field-input" value="{{stationEditor.name}}" bindinput="stationNameInput" maxlength="100" placeholder="填写统一显示的驿站名" disabled="{{stationBusy}}" />
@@ -109,10 +110,20 @@
     <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button nav-item {{activeTab === 'history' ? 'nav-active' : ''}}" data-tab="history" catchtap="switchTab"><text class="nav-symbol">✓</text><text>历史</text></button>
   </view>
   <view wx:if="{{undoAvailable}}" class="undo-bar" catchtap="recordTap"><text>{{undoMessage}} · 5 秒内可撤销</text><button hover-class="{{(storageBlocked || importing || deleting) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(storageBlocked || importing || deleting) ? 'ui-disabled' : ''}} undo-action" size="mini" catchtap="undoDelete" disabled="{{storageBlocked || importing || deleting}}">撤销</button></view>
-  <view wx:if="{{reviewOpen}}" class="modal-mask" catchtap="noop" catchtouchmove="noop">
-    <view class="review-sheet" catchtap="noop">
+  <view wx:if="{{editing}}" class="modal-mask" catchtap="cancelEdit">
+    <view class="edit-sheet" catchtap="noop">
+      <view class="section-title">核对并修改</view>
+      <text class="field-label">取件码</text><input class="field-input" value="{{editing.code}}" bindinput="editCode" placeholder="填写完整取件码" maxlength="32" adjust-position="{{true}}" />
+      <text class="field-label">取件地点</text><textarea class="station-input" value="{{editing.station}}" bindinput="editStation" placeholder="填写驿站名称" maxlength="100" auto-height="{{true}}" adjust-position="{{true}}" />
+      <text class="field-label">快递公司（选填）</text><input class="field-input" value="{{editing.carrier}}" bindinput="editCarrier" placeholder="如：中通快递" maxlength="40" adjust-position="{{true}}" />
+      <view wx:if="{{editError}}" class="error">{{editError}}</view>
+      <view class="actions"><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button secondary" bindtap="cancelEdit">取消</button><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button primary" bindtap="saveEdit">保存修改</button></view>
+    </view>
+  </view>
+  </view>
+  <view wx:if="{{reviewOpen}}" class="review-screen" catchtap="noop">
       <view class="review-header"><view class="section-title">核对重复快递</view><view class="hint">仅补全空缺信息，保留原记录状态。确认后统一保存。</view></view>
-      <scroll-view class="review-list" scroll-y="{{true}}">
+      <view class="review-list-slot"><scroll-view class="review-list" scroll-y="{{true}}">
         <view wx:for="{{reviewItems}}" wx:key="id" wx:for-item="entry" class="review-item">
           <view class="review-code">{{entry.code}}</view><view class="hint">本次地点：{{entry.station}}</view><view wx:if="{{entry.carrier}}" class="hint">本次公司：{{entry.carrier}}</view>
           <view class="review-reason">{{entry.reason}}</view>
@@ -124,18 +135,7 @@
           <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" wx:if="{{entry.allowNew}}" class="ui-button review-option {{entry.action === 'new' ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="new" catchtap="chooseImportAction">{{entry.action === 'new' ? '✓ ' : ''}}确认是另一件包裹，新增</button>
           <view wx:else class="hint">运单号相同，不能重复新增。</view>
         </view>
-      </scroll-view>
+      </scroll-view></view>
       <view class="review-footer"><view class="review-summary">{{reviewSummary}}</view><view class="actions"><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button secondary" catchtap="cancelImportReview">返回核对</button><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button primary" catchtap="finishImportReview">按以上选择导入</button></view></view>
-    </view>
-  </view>
-  <view wx:if="{{editing}}" class="modal-mask" catchtap="cancelEdit" catchtouchmove="noop">
-    <view class="edit-sheet" catchtap="noop">
-      <view class="section-title">核对并修改</view>
-      <text class="field-label">取件码</text><input class="field-input" value="{{editing.code}}" bindinput="editCode" placeholder="填写完整取件码" maxlength="32" adjust-position="{{true}}" />
-      <text class="field-label">取件地点</text><textarea class="station-input" value="{{editing.station}}" bindinput="editStation" placeholder="填写驿站名称" maxlength="100" auto-height="{{true}}" adjust-position="{{true}}" />
-      <text class="field-label">快递公司（选填）</text><input class="field-input" value="{{editing.carrier}}" bindinput="editCarrier" placeholder="如：中通快递" maxlength="40" adjust-position="{{true}}" />
-      <view wx:if="{{editError}}" class="error">{{editError}}</view>
-      <view class="actions"><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button secondary" bindtap="cancelEdit">取消</button><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button primary" bindtap="saveEdit">保存修改</button></view>
-    </view>
   </view>
 </view>
