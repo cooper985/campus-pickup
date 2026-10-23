@@ -13,7 +13,7 @@
 
       <view class="group-content {{group.collapsed ? 'is-collapsed' : ''}}" aria-hidden="{{group.collapsed}}"><view class="group-inner">
         <view wx:for="{{group.items}}" wx:key="id" class="exit-row {{item.leaving ? 'row-leaving' : ''}}"><view class="exit-inner"><view class="parcel-row">
-          <view class="parcel-main"><text class="pickup-code copy-code" data-id="{{item.id}}" catchtap="copyCode" role="button" aria-label="复制取件码 {{item.code}}">{{item.code}}</text><view class="record-meta"><text wx:if="{{item.carrier}}">{{item.carrier}} · </text><view hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="text-action" data-id="{{item.id}}" catchtap="editRecord" role="button">{{group.station === '待确认地点' ? '补充地点' : '修改'}}</view></view></view>
+          <view class="parcel-main"><view wx:if="{{item.pickupAddress}}" class="hint">取件地址：{{item.pickupAddress}}</view><text class="pickup-code copy-code" data-id="{{item.id}}" catchtap="copyCode" role="button" aria-label="复制取件码 {{item.code}}">{{item.code}}</text><view class="record-meta"><text wx:if="{{item.carrier}}">{{item.carrier}} · </text><view hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="text-action" data-id="{{item.id}}" catchtap="editRecord" role="button">{{group.station === '待确认地点' ? '补充地点' : '修改'}}</view></view></view>
           <button hover-class="{{(importing || deleting || storageBlocked || dragId) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} take-button" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked || dragId}}">我已取件</button>
         </view></view></view>
       <view wx:if="{{group.items.length > 1}}" class="batch-row"><button hover-class="{{(importing || deleting || storageBlocked || dragId) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(importing || deleting || storageBlocked || dragId) ? 'ui-disabled' : ''}} secondary batch-take-button" data-id="{{group.id}}" catchtap="takeStation" disabled="{{importing || deleting || storageBlocked || dragId}}">全部标记已取</button></view>
@@ -43,13 +43,13 @@
         <view wx:for="{{visibleDraftGroups}}" wx:key="station" wx:for-item="group" class="station-exit {{group.leaving ? 'station-leaving' : ''}}"><view class="station-exit-inner"><view class="card station-card">
           <view class="station-header"><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.validCount}} 件</text></view>
           <view wx:for="{{group.items}}" wx:key="id" class="exit-row {{item.leaving ? 'row-leaving' : ''}}"><view class="exit-inner"><view class="parcel-row">
-            <view class="parcel-main"><text class="pickup-code" user-select="{{true}}">{{item.code || '号码缺失'}}</text><view wx:if="{{item.carrier}}" class="record-meta">{{item.carrier}}</view></view>
+            <view class="parcel-main"><view wx:if="{{item.pickupAddress}}" class="hint">取件地址：{{item.pickupAddress}}</view><text class="pickup-code" user-select="{{true}}">{{item.code || '号码缺失'}}</text><view wx:if="{{item.carrier}}" class="record-meta">{{item.carrier}}</view></view>
             <view class="draft-actions"><button hover-class="{{(importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(importing) ? 'ui-disabled' : ''}} secondary" data-id="{{item.id}}" bindtap="editRecord" disabled="{{importing}}">修改</button><button hover-class="{{(importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(importing) ? 'ui-disabled' : ''}} text-button" data-id="{{item.id}}" bindtap="removeDraft" disabled="{{importing}}">移除</button></view>
           </view></view></view>
         </view></view></view>
       </view>
       <view wx:if="{{drafts.length || results.length || loading || completed}}" class="import-result-actions">
-        <button hover-class="{{(!validDraftCount || importing || deleting || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(!validDraftCount || importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} primary full-button" bindtap="confirmImport" disabled="{{!validDraftCount || importing || deleting || storageBlocked}}" loading="{{importing}}">确认导入 {{validDraftCount}} 件</button>
+        <button hover-class="{{(!validDraftCount || loading || importing || deleting || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(!validDraftCount || loading || importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} primary full-button" bindtap="confirmImport" disabled="{{!validDraftCount || loading || importing || deleting || storageBlocked}}" loading="{{importing}}">确认导入 {{validDraftCount}} 件</button>
         <view class="session-actions"><button hover-class="{{(importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(importing) ? 'ui-disabled' : ''}} text-button" bindtap="clearImportResults" disabled="{{importing}}">清空本次结果</button><button hover-class="{{(importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(importing) ? 'ui-disabled' : ''}} text-button" bindtap="cancelImport" disabled="{{importing}}">取消本次导入</button></view>
       </view>
       <view wx:if="{{results.length}}" class="section-heading small-heading">截图 · {{images.length}} 张</view>
@@ -70,7 +70,7 @@
         <view class="exit-inner"><view wx:if="{{openDeleteId === item.id || swipeId === item.id}}" class="delete-button" hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" role="button" aria-label="删除已取件记录" data-id="{{item.id}}" catchtap="deleteRecord"><text class="delete-label">删除</text></view>
         <view class="swipe-content {{openDeleteId === item.id ? 'swipe-open' : ''}}" style="{{swipeId === item.id ? swipeStyle : ''}}">
           <view class="history-top"><text class="pickup-code" user-select="{{true}}">{{item.code}}</text><text class="history-state">已取件</text></view>
-          <view class="history-station">{{item.station}}</view>
+          <view class="history-station">{{item.station}}</view><view wx:if="{{item.pickupAddress}}" class="hint">取件地址：{{item.pickupAddress}}</view>
           <view class="history-bottom"><text class="hint">{{item.takenTimeLabel}}{{item.carrier ? ' · ' + item.carrier : ''}}</text><button hover-class="{{(importing || deleting || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} secondary" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked}}">恢复待取</button></view>
         </view></view>
       </view>
@@ -115,6 +115,7 @@
       <view class="section-title">核对并修改</view>
       <text class="field-label">取件码</text><input class="field-input" value="{{editing.code}}" bindinput="editCode" placeholder="填写完整取件码" maxlength="32" adjust-position="{{true}}" />
       <text class="field-label">取件地点</text><textarea class="station-input" value="{{editing.station}}" bindinput="editStation" placeholder="填写驿站名称" maxlength="100" auto-height="{{true}}" adjust-position="{{true}}" />
+      <text class="field-label">详细取件地址（选填）</text><textarea class="station-input" value="{{editing.pickupAddress}}" bindinput="editPickupAddress" maxlength="100" auto-height="{{true}}" adjust-position="{{true}}" />
       <text class="field-label">快递公司（选填）</text><input class="field-input" value="{{editing.carrier}}" bindinput="editCarrier" placeholder="如：中通快递" maxlength="40" adjust-position="{{true}}" />
       <view wx:if="{{editError}}" class="error">{{editError}}</view>
       <view class="actions"><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button secondary" bindtap="cancelEdit">取消</button><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button primary" bindtap="saveEdit">保存修改</button></view>
@@ -125,14 +126,14 @@
       <view class="review-header"><view class="section-title">核对重复快递</view><view class="hint">仅补全空缺信息，保留原记录状态。确认后统一保存。</view></view>
       <view class="review-list-slot"><scroll-view class="review-list" scroll-y="{{true}}">
         <view wx:for="{{reviewItems}}" wx:key="id" wx:for-item="entry" class="review-item">
-          <view class="review-code">{{entry.code}}</view><view class="hint">本次地点：{{entry.station}}</view><view wx:if="{{entry.carrier}}" class="hint">本次公司：{{entry.carrier}}</view>
-          <view class="review-reason">{{entry.reason}}</view>
+          <view class="review-code">{{entry.code}}</view><view class="hint">本次地点：{{entry.station}}</view><view wx:if="{{entry.pickupAddress}}" class="hint">本次地址：{{entry.pickupAddress}}</view><view wx:if="{{entry.carrier}}" class="hint">本次公司：{{entry.carrier}}</view>
+          <view class="review-reason">{{entry.reason}}</view><view wx:if="{{entry.batchReview}}" class="hint"><text wx:for="{{entry.sourceIndices}}" wx:key="*this">截图 {{item + 1}} </text></view>
           <view wx:for="{{entry.matches}}" wx:key="id" wx:for-item="match" class="match-info">
-            <view class="hint">原记录（{{match.taken ? '已取件' : '待取件'}}）：{{match.code}}</view><view class="match-station">{{match.station}}{{match.carrier ? ' · ' + match.carrier : ''}}</view>
+            <view class="hint">原记录（{{match.taken ? '已取件' : '待取件'}}）：{{match.code}}</view><view wx:if="{{match.pickupAddress}}" class="hint">原地址：{{match.pickupAddress}}</view><view class="match-station">{{match.station}}{{match.carrier ? ' · ' + match.carrier : ''}}</view>
             <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" wx:if="{{match.canUpdate}}" class="ui-button review-option {{entry.action === 'update' && entry.targetId === match.id ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="update" data-target-id="{{match.id}}" catchtap="chooseImportAction">{{entry.action === 'update' && entry.targetId === match.id ? '✓ ' : ''}}更新此记录{{entry.recommended ? '（推荐）' : ''}}<text class="option-detail">补全{{match.additions}}</text></button>
           </view>
           <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button review-option {{entry.action === 'skip' ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="skip" catchtap="chooseImportAction">{{entry.action === 'skip' ? '✓ ' : ''}}保留原记录，跳过本次</button>
-          <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" wx:if="{{entry.allowNew}}" class="ui-button review-option {{entry.action === 'new' ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="new" catchtap="chooseImportAction">{{entry.action === 'new' ? '✓ ' : ''}}确认是另一件包裹，新增</button>
+          <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" wx:if="{{entry.allowNew}}" class="ui-button review-option {{entry.action === 'new' ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="new" catchtap="chooseImportAction">{{entry.action === 'new' ? '✓ ' : ''}}{{entry.batchReview && !entry.matches.length ? '核对原图后保留此记录' : '确认是另一件包裹，新增'}}</button>
           <view wx:else class="hint">运单号相同，不能重复新增。</view>
         </view>
       </scroll-view></view>

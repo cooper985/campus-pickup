@@ -24,11 +24,13 @@ function assess(candidate, match) {
   const patch = {};
   const reliableStation = !unknownStation(candidate.station) && !candidate.needsReview;
   if (unknownStation(old.station) && reliableStation && locked.indexOf("station") < 0) patch.station = candidate.station.trim();
+  if (!old.pickupAddress && candidate.pickupAddress && locked.indexOf("pickupAddress") < 0) patch.pickupAddress = candidate.pickupAddress.trim();
   if (!old.carrier && candidate.carrier && locked.indexOf("carrier") < 0) patch.carrier = candidate.carrier.trim();
   if (!old.waybillNumber && validWaybill(normalize(candidate.waybillNumber))) patch.waybillNumber = normalize(candidate.waybillNumber);
   // Existing meaningful values are never overwritten, including legacy records with no provenance.
   const conflict = (!unknownStation(old.station) && reliableStation && normalize(old.station) !== normalize(candidate.station)) ||
     (old.carrier && candidate.carrier && normalize(old.carrier) !== normalize(candidate.carrier)) ||
+    (old.pickupAddress && candidate.pickupAddress && normalize(old.pickupAddress) !== normalize(candidate.pickupAddress)) ||
     normalize(old.code) !== normalize(candidate.code);
   const canUpdate = Object.keys(patch).length > 0 && !conflict && (!old.taken || match.kind === "waybill");
   return { ...match, patch, canUpdate, conflict: !!conflict };
@@ -40,12 +42,13 @@ function planImport(original, drafts, choices = {}, newRecords = new Map()) {
   const reviews = [], changedIds = new Set(), addedIds = new Set();
   for (const draft of drafts) {
     const matches = findMatches(draft, records).map(m => assess(draft, m));
-    const directSkip = matches.length === 1 && !matches[0].conflict && !Object.keys(matches[0].patch).length &&
+    const batchReview = !!(draft.batchConflict || draft.uncertainCode);
+    const directSkip = !batchReview && matches.length === 1 && !matches[0].conflict && !Object.keys(matches[0].patch).length &&
       (!matches[0].record.taken || matches[0].kind === "waybill");
     let action = "new", target;
-    if (matches.length) {
+    if (matches.length || batchReview) {
       if (directSkip) continue;
-      const recommended = matches.length === 1 && matches[0].canUpdate;
+      const recommended = !batchReview && matches.length === 1 && matches[0].canUpdate;
       const choice = choices[draft.id];
       target = choice && matches.find(m => m.record.id === choice.targetId && m.canUpdate);
       action = choice ? choice.action : recommended ? "update" : "skip";
@@ -53,15 +56,16 @@ function planImport(original, drafts, choices = {}, newRecords = new Map()) {
       if (action === "update" && !target) action = "skip";
       const allowNew = !matches.some(m => m.kind === "waybill");
       if (action === "new" && !allowNew) action = "skip";
-      reviews.push({ id: draft.id, code: draft.code, station: draft.station, carrier: draft.carrier || "",
-        action, targetId: target ? target.record.id : "", recommended, allowNew,
-        reason: matches.length > 1 ? "有多条可能匹配的记录，请核对后选择"
+      reviews.push({ id: draft.id, code: draft.code, station: draft.station, carrier: draft.carrier || "", pickupAddress: draft.pickupAddress || "",
+        sourceIndices: draft.sourceIndices || [], batchReview, action, targetId: target ? target.record.id : "", recommended, allowNew,
+        reason: batchReview ? (draft.uncertainCode ? "号码存在易混淆字符，请对照原图修改或确认保留" : "同批同码信息冲突，请核对来源；确认是否为另一件包裹")
+          : matches.length > 1 ? "有多条可能匹配的记录，请核对后选择"
           : matches[0].record.taken && matches[0].kind !== "waybill" ? "历史记录已取件，同码可能是新包裹"
             : matches[0].conflict ? "已有信息不同，保留原信息；如需纠错请手动修改"
               : recommended ? "发现可补全的信息，推荐更新原记录" : "已有字段受保护或没有可靠的新信息，推荐跳过",
         matches: matches.map(m => ({ id: m.record.id, station: m.record.station, code: m.record.code,
-          carrier: m.record.carrier, taken: m.record.taken, canUpdate: m.canUpdate,
-          additions: Object.keys(m.patch).map(k => ({ station: "地点", carrier: "快递公司", waybillNumber: "运单号" })[k]).join("、") })) });
+          carrier: m.record.carrier, pickupAddress: m.record.pickupAddress || "", taken: m.record.taken, canUpdate: m.canUpdate,
+          additions: Object.keys(m.patch).map(k => ({ station: "地点", pickupAddress: "详细取件地址", carrier: "快递公司", waybillNumber: "运单号" })[k]).join("、") })) });
     }
     if (action === "update") {
       const next = updateRecord(target.record, target.patch);

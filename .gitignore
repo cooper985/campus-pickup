@@ -18,3 +18,7 @@ secrets*.json
 # Local snapshots and private pickup screenshots
 .local-backups/
 test-data/private/
+
+# Raw recognition materials stay local; curated redacted fixtures live in tests/fixtures
+test-data/recognition/
+test-data/文本.md

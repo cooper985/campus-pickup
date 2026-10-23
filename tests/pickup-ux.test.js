@@ -24,7 +24,7 @@ test('慢无码图不挡住正常图，完成顺序独立更新且实际同时�
   assert.equal(peak, 3); assert.equal(Object.keys(releases).length, 3);
   releases.c(['取件码3333']); await tick();
   assert.equal(p.data.results[0].state, 'running'); assert.equal(p.data.results[2].count, 1);
-  assert.equal(p.data.drafts[0].sourceIndex, 2); assert.ok(p.data.results[2].appearedMs >= 0);
+  assert.equal(p.data.drafts.length, 0); assert.ok(p.data.results[2].appearedMs >= 0);
   releases.b(['取件码2222']); await tick();
   releases.d(['已到站']); releases.e(['物流详情']); releases.slow(['运输中']); await run;
   assert.equal(peak, 3); assert.equal(p.data.drafts.length, 2);
@@ -74,9 +74,9 @@ test('识别异常可在其他图仍运行时单独重试，不重跑成功图�
   p.data.drafts = [{ id: 'old', sourceIndex: 0, code: '1111', station: '测试驿站' }];
   p.data.images = ['bad', 'slow']; const run = p.recognizeCloud(); await tick();
   assert.equal(p.data.results[0].error, '连接失败，请重试'); assert.equal(p.data.loading, true);
-  fail = false; await p.retryImage(imageEvent(p)); assert.equal(p.data.drafts.length, 0);
+  fail = false; await p.retryImage(imageEvent(p)); assert.equal(p.data.records.length, 0);
   assert.equal(calls.join(','), 'bad,slow,bad');
-  release({ mock: false, lines: ['已到站'] }); await run;
+  release({ mock: false, lines: ['已到站'] }); await run; assert.equal(p.data.drafts.length, 0);
 });
 test('仅已取记录可左滑，明确横向阈值且最多展开一条，竖滚/短滑/取消不展开', () => {
   const { p, pending, taken, other } = savedPage();
@@ -125,23 +125,19 @@ test('已取仍可恢复待取，备用入口仅对已取生效；多指手势�
   p.touchMove({ ...event(taken), touches: [{ clientX: 80, clientY: 0 }, { clientX: 90, clientY: 0 }] });
   p.touchEnd(touch(taken, 80, 0, true)); assert.equal(p.data.openDeleteId, '');
 });
-test('正常图片可先导入，确认弹窗期间和导入后新完成的图片均保留，不丢失或重复导入', async () => {
-  let releaseImage, releaseLast, releaseModal;
+test('整批收齐前不允许提前导入；完成后一次确认所有结果', async () => {
+  let releaseImage, releaseLast;
   const wx = fakeStorage();
   const p = page(wx, async path => path === 'slow' ? new Promise(resolve => releaseImage = resolve)
     : path === 'last' ? new Promise(resolve => releaseLast = resolve) : { mock: false, lines: ['取件码1111'] });
   p.data.images = ['fast', 'slow', 'last']; const run = p.recognizeCloud(); await tick();
-  assert.equal(p.data.loading, true); assert.equal(p.data.drafts.length, 1);
-  wx.showModal = () => new Promise(resolve => releaseModal = resolve);
-  const importing = p.confirmImport();
+  assert.equal(p.data.loading, true); assert.equal(p.data.drafts.length, 0);
+  await p.confirmImport(); assert.equal(p.data.records.length, 0);
   releaseImage({ mock: false, lines: ['取件码2222'] }); await tick();
-  releaseModal({ confirm: true }); await importing;
-  assert.equal(p.data.records.length, 1); assert.equal(p.data.records[0].code, '1111');
-  assert.equal(p.data.drafts.length, 1); assert.equal(p.data.drafts[0].code, '2222');
-  assert.equal(p.data.images.length, 3); assert.equal(p.data.loading, true);
+  await p.confirmImport(); assert.equal(p.data.records.length, 0);
   releaseLast({ mock: false, lines: ['取件码3333'] }); await run;
-  wx.showModal = async () => ({ confirm: true }); await p.confirmImport();
-  assert.equal(page(wx).data.records.length, 3);
+  assert.equal(p.data.drafts.length, 3);
+  await p.confirmImport(); assert.equal(page(wx).data.records.length, 3); p.onUnload();
 });
 test('删除确认期间页面卸载，不写入旧页面也不持久删除', async () => {
   const { p, wx, taken } = savedPage(); let release;

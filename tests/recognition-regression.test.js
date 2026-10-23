@@ -29,7 +29,7 @@ test('同一份真实 OCR 返回对照旧版：号码丢失和跨站误配被定
   }
   assert.equal(parser.analyze(cases[3].result.lines, 0, cases[3].result.boxes).message, '还在运输');
 });
-test('原图字节→真实压缩输入回放→云适配器→并发页面→草稿→保存重启，16个码均到达列表', {
+test('原图字节→真实压缩输入回放→云适配器→并发页面→草稿→保存重启，16个候选融合为15件，跨截图补全到达列表', {
   skip: !fs.existsSync(path.join(privateDir, 'prepared-01.jpg')) && 'Original private screenshots and captured preparation are required',
 }, async () => {
   const wx = fakeStorage(), byImage = new Map(); let cloudCalls = 0, compressCalls = 0;
@@ -55,8 +55,11 @@ test('原图字节→真实压缩输入回放→云适配器→并发页面→�
     require: () => task });
   const p = page(wx, module.exports.recognize);
   p.data.images = cases.map(c => path.join(privateDir, `0${c.case}.jpg`)); await p.recognizeCloud();
-  assert.equal(cloudCalls, 6); assert.equal(compressCalls, 6); assert.equal(p.data.drafts.length, 16);
-  for (const c of cases) assert.deepEqual(Array.from(p.data.drafts.filter(r => r.sourceIndex === c.case - 1), r => [r.code, r.station]), c.expected);
+  assert.equal(cloudCalls, 6); assert.equal(compressCalls, 6); assert.equal(p.data.drafts.length, 15);
+  for (const c of cases) for (const [code, station] of c.expected) {
+    const record = p.data.drafts.find(r => r.sourceIndices.includes(c.case - 1) && r.code === code);
+    assert.ok(record); assert.equal(record.station, code === 'B3-4-7401' ? '河南工业大学服务站' : station);
+  }
   assert.equal(p.data.results[3].status, 'in_transit'); assert.equal(p.data.results[3].error, '');
   wx.showModal = async o => ({ confirm: o.title !== '疑似重复，请确认' });
   const importing = p.confirmImport();
@@ -65,7 +68,7 @@ test('原图字节→真实压缩输入回放→云适配器→并发页面→�
     p.finishImportReview();
   }
   await importing;
-  assert.equal(page(wx).data.records.length, 15); // An unknown-place B3-4-7401 triggers duplicate review and is skipped.
+  assert.equal(page(wx).data.records.length, 15); // The two B3-4-7401 candidates fuse before history review.
 });
 test('11秒正常响应：767的10秒硬截止丢弃，稳定版与修复版接受；慢提示不会冒充超时', async t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });

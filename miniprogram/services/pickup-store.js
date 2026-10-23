@@ -1,7 +1,7 @@
 const KEY = "campus-pickup.records";
 const BACKUP_KEY = `${KEY}.backup`;
 const VERSION = 1;
-const CONFIRMABLE = ["station", "code", "carrier"];
+const CONFIRMABLE = ["station", "code", "carrier", "pickupAddress"];
 const FIELDS = ["id", "station", "code", "carrier", "waybillNumber", "taken", "createdAt", "updatedAt", "takenAt"];
 const copy = value => JSON.parse(JSON.stringify(value));
 const time = value => Number.isSafeInteger(value) && value > 0;
@@ -17,7 +17,7 @@ function validate(value) {
   const ids = new Set();
   for (const r of value.records) {
     if (!r || !text(r.id, 120, true) || ids.has(r.id) || !text(r.station, 100, true) ||
-      !text(r.code, 32, true) || !text(r.carrier, 40) ||
+      (r.pickupAddress !== undefined && !text(r.pickupAddress, 100)) || !text(r.code, 32, true) || !text(r.carrier, 40) ||
       !(r.waybillNumber === "" || validWaybill(r.waybillNumber)) ||
       typeof r.taken !== "boolean" || !time(r.createdAt) || !time(r.updatedAt) ||
       r.updatedAt < r.createdAt || (r.taken ? !time(r.takenAt) ||
@@ -25,7 +25,7 @@ function validate(value) {
       throw new Error("本地记录字段异常");
     }
     if (r.confirmedFields !== undefined && (!Array.isArray(r.confirmedFields) ||
-      r.confirmedFields.length > 3 || r.confirmedFields.some(f => CONFIRMABLE.indexOf(f) < 0))) {
+      r.confirmedFields.length > CONFIRMABLE.length || r.confirmedFields.some(f => CONFIRMABLE.indexOf(f) < 0))) {
       throw new Error("本地字段确认信息异常");
     }
     ids.add(r.id);
@@ -35,6 +35,7 @@ function validate(value) {
 function storedRecord(record) {
   const result = {};
   FIELDS.forEach(key => { result[key] = record[key]; });
+  if (record.pickupAddress !== undefined) result.pickupAddress = record.pickupAddress;
   if (record.confirmedFields !== undefined) result.confirmedFields = record.confirmedFields.slice();
   return result;
 }
@@ -99,6 +100,7 @@ function newRecord(draft, existing = [], now = Date.now()) {
     id = `parcel-${now.toString(36)}-${(++sequence).toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   } while (existing.some(r => r.id === id));
   return storedRecord({ id, station: draft.station.trim(), code: draft.code.trim(),
+    ...(draft.pickupAddress !== undefined ? { pickupAddress: draft.pickupAddress.trim() } : {}),
     carrier: draft.carrier || "", waybillNumber: draft.waybillNumber || "",
     taken: false, createdAt: now, updatedAt: now, takenAt: null,
     ...(draft.confirmedFields ? { confirmedFields: draft.confirmedFields } : {}) });

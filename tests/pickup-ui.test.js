@@ -38,15 +38,17 @@ test('选图自动走 fileID；导入后返回首页，取消重选不重复请�
   wx.showModal = async () => ({ confirm: true }); await p.confirmImport();
   assert.equal(p.data.activeTab, 'home'); assert.equal(p.data.remaining, 1); assert.equal(page(wx).data.records.length, 1); p.onUnload();
 });
-test('部分图片仍在识别时可编辑先完成的草稿和公司，不影响后续结果', async () => {
+test('整批完成后编辑草稿与公司，确认才写入', async () => {
   let release;
   const p = page(fakeStorage(), path => path === 'slow' ? new Promise(r => release = r)
     : Promise.resolve({ mock: false, lines: ['取件码1111'] }));
   p.data.images = ['fast', 'slow']; const run = p.recognizeCloud(); await new Promise(r => setImmediate(r));
+  assert.equal(p.data.drafts.length, 0);
+  release({ mock: false, lines: ['取件码2222'] }); await run;
   const id = p.data.drafts[0].id; p.editRecord(event({ id }));
   p.data.editing.station = '北门'; p.data.editing.carrier = '中通'; p.data.editing.code = '1234'; p.saveEdit();
   assert.equal(p.data.drafts[0].carrier, '中通');
-  release({ mock: false, lines: ['取件码2222'] }); await run; await p.confirmImport();
+  await p.confirmImport();
   assert.equal(p.data.records.length, 2); assert.equal(p.data.records[0].code, '1234');
   assert.equal(p.data.records[0].carrier, '中通'); p.onUnload();
 });

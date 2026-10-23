@@ -15,7 +15,7 @@ test('批量选择、预览、并发识别；确认前不保存，整批确认�
     return { mock: false, lines: ['北门驿站', '取件码1-2-3456'] };
   });
   await p.chooseImage(); p.previewImage({ currentTarget: { dataset: { index: 1 } } }); await p.recognizeCloud();
-  assert.equal(preview, 'b.png'); assert.equal(p.data.drafts.length, 2); assert.equal(p.data.records.length, 0);
+  assert.equal(preview, 'b.png'); assert.equal(p.data.drafts.length, 1); assert.equal(p.data.records.length, 0);
   assert.equal(page(wx).data.records.length, 0);
   await p.confirmImport();
   const restarted = page(wx);

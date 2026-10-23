@@ -1,7 +1,9 @@
 // Only explicit pickup semantics or recognizable station names may identify a location.
+const notifications = require("./notification-parser");
+const { validCode } = require("./pickup-code");
 const UNKNOWN = "待确认地点";
 const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|取货码|提货码|领取码|订单|商品|购买|付款|旗舰店|专营店/;
-const labels = /(?:取件码|取货码|提货码|领取码)\s*[:：]?\s*/g;
+const labels = /(?:取件码|取货码|提货码|领取码|自提码|提取码|取件密码)\s*[:：]?\s*/g;
 function clean(text) {
   return String(text).normalize("NFKC").replace(/[—–－﹣−‐‑‒]/g, "-").trim();
 }
@@ -24,11 +26,11 @@ function labelNeighbor(a, b) {
     : b.y >= a.y && b.y - a.y - a.height <= height * 3 && sameColumn(a, b);
 }
 function codeValue(value, numericSegments = false) {
-  const m = value.match(/^([A-Za-z0-9]{1,8}(?:\s*-\s*[A-Za-z0-9]{1,8}){1,3}|\d{4,8})(?![A-Za-z0-9.\-:/＊*?？_])/);
+  const m = value.match(/^([A-Za-z0-9]{1,8}(?:\s*-\s*[A-Za-z0-9]{1,8}){1,3}|[A-Za-z0-9]{3,9})(?![A-Za-z0-9.\-:/＊*?？_])/);
   if (!m) return "";
   const code = m[1].replace(/\s/g, "");
   // Dates and letter-only fragments are not parcel identifiers, even beside a label.
-  if (!/\d/.test(code) || (numericSegments && /-[^-]*[A-Za-z]/.test(code)) || /^(?:19|20)\d{2}-\d{1,2}-\d{1,2}$/.test(code) ||
+  if (!validCode(code) || (/^\d+[A-Za-z]/.test(code) && !code.includes('-')) || (numericSegments && /-[^-]*[A-Za-z]/.test(code)) || /^(?:19|20)\d{2}-\d{1,2}-\d{1,2}$/.test(code) ||
       /^1\d{10}$/.test(code.replace(/-/g, "")) ||
       /^\s*(?:[-.:/＊*?？_年月日元时分秒￥¥]|\d)/.test(value.slice(m[0].length)) || code.length > 32) return "";
   return code;
@@ -49,6 +51,7 @@ function extractCodes(text, boxes) {
     for (let n = 0; n < matches.length; n++) {
       const label = matches[n];
       const prefix = text[i].slice(0, label.index);
+      if (/(?:https?:\/\/|www\.|[A-Za-z0-9-]+\.[A-Za-z]{2,}\/)[^\s，。]*$/.test(prefix)) continue;
       if (/(?:没有|暂无|未生成|未发现|未获取|无有效|查询|查看|获得|获取|输入|凭)\s*$/.test(prefix)) continue;
       let valueIndex = i;
       let value = text[i].slice(label.index + label[0].length, n + 1 < matches.length ? matches[n + 1].index : undefined).trim();
@@ -93,10 +96,31 @@ function placeName(candidates) {
   return branches.length === 1 ? branches[0] : UNKNOWN;
 }
 function parse(lines, sourceIndex = 0, boxes = []) {
-  const text = lines.map(clean), { codes } = extractCodes(text, boxes), places = [];
+  const text = lines.map(clean), extracted = extractCodes(text, boxes), places = [];
+  // Join only contiguous notification rows, never the entire screenshot or adjacent columns.
+  const notificationRecords = [], covered = new Set();
+  for (let i = 0; i < text.length; i++) {
+    if (!/^【(?:驿小哥|京东(?:快递|物流)?|菜鸟(?:驿站)?|顺丰(?:快递|速运)?)】/.test(text[i]) &&
+        !/(?:已到|已送达|已送至|已入库|凭)[^。]*[A-Za-z0-9]/.test(text[i])) continue;
+    let paragraph = text[i], end = i;
+    while (end + 1 < text.length) {
+      const a = boxAt(boxes, end), b = boxAt(boxes, end + 1);
+      if (!a || !b || /^【/.test(text[end + 1]) || !sameColumn(a, b) ||
+          Math.abs(a.x - b.x) > Math.max(a.height, b.height) * 2 || b.y <= a.y ||
+          b.y - a.y - a.height > Math.max(a.height, b.height) * 1.5 || /[。！!]$/.test(paragraph)) break;
+      paragraph += text[++end];
+    }
+    const parsed = notifications.parse(paragraph);
+    if (!parsed.length) continue;
+    notificationRecords.push(...parsed.map(r => ({ ...r, sourceType: 'image', sourceIndex, lineIndex: i })));
+    for (let j = i; j <= end; j++) covered.add(j);
+    i = end;
+  }
+  const codes = extracted.codes.filter(c => !covered.has(c.i));
   const cainiao = cainiaoPage(text);
   for (let i = 0; i < text.length; i++) {
-    const explicit = text[i].match(/(?:已派送至|已送至|自提地点|自提点|取件地址|取件地点)\s*[:：]?\s*(.*)/);
+    if (covered.has(i) || /(?:收件|收货|寄件|寄货)(?:人)?地址/.test(text[i])) continue;
+    const explicit = text[i].match(/(?:已派送至|已送至|已送达|已到达?|已入库(?:至|到|于)?|领取地点|自提地点|自提点|取件地址|取件地点|地址(?=\s*[:：]))\s*[:：]?\s*(.*)/);
     let name = explicit ? explicit[1].replace(/[，,。；;].*$/, "").replace(/(?:请|凭).*$/, "").trim() : text[i].replace(/^支持退换货\s*/, "");
     const header = cainiao && /[>›〉]\s*绿色公益/.test(name);
     if (header) name = stationHeader(name);
@@ -116,7 +140,7 @@ function parse(lines, sourceIndex = 0, boxes = []) {
       Math.abs(a.x - b.x) <= Math.max(a.height, b.height) && b.y > a.y && b.y - a.y <= a.height * 3);
     if (validPlace(name) && !/^(?:中国邮政|邮政|中通快递|极兔速递)$/.test(name) &&
       (explicit || header || detailPlace || /驿站|自提柜|快递柜|邮政$|(?:店|服务站)$/.test(name) || section)) {
-      places.push({ i: locationIndex, name, explicit: !!explicit });
+      places.push({ i: locationIndex, name, explicit: !!explicit, detail: !!explicit && /^地址/.test(explicit[0]) });
     }
   }
   const records = [];
@@ -133,10 +157,14 @@ function parse(lines, sourceIndex = 0, boxes = []) {
         Math.abs(boxAt(boxes, p.i).y - a.y) < Math.abs(boxAt(boxes, p.i).y - boxAt(boxes, next.i).y)));
     if (after.length) candidates = [...candidates, ...after];
     const previousRecord = previous && records.find(r => r.lineIndex === previous.i);
-    const station = candidates.length ? placeName(candidates) : previousRecord ? previousRecord.station : UNKNOWN;
-    records.push({ station, code: code.code, sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i });
+    const stationCandidates = candidates.filter(p => !p.detail);
+    const addresses = [...new Set(candidates.filter(p => p.detail).map(p => p.name))];
+    const nearbyPrevious = previousRecord && (!a || !boxAt(boxes, previous.i) ||
+      Math.abs(a.y - boxAt(boxes, previous.i).y) <= Math.max(a.height, boxAt(boxes, previous.i).height) * 8);
+    const station = candidates.length ? placeName(stationCandidates.length ? stationCandidates : candidates) : nearbyPrevious ? previousRecord.station : UNKNOWN;
+    records.push({ station, ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i });
   }
-  return records.map(r => ({ station: r.station, code: r.code, sourceIndex: r.sourceIndex, needsReview: r.needsReview }));
+  return [...records, ...notificationRecords].sort((a, b) => a.lineIndex - b.lineIndex).map(r => ({ ...(r.pickupAddress ? { pickupAddress: r.pickupAddress } : {}), ...(r.carrier ? { carrier: r.carrier } : {}), station: r.station, code: r.code, sourceIndex: r.sourceIndex, needsReview: r.needsReview }));
 }
 function analyze(lines, sourceIndex = 0, boxes = []) {
   const records = parse(lines, sourceIndex, boxes);

@@ -8,6 +8,7 @@ const fileidOcr = require("../../services/fileid-ocr");
 const stations = require("../../services/stations");
 const notifications = require("../../services/notification-parser");
 const { validCode } = require("../../services/pickup-code");
+const { fuse } = require("../../services/candidate-fusion");
 const stationDrag = require("../../services/station-drag");
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -108,8 +109,10 @@ Page({
     this.presentRows("visibleDraftGroups", this.data.draftGroups, true);
   },
   removeDraft(e) {
-    if (this.data.importing) return;
+    if (this.data.loading || this.data.importing) return;
     const id = e.currentTarget.dataset.id;
+    const removed = this.data.drafts.find(r => r.id === id);
+    if (this.recognitionRun && removed) (removed.sourceIds || [removed.id]).forEach(key => this.recognitionRun.dismissed.add(key));
     this.setDrafts(this.data.drafts.filter(r => r.id !== id), { error: "", editing: this.data.editing && this.data.editing.id === id ? null : this.data.editing });
   },
   resetImport() {
@@ -359,6 +362,7 @@ Page({
       if (files.some(f => f.size > MAX_BYTES)) throw new Error("有图片超过 5 MB，请先裁剪或压缩。");
       selected = true;
       this.imagesSelectedAt = Date.now();
+      this.recognitionRun = null;
       this.setData({ images: files.slice(0, 9).map(f => f.path), results: [], drafts: [], draftGroups: [], validDraftCount: 0, notificationOpen: false, notificationText: "", completed: false, editing: null });
     } catch (err) {
       if (!this.unloaded && epoch === this.importEpoch && !/cancel/i.test(err && err.errMsg || "")) this.setData({ errorScope: "import", error: err.message || "无法打开相册，请重试。" });
@@ -418,12 +422,20 @@ Page({
       progress: `已完成 ${results.length - pending}/${results.length}`,
       mock: results.some(r => r.mock),
       error: "" });
+    if (!pending && this.recognitionRun) {
+      const run = this.recognitionRun;
+      const raw = [...run.sources.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, records]) => records)
+        .filter(r => !run.dismissed.has(r.id)).map(r => ({ ...r, ...(run.edits.get(r.id) || {}) }));
+      this.setDrafts(fuse(raw, name => stations.resolve(this.stationState, name).id));
+    }
   },
   runRecognition(useCloud) {
     const transport = useCloud ? "fileid" : "mock";
     if (!this.data.images.length || this.data.loading || this.data.choosing || this.data.importing) return;
     const changedMode = this.recognitionRun && (this.recognitionRun.useCloud !== useCloud || this.recognitionRun.transport !== transport);
-    const run = { startedAt: Date.now(), selectedAt: this.imagesSelectedAt || Date.now(), useCloud, transport };
+    const previous = !changedMode && this.recognitionRun && JSON.stringify(this.recognitionRun.imagePaths) === JSON.stringify(this.data.images) && this.recognitionRun;
+    const run = { imagePaths: this.data.images.slice(), id: previous ? previous.id : ++this.taskSequence, sources: previous ? previous.sources : new Map(),
+      edits: previous ? previous.edits : new Map(), dismissed: previous ? previous.dismissed : new Set(), startedAt: Date.now(), selectedAt: this.imagesSelectedAt || Date.now(), useCloud, transport };
     this.recognitionRun = run;
     this.setData({ results: [], loading: true, error: "", completed: false, editing: null,
       ...(changedMode ? { drafts: [], draftGroups: [], validDraftCount: 0 } : {}) });
@@ -431,6 +443,7 @@ Page({
   },
   async startImage(i, run) {
     if (!run || this.recognitionRun !== run) return;
+    this.setData({ editing: null });
     const taskId = `image-${++this.taskSequence}`;
     const traceId = Date.now() * 100 + this.taskSequence;
     const queuedAt = Date.now();
@@ -454,7 +467,7 @@ Page({
       timeoutMs: this.recognitionTimeoutMs,
       onStart: () => { startedAt = Date.now(); task.log("queue_wait", queuedAt, "OK", { traceId }); update({ state: "running", message: "识别中" }); },
       onStage: stage => { phase = stage; update({ message: phases[stage] || "正在识别" }); },
-      onSlow: () => update({ message: "还在识别中，可先导入已完成的快递" }),
+      onSlow: () => update({ message: "还在识别中，整批完成后统一补全；也可跳过此图" }),
     });
     this.imageJobs.set(taskId, job);
     try {
@@ -465,11 +478,10 @@ Page({
       const analysis = parser.analyze(result.lines, i, result.boxes);
       const labels = result.lines.join("\n").match(/取件码|取货码|提货码|领取码/g) || [];
       const metadata = duplicates.metadata(result.lines, Math.max(analysis.records.length, labels.length));
-      const parsed = analysis.records.map((r, j) => ({ ...r, ...metadata, id: `draft-${taskId}-${j}`, taken: false }));
+      const parsed = analysis.records.map((r, j) => ({ ...metadata, ...r, id: `draft-${run.id}-${i}-${r.code}-${j}`, taken: false }));
       // A valid no-code response must also replace old drafts from this image.
-      const drafts = [...this.data.drafts.filter(r => r.sourceIndex !== i), ...parsed];
+      run.sources.set(i, parsed);
       task.log("text_parse", parseStarted, "OK", { traceId, parseReason: analysis.reason, recordCount: parsed.length, uncertainCount: analysis.uncertainCount });
-      this.setDrafts(drafts);
       update({ state: "done", mock: result.mock, count: parsed.length, uncertainCount: analysis.uncertainCount,
         status: analysis.status, parseReason: analysis.reason, message: analysis.message, retryable: analysis.status === "unrecognized" });
     } catch (err) {
@@ -483,7 +495,7 @@ Page({
               ? "识别服务暂不可用，请重试" : "识别不出来";
       update({ state: "failed", status: safe.code, error: cancelled ? "" : retryMessage,
         message: cancelled ? "已跳过" : "", retryable: true,
-        retained: this.data.drafts.some(r => r.sourceIndex === i) });
+        retained: !!(run.sources.get(i) || []).length });
       task.log("image_total", startedAt || queuedAt, safe.code, { traceId, phase, origin: err && err.origin, sdkCode: err && err.sdkCode });
       if (task.isDevelopment()) console.info("[pickup-failure]", { taskId, type: safe.code,
         origin: ["client_wait", "cloud_call", "cloud_result"].includes(err && err.origin) ? err.origin : "client",
@@ -508,7 +520,7 @@ Page({
     }
   },
   async confirmImport() {
-    if (this.unloaded || this.data.choosing || this.data.importing || this.data.deleting || this.data.stationBusy || this.data.storageBlocked || !this.data.drafts.length) return;
+    if (this.unloaded || this.data.loading || this.data.choosing || this.data.importing || this.data.deleting || this.data.stationBusy || this.data.storageBlocked || !this.data.drafts.length) return;
     const batchDrafts = this.data.drafts.slice();
     const importingDrafts = batchDrafts.filter(r => validCode(r.code));
     if (!importingDrafts.length) {
@@ -549,6 +561,7 @@ Page({
       if (importingDrafts.some(r => !validCode(r.code))) { this.setData({ error: "取件码无效，请重新核对。" }); return; }
       if ((plan.added || plan.updated) && !this.persistRecords(plan.records)) return;
       this.reviewResume = null;
+      this.recognitionRun = null;
       const { added, updated, skipped } = plan;
       if (updated) {
         this.clearUndo();
@@ -749,7 +762,7 @@ Page({
       }
       const restored = records.map(r => {
         const update = undo.updates.find(u => u.before.id === r.id);
-        return update ? storage.updateRecord(r, { station: update.before.station, carrier: update.before.carrier, waybillNumber: update.before.waybillNumber }) : r;
+        return update ? storage.updateRecord(r, { station: update.before.station, carrier: update.before.carrier, waybillNumber: update.before.waybillNumber, pickupAddress: update.before.pickupAddress }) : r;
       });
       if (this.persistRecords(restored)) { this.clearUndo(); this.setData({ importFeedback: "已撤销信息更新" }); }
       return;
@@ -796,28 +809,32 @@ Page({
     this.presentRows("visibleHistory", this.data.history);
   },
   editRecord(e) {
+    if (this.data.loading) return;
     if (this.data.dragId || this.data.importing || this.data.deleting || Date.now() < (this.suppressTapUntil || 0)) return;
     this.closeDelete();
     const record = [...this.data.records, ...this.data.drafts].find(r => r.id === e.currentTarget.dataset.id);
     if (record) this.setData({ editing: { ...record }, editError: "" });
   },
   editStation(e) { this.setData({ "editing.station": e.detail.value }); },
+  editPickupAddress(e) { this.setData({ "editing.pickupAddress": e.detail.value }); },
   editCarrier(e) { this.setData({ "editing.carrier": e.detail.value }); },
   editCode(e) { this.setData({ "editing.code": e.detail.value }); },
   cancelEdit() { this.setData({ editing: null }); },
   saveEdit() {
-    if (this.data.importing || this.data.deleting || this.data.stationBusy) return;
+    if (this.data.loading || this.data.importing || this.data.deleting || this.data.stationBusy) return;
     const edit = this.data.editing;
-    if (!edit || !edit.station.trim() || !validCode(edit.code) || edit.station.trim().length > 100 || edit.code.trim().length > 32 || (edit.carrier || "").trim().length > 40) {
+    if (!edit || !edit.station.trim() || !validCode(edit.code) || edit.station.trim().length > 100 || edit.code.trim().length > 32 || (edit.carrier || "").trim().length > 40 || (edit.pickupAddress || "").trim().length > 100) {
       this.setData({ editError: "请填写真实有效的取件码和地点，不能使用占位文字、电话或日期。" }); return;
     }
     const changes = { station: edit.station.trim(), code: edit.code.trim(), carrier: (edit.carrier || "").trim() };
+    if (edit.pickupAddress !== undefined) changes.pickupAddress = edit.pickupAddress.trim();
     const original = [...this.data.records, ...this.data.drafts].find(r => r.id === edit.id);
     if (!original) return;
     changes.confirmedFields = [...new Set([...(original.confirmedFields || []), ...Object.keys(changes).filter(key =>
       changes[key] !== (original[key] || "") || (changes[key] && changes[key] !== parser.UNKNOWN))])];
     if (this.data.drafts.some(r => r.id === edit.id)) {
       const drafts = this.data.drafts.map(r => r.id === edit.id ? { ...r, ...changes, needsReview: false } : r);
+      if (this.recognitionRun) (original.sourceIds || [original.id]).forEach(id => this.recognitionRun.edits.set(id, changes));
       this.setDrafts(drafts);
     } else {
       if (this.data.storageBlocked || !this.persistRecords(this.data.records.map(r => r.id === edit.id ? storage.updateRecord(r, changes) : r))) return;

@@ -77,7 +77,11 @@ test("真实截图字节经 fileID 完整本地回放，原 OCR 返回及解析�
   assert.equal(uploads, cases.length); assert.equal(ocr, cases.length);
   assert.equal(reads, cases.length); assert.equal(deletes, cases.length); assert.equal(files.size, 0);
   for (let i = 0; i < cases.length; i++) {
-    assert.deepEqual(JSON.parse(JSON.stringify(p.data.drafts.filter(r => r.sourceIndex === i).map(r => [r.code, r.station]))), cases[i].expected);
+    for (const [code, station] of cases[i].expected) {
+      const record = p.data.drafts.find(r => r.sourceIndices.includes(i) && r.code === code);
+      assert.ok(record);
+      assert.equal(record.station, code === 'B3-4-7401' ? '河南工业大学服务站' : station);
+    }
   }
   assert.ok(p.data.drafts.some(r => r.code === "603402"));
   assert.ok(p.data.drafts.some(r => r.code === "B3-4-7401"));

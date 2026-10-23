@@ -1,0 +1,62 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const parser = require('../miniprogram/services/notification-parser');
+const store = require('../miniprogram/services/pickup-store');
+const { planImport } = require('../miniprogram/services/pickup-duplicates');
+const { page } = require('./helpers/page');
+const { fakeStorage } = require('./helpers/storage');
+const yixiaoge = '【驿小哥】您的快递顺丰，已到河南工业大学洗浴中心北侧驿站顺丰专区，凭A203-4010免费取，如有疑问可到店咨询，谢谢';
+const jd = '【京东快递】取件码C2-3-1304，您的快件尾号7202已送达河南工业大学服务站，地址：河南郑州市郑州高新技术产业开发区河南工业大学31号楼北校便利超市京东快递，取件和寄件可咨询 3.cn/31cq5-fS';
+const address = '河南郑州市郑州高新技术产业开发区河南工业大学31号楼北校便利超市京东快递';
+test('驿小哥凭码免费取保留完整专区；京东同时保留站名和地址，尾号及链接不增包裹', () => {
+  const first = parser.parse(yixiaoge);
+  assert.equal(first.length, 1);
+  assert.equal(first[0].code, 'A203-4010');
+  assert.equal(first[0].station, '河南工业大学洗浴中心北侧驿站顺丰专区');
+  assert.equal(first[0].carrier, '顺丰速运');
+  const second = parser.parse(jd);
+  assert.equal(second.length, 1);
+  assert.equal(second[0].code, 'C2-3-1304');
+  assert.equal(second[0].station, '河南工业大学服务站');
+  assert.equal(second[0].pickupAddress, address);
+  assert.equal(second[0].carrier, '京东物流');
+  assert.equal(second[0].needsReview, false);
+  assert.equal(parser.parse('您的快件尾号7202，取件和寄件可咨询 3.cn/31cq5-fS').length, 0);
+});
+test('地址经通知草稿、导入、重载及手动编辑保留；重复通知不新增包裹', async () => {
+  const wx = fakeStorage(), p = page(wx);
+  p.openNotification(); p.notificationInput({ detail: { value: jd } }); await p.recognizeNotification();
+  assert.equal(p.data.drafts[0].pickupAddress, address);
+  await p.confirmImport();
+  const q = page(wx), saved = q.data.records[0];
+  assert.equal(q.data.records.length, 1); assert.equal(saved.pickupAddress, address);
+  assert.equal(q.data.pendingGroups[0].items[0].pickupAddress, address);
+  assert.equal(planImport(q.data.records, parser.parse(jd)).added, 0);
+  q.editRecord({ currentTarget: { dataset: { id: saved.id } } });
+  q.editPickupAddress({ detail: { value: '31号楼北校便利超市京东快递' } }); q.saveEdit();
+  assert.equal(store.createStore(wx).load().records[0].pickupAddress, '31号楼北校便利超市京东快递');
+  p.onUnload(); q.onUnload();
+});
+test('旧记录可确认补全地址并撤销；地址冲突不覆盖已有位置', async () => {
+  const wx = fakeStorage(), p = page(wx);
+  const incoming = { ...parser.parse(jd)[0], id: 'incoming' };
+  const { pickupAddress, ...withoutAddress } = incoming;
+  p.persistRecords([store.newRecord(withoutAddress)]);
+  p.setDrafts([incoming]); const importing = p.confirmImport();
+  assert.equal(p.data.reviewOpen, true); p.finishImportReview(); await importing;
+  assert.equal(p.data.records[0].pickupAddress, address);
+  p.undoDelete();
+  assert.equal(p.data.records[0].pickupAddress, undefined);
+  assert.equal(store.createStore(wx).load().records[0].pickupAddress, undefined);
+  const old = store.newRecord({ ...incoming, pickupAddress: '西门取件点' });
+  const plan = planImport([old], [incoming]);
+  assert.equal(plan.updated, 0); assert.equal(plan.reviews[0].matches[0].canUpdate, false);
+  p.onUnload();
+});
+
+test('真实案例1：到站完整地址优先于凭码到店的简称，尾号不生成包裹', () => {
+  const records = parser.parse('【驿小哥】您好，您的顺丰快递9465已到河南工业大学洗浴中心北侧驿站顺丰专区，可凭C205-2004到店洗浴中心北侧店提取。');
+  assert.equal(records.length, 1);
+  assert.equal(records[0].code, 'C205-2004');
+  assert.equal(records[0].station, '河南工业大学洗浴中心北侧驿站顺丰专区');
+});
