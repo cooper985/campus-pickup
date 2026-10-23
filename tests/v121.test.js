@@ -29,7 +29,7 @@ test('整段通知无需分段复制，处理无标点、换行、多包裹及�
 test('无可靠号码不生成草稿，核对修改和保存仍拦截占位、电话和日期', async () => {
   const p = page(); p.openNotification();
   p.notificationInput({ detail: { value: '验证码：123456，联系电话13812345678，运单号123456789012' } });
-  await p.recognizeNotification();
+  await p.recognizeNotification({ shadow: true });
   assert.equal(p.data.drafts.length, 0); assert.equal(p.data.validDraftCount, 0); assert.match(p.data.error, /未找到取件码/);
   for (const code of ['', '请补充取件码', '号码缺失', '13812345678', '2026-10-22', '18:30', '123456789012', '待确认', '****']) {
     assert.equal(validCode(code), false, code);
@@ -54,7 +54,7 @@ test('移除、清空和取消仅影响草稿；有效计数精确，成功后�
 test('清空/取消隔离仍运行的识别；离开通知输入界面清理文字和提示', async () => {
   const wx = fakeStorage(); let release;
   const p = page(wx, () => new Promise(resolve => release = resolve)); p.data.images = ['pending'];
-  const run = p.recognizeCloud(); await tick(); p.clearImportResults();
+  const run = p.runRecognition(true, { shadow: true }); await tick(); p.clearImportResults();
   release({ mock: false, lines: ['取件码1234'] }); await run; assert.equal(p.data.drafts.length, 0);
   p.openNotification(); p.notificationInput({ detail: { value: '已到西门驿站，取件码1234' } });
   p.cancelImport(); assert.equal(p.data.notificationText, '');

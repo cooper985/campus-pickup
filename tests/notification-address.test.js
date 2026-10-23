@@ -25,7 +25,7 @@ test('驿小哥凭码免费取保留完整专区；京东同时保留站名和�
 });
 test('地址经通知草稿、导入、重载及手动编辑保留；重复通知不新增包裹', async () => {
   const wx = fakeStorage(), p = page(wx);
-  p.openNotification(); p.notificationInput({ detail: { value: jd } }); await p.recognizeNotification();
+  p.openNotification(); p.notificationInput({ detail: { value: jd } }); await p.recognizeNotification({ shadow: true });
   assert.equal(p.data.drafts[0].pickupAddress, address);
   await p.confirmImport();
   const q = page(wx), saved = q.data.records[0];

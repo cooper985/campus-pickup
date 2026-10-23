@@ -78,7 +78,7 @@ test('真实OCR跨图互补：两种完成顺序一致，第三张失败不阻�
   for (const order of [[0,1],[1,0]]) {
     const releases = {}, wx=fakeStorage();
     const p=page(wx,path=>new Promise((resolve,reject)=>releases[path]={resolve,reject}));
-    p.data.images=['order-list','detail','failed']; const run=p.recognizeCloud(); await tick();
+    p.data.images=['order-list','detail','failed']; const run=p.runRecognition(true, { shadow: true }); await tick();
     const keys=['order-list','detail'], responses=[real[4].result,real[5].result];
     releases[keys[order[0]]].resolve(responses[order[0]]); await tick();
     await p.confirmImport(); assert.equal(p.data.records.length,0); assert.equal(p.data.drafts.length,0);
@@ -92,7 +92,7 @@ test('真实OCR跨图互补：两种完成顺序一致，第三张失败不阻�
 test('手动修改在单图重试后保留，历史已取同码仍可选择新增而不覆盖', async () => {
   const wx=fakeStorage(); let failed=true;
   const p=page(wx,async path=>{if(path==='bad'&&failed)throw {code:'NETWORK_FAILED'};return {mock:false,lines:['取件码1234']};});
-  p.data.images=['good','bad'];await p.recognizeCloud();
+  p.data.images=['good','bad'];await p.runRecognition(true, { shadow: true });
   const id=p.data.drafts[0].id;p.editRecord(event(id));p.editStation({detail:{value:'用户确认驿站'}});p.saveEdit();
   failed=false;await p.retryImage({currentTarget:{dataset:{index:2}}});
   assert.equal(p.data.drafts.length,1);assert.equal(p.data.drafts[0].station,'用户确认驿站');
@@ -106,7 +106,7 @@ test('跨句详细地址保留；单独地点来源不能给多码截图猜配�
   const n=notifications.parse('取件码1234，已送达大学服务站。地址：大学31号楼便利店。');
   assert.equal(n[0].station,'大学服务站');assert.equal(n[0].pickupAddress,'大学31号楼便利店');
   const p=page(fakeStorage(),async path=>({mock:false,lines:path==='codes'?['取件码1234','取件码5678']:['大学服务站']}));
-  p.data.images=['codes','address'];await p.recognizeCloud();
+  p.data.images=['codes','address'];await p.runRecognition(true, { shadow: true });
   assert.equal(p.data.drafts.length,2);assert.ok(p.data.drafts.every(r=>r.station===parser.UNKNOWN));
   p.removeDraft(event(p.data.drafts[0].id));
   await p.startImage(1,p.recognitionRun);
@@ -114,7 +114,7 @@ test('跨句详细地址保留；单独地点来源不能给多码截图猜配�
 });
 test('同码冲突两条均需显式选择，选择两件后重进核对仍保留，未选择不保存', async () => {
   const p=page(fakeStorage(),async path=>({mock:false,lines:[path==='east'?'东门驿站':'西门驿站','取件码1234']}));
-  p.data.images=['east','west'];await p.recognizeCloud();
+  p.data.images=['east','west'];await p.runRecognition(true, { shadow: true });
   let run=p.confirmImport();assert.equal(p.data.reviewItems.length,2);assert.equal(p.data.records.length,0);
   p.data.reviewItems.forEach(r=>p.chooseImportAction(event(r.id,'new')));
   p.cancelImportReview();await run;

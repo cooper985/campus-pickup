@@ -1,6 +1,7 @@
 // Only explicit pickup semantics or recognizable station names may identify a location.
 const notifications = require("./notification-parser");
 const { validCode } = require("./pickup-code");
+const evidence = require('./import-evidence');
 const UNKNOWN = "待确认地点";
 const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|取货码|提货码|领取码|订单|商品|购买|付款|旗舰店|专营店/;
 const labels = /(?:取件码|取货码|提货码|领取码|自提码|提取码|取件密码)\s*[:：]?\s*/g;
@@ -162,9 +163,11 @@ function parse(lines, sourceIndex = 0, boxes = []) {
     const nearbyPrevious = previousRecord && (!a || !boxAt(boxes, previous.i) ||
       Math.abs(a.y - boxAt(boxes, previous.i).y) <= Math.max(a.height, boxAt(boxes, previous.i).height) * 8);
     const station = candidates.length ? placeName(stationCandidates.length ? stationCandidates : candidates) : nearbyPrevious ? previousRecord.station : UNKNOWN;
-    records.push({ station, ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i });
+    const scope = codes.length === 1 && !notificationRecords.length ? text.join('\n') : text.slice(code.i, next ? next.i : text.length).filter((_, offset) => compatible({ i: code.i + offset })).join('\n');
+    const options = [...new Set(candidates.map(p => p.name))];
+    records.push({ station, ...(station === UNKNOWN && options.length > 1 ? { locationOptions: options } : {}), ...evidence.inspect(scope), ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, ...(/\d[OILSB](?:\d|-|$)/i.test(code.code) ? { uncertainCode: true } : {}), sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i });
   }
-  return [...records, ...notificationRecords].sort((a, b) => a.lineIndex - b.lineIndex).map(r => ({ ...(r.pickupAddress ? { pickupAddress: r.pickupAddress } : {}), ...(r.carrier ? { carrier: r.carrier } : {}), station: r.station, code: r.code, sourceIndex: r.sourceIndex, needsReview: r.needsReview }));
+  return [...records, ...notificationRecords].sort((a, b) => a.lineIndex - b.lineIndex).map(({ lineIndex, sourceType, ...r }) => r);
 }
 function analyze(lines, sourceIndex = 0, boxes = []) {
   const records = parse(lines, sourceIndex, boxes);

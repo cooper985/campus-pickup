@@ -28,21 +28,23 @@ test('取件从首页移至历史，撤销落盘，写入失败不提示成功',
   wx.failWrite = storage.KEY; p.toggleTaken(event({ id: record.id }));
   assert.equal(p.data.remaining, 1); assert.equal(p.data.undoAvailable, false); p.onUnload();
 });
-test('选图自动走 fileID；导入后返回首页，取消重选不重复请求', async () => {
+test('选图自动走 fileID，缺地点只暂存异常；稍后处理与重新进入保留', async () => {
   const wx = fakeStorage(); let calls = 0;
   wx.chooseImage = async () => ({ tempFiles: [{ path: 'image', size: 10 }] });
   const p = page(wx, async () => { calls++; return { mock: false, lines: ['取件码1111'] }; });
   p.switchTab(event({ tab: 'import' })); await p.chooseImage();
-  assert.equal(calls, 1); assert.equal(p.data.results[0].transport, 'fileid'); assert.equal(p.data.drafts.length, 1);
-  wx.showModal = async () => ({ confirm: false }); await p.chooseImage(); assert.equal(calls, 1);
-  wx.showModal = async () => ({ confirm: true }); await p.confirmImport();
-  assert.equal(p.data.activeTab, 'home'); assert.equal(p.data.remaining, 1); assert.equal(page(wx).data.records.length, 1); p.onUnload();
+  assert.equal(calls, 1); assert.equal(p.data.results[0].transport, 'fileid'); assert.equal(p.data.drafts.length, 0);
+  assert.equal(p.data.activeTab, 'home'); assert.equal(p.data.exceptionCount, 1); assert.equal(p.data.records.length, 0);
+  p.openExceptions(); p.closeExceptions();
+  const q = page(wx); assert.equal(q.data.exceptionCount, 1); q.openExceptions();
+  q.chooseException(event({ id: q.data.exceptionItems[0].id, action: 'new' })); q.applyExceptions();
+  assert.equal(q.data.remaining, 1); assert.equal(page(wx).data.records.length, 1); p.onUnload(); q.onUnload();
 });
 test('整批完成后编辑草稿与公司，确认才写入', async () => {
   let release;
   const p = page(fakeStorage(), path => path === 'slow' ? new Promise(r => release = r)
     : Promise.resolve({ mock: false, lines: ['取件码1111'] }));
-  p.data.images = ['fast', 'slow']; const run = p.recognizeCloud(); await new Promise(r => setImmediate(r));
+  p.data.images = ['fast', 'slow']; const run = p.runRecognition(true, { shadow: true }); await new Promise(r => setImmediate(r));
   assert.equal(p.data.drafts.length, 0);
   release({ mock: false, lines: ['取件码2222'] }); await run;
   const id = p.data.drafts[0].id; p.editRecord(event({ id }));

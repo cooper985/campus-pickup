@@ -10,10 +10,13 @@ const notifications = require("../../services/notification-parser");
 const { validCode } = require("../../services/pickup-code");
 const { fuse } = require("../../services/candidate-fusion");
 const stationDrag = require("../../services/station-drag");
+const imageDedup = require("../../services/image-dedup");
+const decision = require("../../services/import-decision");
+const batches = require("../../services/import-batches");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { swipeId: "", swipeStyle: "", reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { recentImport: null, exceptionCount: 0, exceptionOpen: false, exceptionItems: [], batchError: "", newStations: [], swipeId: "", swipeStyle: "", reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
@@ -30,7 +33,10 @@ Page({
     this.stationState = settings.state;
     this.setData({ stationError: settings.error, stationBlocked: !!settings.error });
     this.setData({ storageError: loaded.error, storageBlocked: loaded.blocked });
+    this.importState = loaded.imports || batches.empty();
     this.updateRecords(loaded.records);
+    this.refreshBatchSummary();
+    if (!loaded.blocked) this.recoverInterrupted();
   },
   toggleMotion() {
     this.setData({ reduceMotion: !this.data.reduceMotion });
@@ -80,7 +86,7 @@ Page({
     this.setDrafts(this.data.drafts.filter(r => r.sourceType !== "text"), { notificationOpen: false, notificationText: "",
       error: "", completed: this.data.results.length > 0 });
   },
-  async recognizeNotification() {
+  async recognizeNotification({ shadow = false } = {}) {
     if (!this.data.notificationOpen || this.data.loading || this.data.choosing || this.data.importing) return;
     const text = this.data.notificationText.trim(), epoch = this.importEpoch;
     if (!text) { this.setData({ error: "请先粘贴通知", errorScope: "import" }); return; }
@@ -97,6 +103,11 @@ Page({
       const drafts = parsed.map((r, i) => ({ ...r, id: `text-${Date.now()}-${batchId}-${i}`, taken: false }));
       this.setDrafts(drafts, { images: [], results: [], mock: false, completed: true, editing: null,
         notificationOpen: !parsed.length, errorScope: "import", error: parsed.length ? "" : "未找到取件码" });
+      if (parsed.length && !shadow) {
+        const id = `text-import-${Date.now().toString(36)}-${batchId}`;
+        if (this.persistBatch(batches.begin(id, 0))) this.completeAutoBatch({ batchId: id },
+          fuse(drafts, name => stations.resolve(this.stationState, name).id).map(c => stations.assist(this.stationState, c)));
+      }
     } catch (_) {
       if (!this.unloaded && epoch === this.importEpoch) this.setData({ errorScope: "import", error: "无法识别，请修改文字后重试" });
     } finally { if (!this.unloaded && epoch === this.importEpoch) this.setData({ choosing: false }); }
@@ -351,7 +362,7 @@ Page({
     this.setData({ choosing: true, error: "", errorScope: "import" });
     let selected = false;
     try {
-      if (this.data.drafts.length) {
+      if (this.data.drafts.length && !(this.recognitionRun && this.recognitionRun.auto)) {
         const answer = await wx.showModal({ title: "重新选择截图？", content: "当前尚未导入的结果会被替换。", confirmText: "重新选择" });
         if (!answer.confirm || this.unloaded || epoch !== this.importEpoch) return;
       }
@@ -393,6 +404,16 @@ Page({
       return this.startImage(result.index - 1, this.recognitionRun);
     }
   },
+  dismissFailedImage(e) {
+    if (this.data.loading || this.data.storageBlocked) return;
+    const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId);
+    const run = this.recognitionRun;
+    const original = run && run.auto && this.importState.batches.find(b => b.id === run.batchId);
+    if (!result || !original) return;
+    const batch = JSON.parse(JSON.stringify(original));
+    batch.images[result.index - 1].status = 'SKIPPED_BY_USER';
+    if (this.persistBatch(batch)) this.setData({ results: this.data.results.map(r => r.taskId === result.taskId ? { ...r, error: '', message: '已由你跳过，未判断其中的快递', retryable: false } : r) });
+  },
   skipImage(e) {
     const job = this.imageJobs.get(e.currentTarget.dataset.taskId);
     if (job) job.cancel("SKIPPED");
@@ -401,7 +422,10 @@ Page({
     const job = this.imageJobs.get(e.currentTarget.dataset.taskId);
     if (job) job.cancel();
   },
-  cancelRecognition() { this.imageJobs.forEach(job => job.cancel()); },
+  cancelRecognition() {
+    if (this.recognitionRun && this.recognitionRun.preparing) this.recognitionRun.cancelled = true;
+    this.imageJobs.forEach(job => job.cancel());
+  },
   onUnload() {
     this.unloaded = true;
     Object.values(this.presentationTimers || {}).forEach(clearTimeout);
@@ -422,27 +446,43 @@ Page({
       progress: `已完成 ${results.length - pending}/${results.length}`,
       mock: results.some(r => r.mock),
       error: "" });
-    if (!pending && this.recognitionRun) {
+    if (!pending && this.recognitionRun && results.length === this.recognitionRun.imagePaths.length && !this.recognitionRun.preparing) {
       const run = this.recognitionRun;
       const raw = [...run.sources.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, records]) => records)
         .filter(r => !run.dismissed.has(r.id)).map(r => ({ ...r, ...(run.edits.get(r.id) || {}) }));
-      this.setDrafts(fuse(raw, name => stations.resolve(this.stationState, name).id));
+      const candidates = fuse(raw, name => stations.resolve(this.stationState, name).id).map(c => stations.assist(this.stationState, c));
+      if (run.auto) this.completeAutoBatch(run, candidates);
+      else this.setDrafts(candidates);
     }
   },
-  runRecognition(useCloud) {
+  async runRecognition(useCloud, { shadow = false } = {}) {
     const transport = useCloud ? "fileid" : "mock";
     if (!this.data.images.length || this.data.loading || this.data.choosing || this.data.importing) return;
     const changedMode = this.recognitionRun && (this.recognitionRun.useCloud !== useCloud || this.recognitionRun.transport !== transport);
-    const previous = !changedMode && this.recognitionRun && JSON.stringify(this.recognitionRun.imagePaths) === JSON.stringify(this.data.images) && this.recognitionRun;
-    const run = { imagePaths: this.data.images.slice(), id: previous ? previous.id : ++this.taskSequence, sources: previous ? previous.sources : new Map(),
+    const previous = !(useCloud && !shadow) && !changedMode && this.recognitionRun && JSON.stringify(this.recognitionRun.imagePaths) === JSON.stringify(this.data.images) && this.recognitionRun;
+    const run = { auto: useCloud && !shadow, preparing: true, imagePaths: this.data.images.slice(), id: previous ? previous.id : ++this.taskSequence, sources: previous ? previous.sources : new Map(),
       edits: previous ? previous.edits : new Map(), dismissed: previous ? previous.dismissed : new Set(), startedAt: Date.now(), selectedAt: this.imagesSelectedAt || Date.now(), useCloud, transport };
     this.recognitionRun = run;
+    if (run.auto) {
+      run.batchId = `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      if (!this.persistBatch(batches.begin(run.batchId, run.imagePaths.length))) return;
+    }
     this.setData({ results: [], loading: true, error: "", completed: false, editing: null,
       ...(changedMode ? { drafts: [], draftGroups: [], validDraftCount: 0 } : {}) });
-    return Promise.all(this.data.images.map((_, i) => this.startImage(i, run)));
+    run.identities = useCloud && !shadow ? await imageDedup.inspect(wx, run.imagePaths) : run.imagePaths.map(() => ({ hash: '', duplicateOf: -1 }));
+    if (this.recognitionRun !== run || this.unloaded) return;
+    run.preparing = false;
+    if (run.cancelled) {
+      const batch = this.importState.batches.find(b => b.id === run.batchId);
+      if (batch) this.persistBatch({ ...batch, images: batch.images.map(i => ({ ...i, state: 'failed', status: 'CANCELLED' })) });
+      this.setData({ loading: false, results: run.imagePaths.map((_, i) => ({ taskId: `cancelled-${i}`, index: i + 1, state: 'failed', status: 'CANCELLED', message: '已停止，尚未识别', retryable: true })) });
+      this.completeAutoBatch(run, []);
+      return;
+    }
+    return Promise.all(run.imagePaths.map((_, i) => this.startImage(i, run)));
   },
   async startImage(i, run) {
-    if (!run || this.recognitionRun !== run) return;
+    if (!run || this.recognitionRun !== run || run.auto && this.importState.batches.find(b => b.id === run.batchId && b.status === "undone")) return;
     this.setData({ editing: null });
     const taskId = `image-${++this.taskSequence}`;
     const traceId = Date.now() * 100 + this.taskSequence;
@@ -454,6 +494,16 @@ Page({
       if (!current()) return;
       this.setData({ results: this.data.results.map(r => r.taskId === taskId ? { ...r, ...changes } : r) });
     };
+    const identity = (run.identities || [])[i] || { hash: '', duplicateOf: -1 };
+    const previousBatch = run.auto && identity.hash && this.importState.batches.slice().reverse().find(b => b.id !== run.batchId && b.status === 'completed' &&
+      !b.reviews.length && b.images.some(im => im.hash === identity.hash && im.state === 'done'));
+    if (identity.duplicateOf >= 0 || previousBatch) {
+      const entry = { taskId, traceId, index: i + 1, transport: run.transport, state: 'done', status: 'duplicate', message: '已跳过相同截图', error: '', count: 0, mock: false };
+      this.setData({ results: [...this.data.results.filter(r => r.index !== i + 1), entry].sort((a, b) => a.index - b.index) });
+      if (run.auto) this.checkpointImage(run, i, { state: 'duplicate', status: 'duplicate', hash: identity.hash, candidates: [] });
+      this.refreshRecognition();
+      return;
+    }
     const entry = { taskId, traceId, index: i + 1, transport: run.transport, state: "queued", status: "queued", message: "排队中", error: "",
       count: 0, uncertainCount: 0, retryable: false, mock: !run.useCloud };
     this.setData({ results: [...this.data.results.filter(r => r.index !== i + 1), entry].sort((a, b) => a.index - b.index) });
@@ -478,9 +528,13 @@ Page({
       const analysis = parser.analyze(result.lines, i, result.boxes);
       const labels = result.lines.join("\n").match(/取件码|取货码|提货码|领取码/g) || [];
       const metadata = duplicates.metadata(result.lines, Math.max(analysis.records.length, labels.length));
-      const parsed = analysis.records.map((r, j) => ({ ...metadata, ...r, id: `draft-${run.id}-${i}-${r.code}-${j}`, taken: false }));
+      const parsed = analysis.records.map((r, j) => ({ ...metadata, ...r, id: `draft-${run.auto ? run.batchId : run.id}-${i}-${r.code}-${j}`, taken: false }));
+      if (run.auto && (!parsed.length && (/arrived_no_code|unrecognized/.test(analysis.status) || analysis.status !== 'in_transit' && /快递|包裹|取件|驿站/.test(result.lines.join(''))) || analysis.uncertainCount)) {
+        parsed.push({ id: `issue-${run.batchId}-${i}`, code: '', station: parser.UNKNOWN, sourceIndex: i, needsReview: true });
+      }
       // A valid no-code response must also replace old drafts from this image.
       run.sources.set(i, parsed);
+      if (run.auto) this.checkpointImage(run, i, { hash: identity.hash, state: 'done', status: analysis.status, candidates: parsed.map(batches.cleanCandidate) });
       task.log("text_parse", parseStarted, "OK", { traceId, parseReason: analysis.reason, recordCount: parsed.length, uncertainCount: analysis.uncertainCount });
       update({ state: "done", mock: result.mock, count: parsed.length, uncertainCount: analysis.uncertainCount,
         status: analysis.status, parseReason: analysis.reason, message: analysis.message, retryable: analysis.status === "unrecognized" });
@@ -496,6 +550,7 @@ Page({
       update({ state: "failed", status: safe.code, error: cancelled ? "" : retryMessage,
         message: cancelled ? "已跳过" : "", retryable: true,
         retained: !!(run.sources.get(i) || []).length });
+      if (run.auto) this.checkpointImage(run, i, { hash: identity.hash, state: 'failed', status: safe.code, candidates: (run.sources.get(i) || []).map(batches.cleanCandidate) });
       task.log("image_total", startedAt || queuedAt, safe.code, { traceId, phase, origin: err && err.origin, sdkCode: err && err.sdkCode });
       if (task.isDevelopment()) console.info("[pickup-failure]", { taskId, type: safe.code,
         origin: ["client_wait", "cloud_call", "cloud_result"].includes(err && err.origin) ? err.origin : "client",
@@ -518,6 +573,172 @@ Page({
         this.refreshRecognition();
       }
     }
+  },
+  persistBatch(batch, records = this.data.records) {
+    return this.persistRecords(records, batches.replace(this.importState, batch));
+  },
+  checkpointImage(run, index, image) {
+    const original = this.importState.batches.find(b => b.id === run.batchId);
+    if (!original || this.data.storageBlocked || original.status === 'undone') return;
+    const batch = JSON.parse(JSON.stringify(original));
+    batch.status = 'processing';
+    batch.images[index] = { index, ...image };
+    this.persistBatch(batch);
+  },
+  completeAutoBatch(run, candidates) {
+    if (this.unloaded || this.data.storageBlocked || run.committing) return;
+    const original = this.importState.batches.find(b => b.id === run.batchId);
+    if (!original || original.status === 'undone') return;
+    const signature = JSON.stringify([candidates, original.images]);
+    if (run.committedSignature === signature) return;
+    run.committing = true;
+    try {
+      const resolved = new Set(original.resolved || []);
+      const eligible = candidates.filter(c => !resolved.has(c.id)).map(c => {
+        const handled = original.outcomes.some(o => o.id === c.id && o.decision !== decision.NEEDS_REVIEW);
+        // A retry must not resurrect a source after its saved record was edited or removed.
+        return handled && decision.classify(c, this.data.records, this.stationState).decision === decision.AUTO_IMPORT ? { ...c, batchConflict: true } : c;
+      });
+      const plan = decision.evaluate(eligible, this.data.records, this.stationState);
+      const batch = batches.apply(original, plan, original.images);
+      const owned = new Set(original.additions.map(r => r.id));
+      batch.skipped = plan.decisions.filter(d => d.decision === decision.AUTO_SKIP && !(d.matches || []).some(m => owned.has(m.id))).length;
+      batch.duplicateImages = original.images.filter(i => i.state === 'duplicate').length;
+      batch.unrelatedImages = original.images.filter(i => i.state === 'done' && !i.candidates.length).length;
+      batch.fusedSources = candidates.reduce((sum, c) => sum + Math.max(0, (c.sourceIds || []).length - 1), 0);
+      const newStations = [...new Set(plan.additions.filter(r => stations.known(r.station) && !this.stationState.groups.some(g => g.id === stations.resolve(this.stationState, r.station).id)).map(r => r.station))];
+      if (!this.persistBatch(batch, plan.records)) return;
+      run.committedSignature = signature;
+      this.setDrafts([], { activeTab: 'home', notificationOpen: false, notificationText: '', completed: true, batchError: '', newStations });
+      if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+    } catch (_) {
+      this.setData({ batchError: '自动整理未完成，已保留识别结果，请重新进入后继续。' });
+    } finally { run.committing = false; }
+  },
+  refreshBatchSummary() {
+    const all = this.importState.batches;
+    const recent = all[all.length - 1];
+    const exceptionCount = all.reduce((sum, b) => sum + b.reviews.length, 0);
+    const failures = recent ? recent.images.filter(i => i.state === 'failed' && i.status !== 'SKIPPED_BY_USER' || i.state === 'queued').length : 0;
+    this.setData({ exceptionCount, recentImport: recent ? { id: recent.id, added: recent.additions.length, updated: new Set(recent.updates.map(u => u.after.id)).size,
+      skipped: (recent.skipped || 0) + (recent.duplicateImages || 0) + (recent.unrelatedImages || 0) + (recent.fusedSources || 0),
+      reviewCount: recent.reviews.length, failures, interrupted: recent.status === 'processing' || recent.status === 'interrupted',
+      undone: recent.status === 'undone', canUndo: recent.status === 'completed' && !!(recent.additions.length || recent.updates.length || recent.reviews.length),
+      conflicts: (recent.undoConflicts || []).length } : null });
+  },
+  recoverInterrupted() {
+    for (const batch of this.importState.batches.slice()) {
+      if (batch.status !== 'processing' && batch.status !== 'interrupted') continue;
+      const next = JSON.parse(JSON.stringify(batch));
+      next.images = next.images.map(i => i.state === 'queued' ? { ...i, state: 'failed', status: 'INTERRUPTED' } : i);
+      next.status = 'interrupted';
+      const candidates = next.images.flatMap(i => i.candidates);
+      const plan = decision.evaluate(fuse(candidates, name => stations.resolve(this.stationState, name).id).map(c => stations.assist(this.stationState, c)).filter(c => !(next.resolved || []).includes(c.id)), this.data.records, this.stationState);
+      const completed = batches.apply(next, plan, next.images);
+      if (!this.persistBatch(completed, plan.records)) break;
+    }
+  },
+  showImportFailures() {
+    this.setData({ activeTab: 'import', batchError: this.recognitionRun ? '' : '上次识别中断或部分失败，请重新选择未完成的截图；已导入的内容会自动去重。' });
+  },
+  undoImport() {
+    if (this.data.loading || this.data.importing || this.data.deleting || this.data.storageBlocked) return;
+    const recent = this.data.recentImport;
+    const batch = recent && this.importState.batches.find(b => b.id === recent.id && b.status === 'completed');
+    if (!batch) return;
+    const undone = batches.undo(batch, this.data.records);
+    if (this.persistBatch(undone.batch, undone.records)) {
+      this.setData({ batchError: undone.conflicts.length ? `已撤销可恢复部分，${undone.conflicts.length} 件已有后续操作，已保留。` : '已撤销本次导入', newStations: [] });
+      if (this.recognitionRun && this.recognitionRun.batchId === batch.id) this.recognitionRun = null;
+    }
+  },
+  openExceptions() {
+    const entries = this.importState.batches.flatMap(b => b.reviews.map(r => ({ ...r.candidate, id: r.id, batchId: b.id, reason: r.reason,
+      message: decision.reasonText[r.reason], matches: r.matches, allowNew: r.allowNew, action: r.choice && r.choice.action || '',
+      selectedStation: r.choice ? r.choice.station : stations.known(r.candidate.station) ? r.candidate.station : '',
+      locationOnly: r.reason === 'missing_location', needsCode: !validCode(r.candidate.code),
+      options: r.candidate.locationOptions || [] })));
+    this.setData({ exceptionOpen: true, exceptionItems: entries });
+  },
+  closeExceptions() { this.setData({ exceptionOpen: false, editing: null }); },
+  chooseExceptionStation(e) {
+    const id = e.currentTarget.dataset.id, index = Number(e.detail.value);
+    const name = this.data.stationList[index] && this.data.stationList[index].name;
+    if (name) this.updateException(id, { station: name });
+  },
+  exceptionStationInput(e) { this.updateException(e.currentTarget.dataset.id, { station: e.detail.value }); },
+  chooseException(e) {
+    const { id, action, station } = e.currentTarget.dataset;
+    if (!['new', 'skip'].includes(action)) return;
+    this.updateException(id, { action, ...(station ? { station } : {}) });
+  },
+  updateException(id, changes) {
+    if (this.data.storageBlocked || this.data.loading) return;
+    const batch = this.importState.batches.find(b => b.reviews.some(r => r.id === id));
+    if (!batch) return;
+    const next = JSON.parse(JSON.stringify(batch)), entry = next.reviews.find(r => r.id === id);
+    entry.choice = { action: '', station: stations.known(entry.candidate.station) ? entry.candidate.station : '', ...(entry.choice || {}), ...changes };
+    // Location choices persist now; the explicit save button applies them later.
+    if (!entry.choice.action) entry.choice.action = 'new';
+    if (entry.choice.station.length > 100) return;
+    if (this.persistBatch(next)) this.openExceptions();
+  },
+  applyExceptions() {
+    if (this.data.loading || this.data.importing || this.data.storageBlocked || this.data.deleting) return;
+    let records = this.data.records.slice(), state = this.importState;
+    let changed = false;
+    const remembered = [];
+    const initialRecords = records.slice();
+    for (const original of state.batches.slice()) {
+      const batch = JSON.parse(JSON.stringify(original));
+      const remaining = [];
+      for (const review of batch.reviews) {
+        if (!review.choice) { remaining.push(review); continue; }
+        const { action, station } = review.choice;
+        if (action === 'new') {
+          const c = review.candidate;
+          if (!validCode(c.code) || !review.allowNew) { remaining.push(review); continue; }
+          const current = decision.classify({ ...c, station: station.trim() || parser.UNKNOWN }, initialRecords, this.stationState);
+          const matchKey = matches => JSON.stringify((matches || []).map(m => [m.id, m.taken, m.code, m.station]).sort());
+          if (matchKey(current.matches) !== matchKey(review.matches)) {
+            review.matches = current.matches || []; review.allowNew = current.allowNew !== false;
+            review.reason = current.reason === 'missing_location' ? 'missing_location' : 'record_conflict'; delete review.choice;
+            remaining.push(review); changed = true;
+            this.setData({ batchError: '已有记录发生变化，请重新选择这些问题。' });
+            continue;
+          }
+          if (c.waybillNumber && records.some(r => r.waybillNumber === c.waybillNumber)) { delete review.choice; remaining.push(review); changed = true; continue; }
+          if (review.reason === 'missing_location' && records.some(r => !r.taken && stations.normalize(r.code) === stations.normalize(c.code) && stations.resolve(this.stationState, r.station).id === stations.resolve(this.stationState, station || parser.UNKNOWN).id)) {
+            batch.resolved = [...(batch.resolved || []), review.id]; changed = true; continue;
+          }
+          const added = storage.newRecord({ ...c, station: station.trim() || parser.UNKNOWN, confirmedFields: [...new Set([...(c.confirmedFields || []), 'code', ...(station.trim() ? ['station'] : [])])] }, records);
+          records.push(added); batch.additions.push(added);
+          if (station.trim()) remembered.push(added);
+        }
+        batch.resolved = [...(batch.resolved || []), review.id];
+        changed = true;
+      }
+      batch.reviews = remaining;
+      state = batches.replace(state, batch);
+    }
+    if (changed && !this.persistRecords(records, state)) return;
+    if (remembered.length) this.saveStations(remembered.reduce((settings, record) => stations.remember(settings, record), this.stationState));
+    this.openExceptions();
+    if (!this.data.exceptionItems.length) this.closeExceptions();
+  },
+  editException(e) {
+    const entry = this.data.exceptionItems.find(r => r.id === e.currentTarget.dataset.id);
+    if (entry) this.setData({ editing: { ...entry, station: entry.selectedStation || parser.UNKNOWN, exception: true }, editError: '' });
+  },
+  markStationCommon(e) {
+    const group = this.stationState.groups.find(g => g.id === e.currentTarget.dataset.id);
+    if (group) this.saveStations(stations.remember(this.stationState, { station: group.name }));
+  },
+  addNewStations() {
+    const names = this.data.newStations;
+    let state = this.stationState;
+    names.forEach(station => { state = stations.remember(state, { station }); });
+    if (this.saveStations(state)) this.setData({ newStations: [] });
   },
   async confirmImport() {
     if (this.unloaded || this.data.loading || this.data.choosing || this.data.importing || this.data.deleting || this.data.stationBusy || this.data.storageBlocked || !this.data.drafts.length) return;
@@ -775,9 +996,10 @@ Page({
     records.splice(Math.min(undo.index, records.length), 0, undo.record);
     if (this.persistRecords(records)) this.clearUndo();
   },
-  persistRecords(records) {
+  persistRecords(records, imports) {
     try {
-      this.updateRecords(this.store.save(records));
+      this.updateRecords(this.store.save(records, imports));
+      if (imports) { this.importState = imports; this.refreshBatchSummary(); }
       return true;
     } catch (err) {
       this.setData({ storageError: err.message, storageBlocked: true });
@@ -828,6 +1050,16 @@ Page({
     }
     const changes = { station: edit.station.trim(), code: edit.code.trim(), carrier: (edit.carrier || "").trim() };
     if (edit.pickupAddress !== undefined) changes.pickupAddress = edit.pickupAddress.trim();
+    if (edit.exception) {
+      const batch = this.importState.batches.find(b => b.reviews.some(r => r.id === edit.id));
+      if (!batch) return;
+      const next = JSON.parse(JSON.stringify(batch));
+      const entry = next.reviews.find(r => r.id === edit.id);
+      entry.candidate = batches.cleanCandidate({ ...entry.candidate, ...changes, memoryAddress: false, confirmedFields: ['code', 'station', 'carrier', 'pickupAddress'] });
+      entry.choice = { action: 'new', station: changes.station };
+      if (this.persistBatch(next)) { this.setData({ editing: null }); this.openExceptions(); }
+      return;
+    }
     const original = [...this.data.records, ...this.data.drafts].find(r => r.id === edit.id);
     if (!original) return;
     changes.confirmedFields = [...new Set([...(original.confirmedFields || []), ...Object.keys(changes).filter(key =>
@@ -839,6 +1071,7 @@ Page({
     } else {
       if (this.data.storageBlocked || !this.persistRecords(this.data.records.map(r => r.id === edit.id ? storage.updateRecord(r, changes) : r))) return;
     }
+    if (this.data.records.some(r => r.id === edit.id) && stations.known(changes.station)) this.saveStations(stations.remember(this.stationState, changes));
     this.setData({ editing: null });
   },
 });

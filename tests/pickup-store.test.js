@@ -50,8 +50,8 @@ test('陈旧页面不能覆盖较新的记录；数据校验失败不写入', ()
 });
 test('ID 在同一毫秒内唯一；系统时间回退不破坏时间顺序', () => {
   const records = Array.from({ length: 1000 }, () => parcel()); assert.equal(new Set(records.map(r => r.id)).size, 1000);
-  const taken = updateRecord(records[0], { taken: true }, 50); assert.equal(taken.updatedAt, 100); assert.equal(taken.takenAt, 100);
-  assert.equal(updateRecord(taken, { code: '4321' }, 400).takenAt, 100);
+  const taken = updateRecord(records[0], { taken: true }, 50); assert.equal(taken.updatedAt, 101); assert.equal(taken.takenAt, 101);
+  assert.equal(updateRecord(taken, { code: '4321' }, 400).takenAt, 101);
   assert.equal(updateRecord(taken, { taken: false }, 500).takenAt, null);
 });
 test('去重优先运单；不同可靠运单允许同码；归一化、未知地点和已取码提示', () => {

@@ -50,7 +50,7 @@ test('核对层仅一个受约束滚动容器，无祖先触摸拦截，底栏�
   const review = wxml.slice(wxml.indexOf('<view wx:if="{{reviewOpen}}"'));
   assert.equal((review.match(/<scroll-view\b/g) || []).length, 1);
   assert.doesNotMatch(review, /catchtouchmove/);
-  assert.match(wxml, /<view hidden="{{reviewOpen}}">/);
+  assert.match(wxml, /<view hidden="{{reviewOpen \|\| exceptionOpen}}">/);
   assert.match(wxml.split('\n')[0], /reviewOpen.*overflow: hidden/);
   assert.match(css, /\.review-screen \{[^}]*position: fixed;[^}]*top: 0;[^}]*bottom: 0;[^}]*flex-direction: column/);
   assert.match(css, /\.review-list-slot \{[^}]*flex: 1;[^}]*min-height: 0/);

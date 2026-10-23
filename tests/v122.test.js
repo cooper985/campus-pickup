@@ -30,22 +30,22 @@ test('打开和输入不读取剪贴板或自动解析；点击才识别，修�
   });
   notify(p, '【菜鸟】已到北门驿站，取件码1234');
   assert.equal(reads, 0); assert.equal(calls, 0); assert.equal(p.data.validDraftCount, 0);
-  await p.recognizeNotification(); assert.equal(calls, 1); assert.equal(ocrCalls, 0);
+  await p.recognizeNotification({ shadow: true }); assert.equal(calls, 1); assert.equal(ocrCalls, 0);
   assert.equal(p.data.notificationOpen, false); assert.equal(p.data.drafts[0].station, '北门驿站');
   notify(p, '取件码5678，请到南门驿站领取'); assert.equal(calls, 1);
-  await p.recognizeNotification(); assert.equal(p.data.drafts.length, 1); assert.equal(p.data.drafts[0].code, '5678');
+  await p.recognizeNotification({ shadow: true }); assert.equal(p.data.drafts.length, 1); assert.equal(p.data.drafts[0].code, '5678');
   p.openNotification(); p.clearNotificationText(); assert.equal(p.data.notificationText, ''); assert.equal(p.data.drafts.length, 0);
-  await p.recognizeNotification(); assert.equal(calls, 2); assert.match(p.data.error, /粘贴通知/);
-  p.notificationInput({ detail: { value: '取件码8888' } }); await p.recognizeNotification();
+  await p.recognizeNotification({ shadow: true }); assert.equal(calls, 2); assert.match(p.data.error, /粘贴通知/);
+  p.notificationInput({ detail: { value: '取件码8888' } }); await p.recognizeNotification({ shadow: true });
   p.openNotification(); p.cancelNotification(); assert.equal(p.data.notificationText, ''); assert.equal(p.data.drafts.length, 0);
   assert.equal(reads, 0); assert.equal(Object.keys(wx.values).length, 0); p.onUnload();
 });
 test('通知输入取消不删除原有截图草稿；取消替换或页面卸载不产生迟到草稿', async () => {
   const wx = fakeStorage(), p = page(wx); p.setDrafts([{ id: 'image', code: '1111', station: '北门' }]);
   notify(p, '取件码2222'); p.cancelNotification(); assert.equal(p.data.drafts[0].id, 'image');
-  wx.showModal = async () => ({ confirm: false }); notify(p, '取件码2222'); await p.recognizeNotification();
+  wx.showModal = async () => ({ confirm: false }); notify(p, '取件码2222'); await p.recognizeNotification({ shadow: true });
   assert.equal(p.data.drafts[0].id, 'image'); assert.equal(p.data.notificationOpen, true);
   let release; wx.showModal = () => new Promise(resolve => release = resolve);
-  const run = p.recognizeNotification(); p.onUnload(); release({ confirm: true }); await run;
+  const run = p.recognizeNotification({ shadow: true }); p.onUnload(); release({ confirm: true }); await run;
   assert.equal(p.data.drafts[0].id, 'image'); assert.equal(p.data.notificationText, '');
 });

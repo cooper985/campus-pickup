@@ -1,6 +1,7 @@
 const UNKNOWN = '待确认地点';
 const { metadata } = require('./pickup-duplicates');
 const { validCode } = require('./pickup-code');
+const evidence = require('./import-evidence');
 const signatures = { '邮政': '中国邮政', '中国邮政': '中国邮政', '邮政快递': '中国邮政', 'EMS': '中国邮政', '京东': '京东物流', '京东快递': '京东物流', '京东物流': '京东物流', '中通': '中通快递', '圆通': '圆通速递', '申通': '申通快递', '韵达': '韵达快递', '极兔': '极兔速递', '顺丰': '顺丰速运', '德邦': '德邦快递' };
 const token = '[A-Za-z0-9]{1,9}(?:\\s*-\\s*[A-Za-z0-9]{1,8}){0,3}';
 const codeHead = new RegExp('^\\s*[【\\[（(“"]?\\s*(' + token + ')(?![A-Za-z0-9.\\-:/年月日时分秒元])');
@@ -86,7 +87,7 @@ function parse(text) {
       const addresses = [...new Set(candidates.filter(p => p.detail).map(p => p.name))];
       let station = unique.length === 1 ? unique[0] : UNKNOWN;
       if (!candidates.length && i && entry.anchor === codes[i - 1].anchor) station = records[records.length - 1].station;
-      records.push({ code: entry.code, station, ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), carrier: (sentence && carrier(sentence.text)) || blockCarrier, waybillNumber: info.waybillNumber,
+      records.push({ code: entry.code, ...(/\d[OILSB](?:\d|-|$)/i.test(entry.code) ? { uncertainCode: true } : {}), station, ...(unique.length > 1 ? { locationOptions: unique } : {}), ...evidence.inspect(codes.length === 1 ? block : sentence && sentence.text), ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), carrier: (sentence && carrier(sentence.text)) || blockCarrier, waybillNumber: info.waybillNumber,
         sourceType: 'text', sourceIndex: -1, needsReview: station === UNKNOWN });
     });
   }

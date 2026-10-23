@@ -215,3 +215,11 @@
 }
 
 .text-action.button-pressed { opacity: .65; }
+
+.import-summary { padding: 28rpx; margin-bottom: 24rpx; border-left: 5rpx solid #64d2ff; }
+.summary-actions { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 16rpx; }
+.summary-actions .ui-button { margin: 0; }
+.new-station-hint { margin-top: 16rpx; }
+.exception-screen .review-code { margin-bottom: 12rpx; }
+.exception-screen .field-input { margin: 12rpx 0; }
+.modal-mask { z-index: 130; }

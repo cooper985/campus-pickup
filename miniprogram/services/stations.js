@@ -10,6 +10,7 @@ function validate(state) {
     if (!g || typeof g.id !== 'string' || !g.id || ids.has(g.id) || typeof g.name !== 'string' ||
       g.name.length > 100 || !known(g.name) || !Array.isArray(g.aliases) || !g.aliases.length) throw Error('驿站设置格式异常');
     ids.add(g.id);
+    if (g.confirmed !== undefined && typeof g.confirmed !== 'boolean' || g.pickupAddress !== undefined && (typeof g.pickupAddress !== 'string' || g.pickupAddress.length > 100)) throw Error('驿站记忆格式异常');
     for (const alias of g.aliases) {
       if (typeof alias !== 'string' || alias.length > 100 || !known(alias) || keys.has(normalize(alias))) throw Error('驿站别名格式异常');
       keys.add(normalize(alias));
@@ -96,7 +97,17 @@ function merge(state, ids, name) {
   if (state.groups.some(g => !ids.includes(g.id) && [g.name, ...g.aliases].some(a => normalize(a) === normalize(name)))) throw Error('名称已属于其他驿站，请选择该驿站合并。');
   const aliases = [...new Set(selected.flatMap(g => [...g.aliases, g.name]))];
   const unique = aliases.filter((a, i) => aliases.findIndex(b => normalize(a) === normalize(b)) === i);
-  return { version: 1, groups: state.groups.filter(g => g.id !== selected[1].id).map(g => g.id === selected[0].id ? { ...g, name, aliases: unique } : g) };
+  return { version: 1, groups: state.groups.filter(g => g.id !== selected[1].id).map(g => g.id === selected[0].id ? { ...g, name, aliases: unique, confirmed: true } : g) };
+}
+function assist(state, candidate) {
+  const g = state.groups.find(g => [g.name, ...g.aliases].some(a => normalize(a) === normalize(candidate.station)));
+  return g ? { ...candidate, station: g.name, ...(!candidate.pickupAddress && g.confirmed && g.pickupAddress ? { pickupAddress: g.pickupAddress, memoryAddress: true } : {}) } : candidate;
+}
+function remember(state, record) {
+  const next = sync(state, [record]);
+  const g = next.groups.find(g => [g.name, ...g.aliases].some(a => normalize(a) === normalize(record.station)));
+  if (g) { g.confirmed = true; if (record.pickupAddress !== undefined) g.pickupAddress = record.pickupAddress; }
+  return next;
 }
 function suggestions(state) {
   const pairs = [];
@@ -106,4 +117,4 @@ function suggestions(state) {
   }));
   return pairs.slice(0, 3);
 }
-module.exports = { KEY, normalize, known, createStore, sync, resolve, natural, group, merge, suggestions };
+module.exports = { KEY, normalize, known, createStore, sync, resolve, natural, group, merge, suggestions, assist, remember };

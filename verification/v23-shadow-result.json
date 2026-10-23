@@ -1,0 +1,79 @@
+{
+  "dataset": "synthetic",
+  "scope": "人工标注候选的本地影子评估；不含云OCR、网络、真机耗时或真实分布准确率",
+  "samples": 32,
+  "batches": 7,
+  "autoImportCoverage": {
+    "numerator": 18,
+    "denominator": 27
+  },
+  "autoImportFieldAccuracy": {
+    "correct": 38,
+    "total": 38
+  },
+  "wrongMerges": 0,
+  "missedParcels": 0,
+  "unnecessaryReviews": 0,
+  "autoSkipAccuracy": {
+    "correct": 3,
+    "total": 3
+  },
+  "results": [
+    {
+      "name": "九件新快递",
+      "added": 9,
+      "review": 0,
+      "skipped": 0,
+      "modeledUserActions": 1,
+      "localDecisionMs": 1.534
+    },
+    {
+      "name": "跨图补地点和相似页新增信息",
+      "added": 4,
+      "review": 0,
+      "skipped": 0,
+      "modeledUserActions": 1,
+      "localDecisionMs": 0.149
+    },
+    {
+      "name": "新旧历史同码和终态混合",
+      "added": 5,
+      "review": 2,
+      "skipped": 2,
+      "modeledUserActions": 5,
+      "localDecisionMs": 0.265
+    },
+    {
+      "name": "未知地点不得桥接两个站",
+      "added": 0,
+      "review": 3,
+      "skipped": 0,
+      "modeledUserActions": 6,
+      "localDecisionMs": 0.021
+    },
+    {
+      "name": "同码不同运单",
+      "added": 0,
+      "review": 2,
+      "skipped": 0,
+      "modeledUserActions": 5,
+      "localDecisionMs": 0.067
+    },
+    {
+      "name": "签收与明确旧日期",
+      "added": 0,
+      "review": 2,
+      "skipped": 0,
+      "modeledUserActions": 5,
+      "localDecisionMs": 0.138
+    },
+    {
+      "name": "没有可靠包裹",
+      "added": 0,
+      "review": 1,
+      "skipped": 1,
+      "modeledUserActions": 4,
+      "localDecisionMs": 0.012
+    }
+  ]
+}

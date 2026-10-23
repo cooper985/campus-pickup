@@ -30,13 +30,13 @@ test('通知由用户输入后识别；复用去重、落盘不含原文，无�
   const p = page(wx);
   p.openNotification(); p.notificationInput({ detail: { value: '【菜鸟】已派送至31号楼驿站，取件码1-1-8。私人无关内容不保存' } });
   assert.equal(reads, 0); assert.equal(p.data.drafts.length, 0);
-  await p.recognizeNotification(); assert.equal(p.data.drafts[0].code, '1-1-8'); await p.confirmImport();
+  await p.recognizeNotification({ shadow: true }); assert.equal(p.data.drafts[0].code, '1-1-8'); await p.confirmImport();
   assert.equal(p.data.records.length, 1); assert.equal(p.data.notificationText, '');
   p.openNotification(); p.notificationInput({ detail: { value: '已派送至31号楼驿站，取件码1-1-8' } });
-  await p.recognizeNotification(); await p.confirmImport(); assert.equal(p.data.records.length, 1);
+  await p.recognizeNotification({ shadow: true }); await p.confirmImport(); assert.equal(p.data.records.length, 1);
   assert.ok(!JSON.stringify(wx.values).includes('私人无关内容'));
   p.openNotification(); p.notificationInput({ detail: { value: '运单号123456789012' } });
-  await p.recognizeNotification(); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.editing, null);
+  await p.recognizeNotification({ shadow: true }); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.editing, null);
   assert.equal(p.data.notificationOpen, true); assert.equal(p.data.error, '未找到取件码');
   p.cancelNotification(); assert.equal(p.data.notificationText, ''); assert.equal(reads, 0); p.onUnload();
 });

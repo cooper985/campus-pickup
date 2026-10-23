@@ -100,7 +100,7 @@ test("正式页面默认 fileID、单图可手动重试，开发测试按钮退�
   wx.setClipboardData=()=>copies++;
   const p=page(wx,async()=>{calls++;if(calls===1)throw {code:"NETWORK_FAILED"};return {mock:false,lines:["取件码:603402"]};},
     undefined,{'recognition-task':{...task,isDevelopment:()=>false}});
-  p.data.images=['local-image']; await p.recognizeCloud();
+  p.data.images=['local-image']; await p.runRecognition(true, { shadow: true });
   assert.equal(p.data.results[0].transport,"fileid"); assert.equal(p.data.results[0].status,"NETWORK_FAILED");
   await p.retryImage({currentTarget:{dataset:{taskId:p.data.results[0].taskId}}});
   assert.equal(calls,2); assert.equal(p.data.drafts[0].code,"603402");

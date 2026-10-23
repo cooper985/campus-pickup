@@ -54,7 +54,7 @@ test('原图字节→真实压缩输入回放→云适配器→并发页面→�
   vm.runInNewContext(fs.readFileSync('miniprogram/services/cloud-ocr.js', 'utf8'), { module, wx,
     require: () => task });
   const p = page(wx, module.exports.recognize);
-  p.data.images = cases.map(c => path.join(privateDir, `0${c.case}.jpg`)); await p.recognizeCloud();
+  p.data.images = cases.map(c => path.join(privateDir, `0${c.case}.jpg`)); await p.runRecognition(true, { shadow: true });
   assert.equal(cloudCalls, 6); assert.equal(compressCalls, 6); assert.equal(p.data.drafts.length, 15);
   for (const c of cases) for (const [code, station] of c.expected) {
     const record = p.data.drafts.find(r => r.sourceIndices.includes(c.case - 1) && r.code === code);
@@ -124,7 +124,7 @@ test('真实返回经过页面：有码、运输与请求失败分别呈现，�
   for (const [code, message] of [['TIMEOUT','识别超时，请重试'],['NETWORK_FAILED','网络异常，请重试'],['CLOUD_FAILED','连接失败，请重试'],['OCR_FAILED','识别服务暂不可用，请重试']]) {
     const calls = [], wx = fakeStorage();
     const p = page(wx, async image => { calls.push(image); if (image === 'failed') throw {code,message:'private detail'}; return image === 'jd' ? jd : transit; });
-    p.data.images = ['jd','transit','failed']; await p.recognizeCloud();
+    p.data.images = ['jd','transit','failed']; await p.runRecognition(true, { shadow: true });
     assert.equal(p.data.results[0].message, '识别到 1 件快递'); assert.equal(p.data.results[1].message, '还在运输');
     assert.equal(p.data.results[2].error, message); assert.equal(p.data.results[2].status, code); assert.equal(p.data.results[2].retryable, true);
     assert.deepEqual(Array.from(p.data.drafts,r=>[r.code,r.station]), [['B3-4-7401','河南工业大学服务站']]);

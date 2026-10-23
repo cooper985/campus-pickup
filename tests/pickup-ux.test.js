@@ -20,7 +20,7 @@ test('慢无码图不挡住正常图，完成顺序独立更新且实际同时�
     peak = Math.max(peak, ++active);
     releases[path] = lines => { active--; resolve({ mock: false, lines }); };
   }));
-  p.data.images = ['slow', 'b', 'c', 'd', 'e']; const run = p.recognizeCloud(); await tick();
+  p.data.images = ['slow', 'b', 'c', 'd', 'e']; const run = p.runRecognition(true, { shadow: true }); await tick();
   assert.equal(peak, 3); assert.equal(Object.keys(releases).length, 3);
   releases.c(['取件码3333']); await tick();
   assert.equal(p.data.results[0].state, 'running'); assert.equal(p.data.results[2].count, 1);
@@ -39,7 +39,7 @@ test('超时和手动重试仍占用真实请求槽，不因停止等待突破�
     peak = Math.max(peak, ++active);
     releases.push(() => { active--; resolve({ mock: false, lines: ['取件码8888'] }); });
   }));
-  p.recognitionTimeoutMs = 5; p.data.images = ['a', 'b', 'c']; await p.recognizeCloud();
+  p.recognitionTimeoutMs = 5; p.data.images = ['a', 'b', 'c']; await p.runRecognition(true, { shadow: true });
   assert.equal(releases.length, 3); assert.equal(p.data.results[0].error, '识别超时，请重试');
   const oldId = p.data.results[0].taskId;
   const retry = p.retryImage(imageEvent(p)); await tick();
@@ -53,10 +53,10 @@ test('超时和手动重试仍占用真实请求槽，不因停止等待突破�
 test('取消批次不启动排队图，旧批次迟到结果不覆盖新选择或重复导入', async () => {
   const releases = [];
   const p = page(fakeStorage(), () => new Promise(resolve => releases.push(resolve)));
-  p.data.images = ['a', 'b', 'c', 'd']; const run = p.recognizeCloud(); await tick();
+  p.data.images = ['a', 'b', 'c', 'd']; const run = p.runRecognition(true, { shadow: true }); await tick();
   p.cancelRecognition(); await run; assert.equal(releases.length, 3);
   assert.ok(p.data.results.every(r => r.status === 'CANCELLED'));
-  p.data.images = ['new']; const next = p.recognizeCloud();
+  p.data.images = ['new']; const next = p.runRecognition(true, { shadow: true });
   releases.forEach(resolve => resolve({ mock: false, lines: ['取件码1111'] })); await tick();
   releases[3]({ mock: false, lines: ['取件码9999'] }); await next;
   assert.equal(p.data.drafts.length, 1); assert.equal(p.data.drafts[0].code, '9999');
@@ -72,7 +72,7 @@ test('识别异常可在其他图仍运行时单独重试，不重跑成功图�
     return { mock: false, lines: ['运输中'] };
   });
   p.data.drafts = [{ id: 'old', sourceIndex: 0, code: '1111', station: '测试驿站' }];
-  p.data.images = ['bad', 'slow']; const run = p.recognizeCloud(); await tick();
+  p.data.images = ['bad', 'slow']; const run = p.runRecognition(true, { shadow: true }); await tick();
   assert.equal(p.data.results[0].error, '连接失败，请重试'); assert.equal(p.data.loading, true);
   fail = false; await p.retryImage(imageEvent(p)); assert.equal(p.data.records.length, 0);
   assert.equal(calls.join(','), 'bad,slow,bad');
@@ -130,7 +130,7 @@ test('整批收齐前不允许提前导入；完成后一次确认所有结果',
   const wx = fakeStorage();
   const p = page(wx, async path => path === 'slow' ? new Promise(resolve => releaseImage = resolve)
     : path === 'last' ? new Promise(resolve => releaseLast = resolve) : { mock: false, lines: ['取件码1111'] });
-  p.data.images = ['fast', 'slow', 'last']; const run = p.recognizeCloud(); await tick();
+  p.data.images = ['fast', 'slow', 'last']; const run = p.runRecognition(true, { shadow: true }); await tick();
   assert.equal(p.data.loading, true); assert.equal(p.data.drafts.length, 0);
   await p.confirmImport(); assert.equal(p.data.records.length, 0);
   releaseImage({ mock: false, lines: ['取件码2222'] }); await tick();
@@ -160,7 +160,7 @@ test('四种结果使用简短文案，部分歧义只排除疑项，不把原�
   if(path==='failed')throw {code:'NETWORK_FAILED',message:'private-secret'};
   return {mock:false,lines:({good:['北门驿站','取件码7-2-4567','取件码：456789','取件码：6034O2','private-secret'],transit:['运输中'],none:['物流详情'],empty:[]})[path]};
  });
- p.data.images=['good','transit','none','failed','empty']; await p.recognizeCloud();
+ p.data.images=['good','transit','none','failed','empty']; await p.runRecognition(true, { shadow: true });
  assert.deepEqual(Array.from(p.data.drafts,r=>r.code),['7-2-4567','456789']);
  assert.equal(p.data.results[0].uncertainCount,1);
  assert.deepEqual(Array.from(p.data.results,r=>r.error||r.message),['识别到 2 件快递','还在运输','没有取件码','网络异常，请重试','识别不出来']);
@@ -180,5 +180,5 @@ test('存疑包裹不借用别件运单；模拟草稿不会在真实识别失�
  });
  p.data.images=['a']; await p.recognize(); assert.equal(p.data.drafts.length,1);
  assert.equal(p.data.drafts[0].waybillNumber,''); assert.equal(p.data.drafts[0].carrier,'');
- fail=true; await p.recognizeCloud(); assert.equal(p.data.drafts.length,0); p.onUnload();
+ fail=true; await p.runRecognition(true, { shadow: true }); assert.equal(p.data.drafts.length,0); p.onUnload();
 });

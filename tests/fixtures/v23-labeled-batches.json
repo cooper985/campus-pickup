@@ -1,0 +1,80 @@
+{
+  "type": "synthetic",
+  "annotation": "人工指定正确包裹身份、决策与字段；仅用于规则校准，不代表真实截图准确率",
+  "batches": [
+    {
+      "name": "九件新快递",
+      "records": [],
+      "candidates": [
+        {"id": "n0","code": "A0-1000","station": "大学服务站","label": {"parcelId": "n0","decision": "AUTO_IMPORT","fields": {"code": "A0-1000","station": "大学服务站"}}},
+        {"id": "n1","code": "A1-1000","station": "大学服务站","label": {"parcelId": "n1","decision": "AUTO_IMPORT","fields": {"code": "A1-1000","station": "大学服务站"}}},
+        {"id": "n2","code": "A2-1000","station": "大学服务站","label": {"parcelId": "n2","decision": "AUTO_IMPORT","fields": {"code": "A2-1000","station": "大学服务站"}}},
+        {"id": "n3","code": "A3-1000","station": "大学服务站","label": {"parcelId": "n3","decision": "AUTO_IMPORT","fields": {"code": "A3-1000","station": "大学服务站"}}},
+        {"id": "n4","code": "A4-1000","station": "大学服务站","label": {"parcelId": "n4","decision": "AUTO_IMPORT","fields": {"code": "A4-1000","station": "大学服务站"}}},
+        {"id": "n5","code": "A5-1000","station": "大学服务站","label": {"parcelId": "n5","decision": "AUTO_IMPORT","fields": {"code": "A5-1000","station": "大学服务站"}}},
+        {"id": "n6","code": "A6-1000","station": "大学服务站","label": {"parcelId": "n6","decision": "AUTO_IMPORT","fields": {"code": "A6-1000","station": "大学服务站"}}},
+        {"id": "n7","code": "A7-1000","station": "大学服务站","label": {"parcelId": "n7","decision": "AUTO_IMPORT","fields": {"code": "A7-1000","station": "大学服务站"}}},
+        {"id": "n8","code": "A8-1000","station": "大学服务站","label": {"parcelId": "n8","decision": "AUTO_IMPORT","fields": {"code": "A8-1000","station": "大学服务站"}}}
+      ]
+    },
+    {
+      "name": "跨图补地点和相似页新增信息",
+      "records": [],
+      "candidates": [
+        {"id": "a","code": "B3-4-7401","station": "待确认地点","label": {"parcelId": "complement","decision": "AUTO_IMPORT","fields": {"code": "B3-4-7401","station": "河南工业大学服务站"}}},
+        {"id": "b","code": "B3-4-7401","station": "河南工业大学服务站","label": {"parcelId": "complement","decision": "AUTO_IMPORT","fields": {"code": "B3-4-7401","station": "河南工业大学服务站"}}},
+        {"id": "c","code": "C205-2004","station": "北校洗浴中心驿站","label": {"parcelId": "c","decision": "AUTO_IMPORT","fields": {"code": "C205-2004","station": "北校洗浴中心驿站"}}},
+        {"id": "d","code": "A203-4010","station": "东门驿站","label": {"parcelId": "d","decision": "AUTO_IMPORT","fields": {"code": "A203-4010","station": "东门驿站"}}},
+        {"id": "e","code": "C2-3-1304","station": "西门服务站","label": {"parcelId": "e","decision": "AUTO_IMPORT","fields": {"code": "C2-3-1304","station": "西门服务站"}}}
+      ]
+    },
+    {
+      "name": "新旧历史同码和终态混合",
+      "records": [{"code": "9900", "station": "大学服务站", "taken": false}, {"code": "8800", "station": "大学服务站", "taken": true}],
+      "candidates": [
+        {"id": "m0","code": "B0-2000","station": "大学服务站","label": {"parcelId": "m0","decision": "AUTO_IMPORT","fields": {"code": "B0-2000","station": "大学服务站"}}},
+        {"id": "m1","code": "B1-2000","station": "大学服务站","label": {"parcelId": "m1","decision": "AUTO_IMPORT","fields": {"code": "B1-2000","station": "大学服务站"}}},
+        {"id": "m2","code": "B2-2000","station": "大学服务站","label": {"parcelId": "m2","decision": "AUTO_IMPORT","fields": {"code": "B2-2000","station": "大学服务站"}}},
+        {"id": "m3","code": "B3-2000","station": "大学服务站","label": {"parcelId": "m3","decision": "AUTO_IMPORT","fields": {"code": "B3-2000","station": "大学服务站"}}},
+        {"id": "m4","code": "B4-2000","station": "大学服务站","label": {"parcelId": "m4","decision": "AUTO_IMPORT","fields": {"code": "B4-2000","station": "大学服务站"}}},
+        {"id": "pending","code": "9900","station": "大学服务站","label": {"parcelId": "pending","decision": "AUTO_SKIP","fields": {"code": "9900","station": "大学服务站"}}},
+        {"id": "history","code": "8800","station": "大学服务站","label": {"parcelId": "history","decision": "NEEDS_REVIEW","fields": {"code": "8800","station": "大学服务站"}}},
+        {"id": "terminal","code": "7700","station": "大学服务站","parcelStatus": "terminal","label": {"parcelId": "terminal","decision": "AUTO_SKIP","fields": {"code": "7700","station": "大学服务站"}}},
+        {"id": "missing","code": "6600","station": "待确认地点","label": {"parcelId": "missing","decision": "NEEDS_REVIEW","fields": {"code": "6600","station": "待确认地点"}}}
+      ]
+    },
+    {
+      "name": "未知地点不得桥接两个站",
+      "records": [],
+      "candidates": [
+        {"id": "east","code": "1234","station": "东门驿站","label": {"parcelId": "east","decision": "NEEDS_REVIEW","fields": {"code": "1234","station": "东门驿站"}}},
+        {"id": "unknown","code": "1234","station": "待确认地点","label": {"parcelId": "east","decision": "NEEDS_REVIEW","fields": {"code": "1234","station": "待确认地点"}}},
+        {"id": "west","code": "1234","station": "西门驿站","label": {"parcelId": "west","decision": "NEEDS_REVIEW","fields": {"code": "1234","station": "西门驿站"}}}
+      ]
+    },
+    {
+      "name": "同码不同运单",
+      "records": [],
+      "candidates": [
+        {"id": "w1","code": "5678","station": "大学服务站","waybillNumber": "SF123456789012","label": {"parcelId": "w1","decision": "NEEDS_REVIEW","fields": {"code": "5678","station": "大学服务站"}}},
+        {"id": "w2","code": "5678","station": "大学服务站","waybillNumber": "SF999999999999","label": {"parcelId": "w2","decision": "NEEDS_REVIEW","fields": {"code": "5678","station": "大学服务站"}}}
+      ]
+    },
+    {
+      "name": "签收与明确旧日期",
+      "records": [],
+      "candidates": [
+        {"id": "signed","code": "A1-9000","station": "大学服务站","parcelStatus": "signed","label": {"parcelId": "signed","decision": "NEEDS_REVIEW","fields": {"code": "A1-9000","station": "大学服务站"}}},
+        {"id": "dated","code": "A2-9000","station": "大学服务站","noticeAt": 1577923200000,"label": {"parcelId": "dated","decision": "NEEDS_REVIEW","fields": {"code": "A2-9000","station": "大学服务站"}}}
+      ]
+    },
+    {
+      "name": "没有可靠包裹",
+      "records": [],
+      "candidates": [
+        {"id": "unparsed","code": "","station": "待确认地点","label": {"parcelId": "unparsed","decision": "NEEDS_REVIEW","fields": {"code": "","station": "待确认地点"}}},
+        {"id": "cancelled","code": "4444","station": "大学服务站","parcelStatus": "terminal","label": {"parcelId": "cancelled","decision": "AUTO_SKIP","fields": {"code": "4444","station": "大学服务站"}}}
+      ]
+    }
+  ]
+}

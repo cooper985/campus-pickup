@@ -34,7 +34,7 @@ test('真实OCR经过页面生成两条独立草稿；单个坏码不阻塞另�
   const list=cases[0].result, partial=JSON.parse(JSON.stringify(list));
   partial.lines[partial.lines.indexOf('313-3-3308')]='313-3-33O8';
   const wx=fakeStorage(), p=page(wx, async image=>image==='list'?list:partial);
-  p.data.images=['list','partial']; await p.recognizeCloud();
+  p.data.images=['list','partial']; await p.runRecognition(true, { shadow: true });
   assert.deepEqual(Array.from(p.data.drafts,r=>[r.code,r.station]), cases[0].expected);
   assert.equal(p.data.results[0].count,2);
   assert.equal(p.data.results[1].count,1);

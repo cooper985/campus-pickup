@@ -39,7 +39,7 @@ test('开发版失败后只复制一次脱敏诊断，正式版不显示入口�
   task.log('cloud_roundtrip',Date.now(),'TIMEOUT',{traceId:control.traceId,origin:'cloud_call',sdkCode:-404012,errorKind:'polling_timeout'});
   throw {code:'TIMEOUT',origin:'cloud_call',sdkCode:-404012,message:'private-text'};
  },undefined,{'recognition-task':task});
- p.data.images=['private-path']; await p.recognizeCloud();
+ p.data.images=['private-path']; await p.runRecognition(true, { shadow: true });
  assert.equal(p.data.diagnosticEnabled,true);
  p.copyRecognitionDiagnostic({currentTarget:{dataset:{taskId:p.data.results[0].taskId}}});
  const report=JSON.parse(copied)[0];
