@@ -1,0 +1,1473 @@
+{
+  "date": "2026-10-23",
+  "profile": "GeneralBasicOCR-v20181119-fileid-512kb-quality70-v1",
+  "source": "fresh Tencent GeneralBasicOCR via existing authenticated WeChat fileID service",
+  "preflight": {
+    "passed": true,
+    "newCredentials": false,
+    "deployments": 0,
+    "permissionChanges": 0
+  },
+  "calls": {
+    "limit": 30,
+    "reserved": 23,
+    "confirmedOcrCalls": 23,
+    "cached": 23,
+    "successful": 23,
+    "failed": 0,
+    "cleanupPending": 0
+  },
+  "formalStorageUnchanged": true,
+  "cacheReuseVerification": {
+    "runs": [
+      {
+        "processed": 23,
+        "formalStorageUnchanged": true
+      },
+      {
+        "processed": 0,
+        "formalStorageUnchanged": true
+      }
+    ],
+    "zeroCallRerunVerified": true,
+    "reservationsAfterRerun": 23
+  },
+  "localParserSha256": "31b5bea49ced26a11ba1be5cd8fcb99cf6f97633231d5eb44ecb7d4fd9f700d2",
+  "findings": [
+    {
+      "imageId": "live-ocr-20261023:arrival-age",
+      "code": "127-3-5016",
+      "before": "站9小时邮政快递包裹",
+      "expected": "河工大洗浴中心北侧菜鸟驿站",
+      "actualAfterFix": "河工大洗浴中心北侧菜鸟驿站",
+      "cause": "Relative arrival-age text was parsed as a location; a trailing navigation arrow hid the actual station heading",
+      "action": "Minimal local parser fix and a privacy-filtered real OCR regression fixture; no extra API request",
+      "autoWriteBeforeFix": false
+    }
+  ],
+  "labels": {
+    "description": "10 existing manually annotated images plus 1 newly reviewed real OCR failure; code/station pairs only. Transport, field association, fusion and decision scenarios checked separately. Unlabeled images excluded from accuracy totals.",
+    "labeledImages": 11,
+    "expectedCodes": 21,
+    "rawCodePresent": 21,
+    "parsedCodeMatches": 21,
+    "codeFalsePositives": 0,
+    "knownStations": 12,
+    "correctKnownStations": 12,
+    "expectedUnknownStations": 9,
+    "correctAbstentions": 9,
+    "correctAssociations": 21
+  },
+  "scenarios": [
+    {
+      "name": "九图混合：多包裹、缺地点、跨图互补、重复与无关图",
+      "images": [
+        "real-ocr-20261021:1",
+        "real-ocr-20261021:2",
+        "real-ocr-20261021:3",
+        "real-ocr-20261021:5",
+        "real-ocr-20261021:6",
+        "cainiao-real-ocr-20261022:list",
+        "cainiao-real-ocr-20261022:detail",
+        "unrelated-project-asset-control",
+        "real-ocr-20261021:1"
+      ],
+      "expected": {
+        "added": 8,
+        "reviews": 9,
+        "duplicateImages": 1,
+        "fusedSources": 2,
+        "cachedReads": 8
+      },
+      "expectedPackages": [
+        {
+          "code": "1018-0079",
+          "station": "湘江集镇邮政"
+        },
+        {
+          "code": "186-220",
+          "station": "湘江集镇盖斯美水店"
+        },
+        {
+          "code": "186-139",
+          "station": "湘江集镇盖斯美水店"
+        },
+        {
+          "code": "1-1-6086",
+          "station": "遵义新蒲湘江集镇亿家华联超市店"
+        },
+        {
+          "code": "1-1-4956",
+          "station": "亚开好时嘉"
+        },
+        {
+          "code": "2-4-00827",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-11904",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-17817",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-22190",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-38389",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-43002",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-47696",
+          "station": "待确认地点"
+        },
+        {
+          "code": "603402",
+          "station": "一中看台"
+        },
+        {
+          "code": "B3-4-7401",
+          "station": "河南工业大学服务站"
+        },
+        {
+          "code": "B2-4-6423",
+          "station": "待确认地点"
+        },
+        {
+          "code": "73-3-4003",
+          "station": "河工大洗浴中心北侧菜鸟驿站"
+        },
+        {
+          "code": "313-3-3308",
+          "station": "河工大31号楼500以上在钟楼"
+        }
+      ],
+      "actual": {
+        "added": 8,
+        "updated": 0,
+        "reviews": 9,
+        "skipped": 4,
+        "duplicateImages": 1,
+        "fusedSources": 2,
+        "failures": 0,
+        "cachedReads": 8,
+        "unrelatedImages": 1,
+        "outcomes": [
+          {
+            "code": "1018-0079",
+            "station": "湘江集镇邮政",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          },
+          {
+            "code": "186-220",
+            "station": "湘江集镇盖斯美水店",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          },
+          {
+            "code": "186-139",
+            "station": "湘江集镇盖斯美水店",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          },
+          {
+            "code": "1-1-6086",
+            "station": "遵义新蒲湘江集镇亿家华联超市店",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          },
+          {
+            "code": "1-1-4956",
+            "station": "亚开好时嘉",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          },
+          {
+            "code": "2-4-00827",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          },
+          {
+            "code": "2-4-11904",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          },
+          {
+            "code": "2-4-17817",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          },
+          {
+            "code": "2-4-22190",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          },
+          {
+            "code": "2-4-38389",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          },
+          {
+            "code": "2-4-43002",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          },
+          {
+            "code": "2-4-47696",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          },
+          {
+            "code": "603402",
+            "station": "一中看台",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          },
+          {
+            "code": "B3-4-7401",
+            "station": "河南工业大学服务站",
+            "decision": "NEEDS_REVIEW",
+            "reason": "status_conflict"
+          },
+          {
+            "code": "B2-4-6423",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          },
+          {
+            "code": "73-3-4003",
+            "station": "河工大洗浴中心北侧菜鸟驿站",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          },
+          {
+            "code": "313-3-3308",
+            "station": "河工大31号楼500以上在钟楼",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          }
+        ],
+        "records": [
+          {
+            "code": "1018-0079",
+            "station": "湘江集镇邮政",
+            "taken": false
+          },
+          {
+            "code": "186-220",
+            "station": "湘江集镇盖斯美水店",
+            "taken": false
+          },
+          {
+            "code": "186-139",
+            "station": "湘江集镇盖斯美水店",
+            "taken": false
+          },
+          {
+            "code": "1-1-6086",
+            "station": "遵义新蒲湘江集镇亿家华联超市店",
+            "taken": false
+          },
+          {
+            "code": "1-1-4956",
+            "station": "亚开好时嘉",
+            "taken": false
+          },
+          {
+            "code": "603402",
+            "station": "一中看台",
+            "taken": false
+          },
+          {
+            "code": "73-3-4003",
+            "station": "河工大洗浴中心北侧菜鸟驿站",
+            "taken": false
+          },
+          {
+            "code": "313-3-3308",
+            "station": "河工大31号楼500以上在钟楼",
+            "taken": false
+          }
+        ],
+        "elapsedMsForCachedLocalPipeline": 7
+      },
+      "passed": true,
+      "mismatches": []
+    },
+    {
+      "name": "两图互补：补全地点但签收证据保留待确认",
+      "images": [
+        "real-ocr-20261021:5",
+        "real-ocr-20261021:6"
+      ],
+      "expected": {
+        "added": 0,
+        "reviews": 2,
+        "fusedSources": 1
+      },
+      "expectedPackages": [
+        {
+          "code": "B3-4-7401",
+          "station": "河南工业大学服务站"
+        },
+        {
+          "code": "B2-4-6423",
+          "station": "待确认地点"
+        }
+      ],
+      "actual": {
+        "added": 0,
+        "updated": 0,
+        "reviews": 2,
+        "skipped": 1,
+        "duplicateImages": 0,
+        "fusedSources": 1,
+        "failures": 0,
+        "cachedReads": 2,
+        "unrelatedImages": 0,
+        "outcomes": [
+          {
+            "code": "B3-4-7401",
+            "station": "河南工业大学服务站",
+            "decision": "NEEDS_REVIEW",
+            "reason": "status_conflict"
+          },
+          {
+            "code": "B2-4-6423",
+            "station": "待确认地点",
+            "decision": "NEEDS_REVIEW",
+            "reason": "missing_location"
+          }
+        ],
+        "records": [],
+        "elapsedMsForCachedLocalPipeline": 1
+      },
+      "passed": true,
+      "mismatches": []
+    },
+    {
+      "name": "同包裹列表和详情融合",
+      "images": [
+        "cainiao-real-ocr-20261022:list",
+        "cainiao-real-ocr-20261022:detail"
+      ],
+      "expected": {
+        "added": 2,
+        "reviews": 0,
+        "fusedSources": 1
+      },
+      "expectedPackages": [
+        {
+          "code": "73-3-4003",
+          "station": "河工大洗浴中心北侧菜鸟驿站"
+        },
+        {
+          "code": "313-3-3308",
+          "station": "河工大31号楼500以上在钟楼"
+        }
+      ],
+      "actual": {
+        "added": 2,
+        "updated": 0,
+        "reviews": 0,
+        "skipped": 1,
+        "duplicateImages": 0,
+        "fusedSources": 1,
+        "failures": 0,
+        "cachedReads": 2,
+        "unrelatedImages": 0,
+        "outcomes": [
+          {
+            "code": "73-3-4003",
+            "station": "河工大洗浴中心北侧菜鸟驿站",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          },
+          {
+            "code": "313-3-3308",
+            "station": "河工大31号楼500以上在钟楼",
+            "decision": "AUTO_IMPORT",
+            "reason": "reliable"
+          }
+        ],
+        "records": [
+          {
+            "code": "73-3-4003",
+            "station": "河工大洗浴中心北侧菜鸟驿站",
+            "taken": false
+          },
+          {
+            "code": "313-3-3308",
+            "station": "河工大31号楼500以上在钟楼",
+            "taken": false
+          }
+        ],
+        "elapsedMsForCachedLocalPipeline": 1
+      },
+      "passed": true,
+      "mismatches": []
+    },
+    {
+      "name": "已有待取重复跳过",
+      "images": [
+        "cainiao-real-ocr-20261022:list"
+      ],
+      "expected": {
+        "added": 0,
+        "reviews": 0,
+        "skipped": 2
+      },
+      "expectedPackages": [
+        {
+          "code": "73-3-4003",
+          "station": "河工大洗浴中心北侧菜鸟驿站"
+        },
+        {
+          "code": "313-3-3308",
+          "station": "河工大31号楼500以上在钟楼"
+        }
+      ],
+      "actual": {
+        "added": 0,
+        "updated": 0,
+        "reviews": 0,
+        "skipped": 2,
+        "duplicateImages": 0,
+        "fusedSources": 0,
+        "failures": 0,
+        "cachedReads": 1,
+        "unrelatedImages": 0,
+        "outcomes": [
+          {
+            "code": "73-3-4003",
+            "station": "河工大洗浴中心北侧菜鸟驿站",
+            "decision": "AUTO_SKIP",
+            "reason": "pending_duplicate"
+          },
+          {
+            "code": "313-3-3308",
+            "station": "河工大31号楼500以上在钟楼",
+            "decision": "AUTO_SKIP",
+            "reason": "pending_duplicate"
+          }
+        ],
+        "records": [
+          {
+            "code": "73-3-4003",
+            "station": "河工大洗浴中心北侧菜鸟驿站",
+            "taken": false
+          },
+          {
+            "code": "313-3-3308",
+            "station": "河工大31号楼500以上在钟楼",
+            "taken": false
+          }
+        ],
+        "elapsedMsForCachedLocalPipeline": 1
+      },
+      "passed": true,
+      "mismatches": []
+    },
+    {
+      "name": "历史同码不能无条件跳过",
+      "images": [
+        "real-ocr-20261021:3"
+      ],
+      "expected": {
+        "added": 0,
+        "reviews": 1
+      },
+      "expectedPackages": [
+        {
+          "code": "603402",
+          "station": "一中看台"
+        }
+      ],
+      "actual": {
+        "added": 0,
+        "updated": 0,
+        "reviews": 1,
+        "skipped": 0,
+        "duplicateImages": 0,
+        "fusedSources": 0,
+        "failures": 0,
+        "cachedReads": 1,
+        "unrelatedImages": 0,
+        "outcomes": [
+          {
+            "code": "603402",
+            "station": "一中看台",
+            "decision": "NEEDS_REVIEW",
+            "reason": "historical_code"
+          }
+        ],
+        "records": [
+          {
+            "code": "603402",
+            "station": "一中看台",
+            "taken": true
+          }
+        ],
+        "elapsedMsForCachedLocalPipeline": 1
+      },
+      "passed": true,
+      "mismatches": []
+    },
+    {
+      "name": "全部无可领取包裹，不生成记录",
+      "images": [
+        "real-ocr-20261021:4",
+        "android-cases-20261021:transit",
+        "unrelated-project-asset-control"
+      ],
+      "expected": {
+        "added": 0,
+        "reviews": 0,
+        "skipped": 3
+      },
+      "expectedPackages": [],
+      "actual": {
+        "added": 0,
+        "updated": 0,
+        "reviews": 0,
+        "skipped": 3,
+        "duplicateImages": 0,
+        "fusedSources": 0,
+        "failures": 0,
+        "cachedReads": 3,
+        "unrelatedImages": 3,
+        "outcomes": [],
+        "records": [],
+        "elapsedMsForCachedLocalPipeline": 1
+      },
+      "passed": true,
+      "mismatches": []
+    }
+  ],
+  "images": [
+    {
+      "id": "android-cases-20261021:transit",
+      "imageSha256": "32c5d202c05009be7ece9bf69781cc50ddf5139b83beb00b6c99ef428fa701f2",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 891,
+      "roundtripMs": 2635,
+      "totalMs": 4523,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "in_transit",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 0,
+        "skipped": 1
+      },
+      "outcomes": [],
+      "expected": [],
+      "mismatches": []
+    },
+    {
+      "id": "android-cases-20261021:jd",
+      "imageSha256": "728da1d2fcb3f1dcca3724c895ccd831b9266cb0765ef2c23c649683e1fa3878",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 364,
+      "roundtripMs": 2098,
+      "totalMs": 3345,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "B3-4-7401",
+          "station": "河南工业大学服务站"
+        }
+      ],
+      "final": {
+        "added": 0,
+        "review": 1,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "B3-4-7401",
+          "station": "河南工业大学服务站",
+          "decision": "NEEDS_REVIEW",
+          "reason": "signed"
+        }
+      ],
+      "expected": [
+        [
+          "B3-4-7401",
+          "河南工业大学服务站"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "cainiao-real-ocr-20261022:detail",
+      "imageSha256": "cabb2888f339c126a9edfdd5a9d7cbcfff1e0790b472d469a443f99b9a76d7b1",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 939,
+      "roundtripMs": 2597,
+      "totalMs": 3843,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "313-3-3308",
+          "station": "河工大31号楼500以上在钟楼"
+        }
+      ],
+      "final": {
+        "added": 1,
+        "review": 0,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "313-3-3308",
+          "station": "河工大31号楼500以上在钟楼",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        }
+      ],
+      "expected": [
+        [
+          "313-3-3308",
+          "河工大31号楼500以上在钟楼"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "cainiao-real-ocr-20261022:list",
+      "imageSha256": "4c02a4b2ab6392f4e2f0ab418544c97b4ac7ead20216c704fe2ceef451853ef2",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 768,
+      "roundtripMs": 2295,
+      "totalMs": 3570,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "73-3-4003",
+          "station": "河工大洗浴中心北侧菜鸟驿站"
+        },
+        {
+          "code": "313-3-3308",
+          "station": "河工大31号楼500以上在钟楼"
+        }
+      ],
+      "final": {
+        "added": 2,
+        "review": 0,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "73-3-4003",
+          "station": "河工大洗浴中心北侧菜鸟驿站",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        },
+        {
+          "code": "313-3-3308",
+          "station": "河工大31号楼500以上在钟楼",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        }
+      ],
+      "expected": [
+        [
+          "73-3-4003",
+          "河工大洗浴中心北侧菜鸟驿站"
+        ],
+        [
+          "313-3-3308",
+          "河工大31号楼500以上在钟楼"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "real-ocr-20261021:1",
+      "imageSha256": "de82791d6e3ff4bdaadbb48a0dba66bb78c2419f720ba18d05d79e1bc5abc7d0",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 365,
+      "roundtripMs": 1869,
+      "totalMs": 3060,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "1018-0079",
+          "station": "湘江集镇邮政"
+        },
+        {
+          "code": "186-220",
+          "station": "湘江集镇盖斯美水店"
+        },
+        {
+          "code": "186-139",
+          "station": "湘江集镇盖斯美水店"
+        },
+        {
+          "code": "1-1-6086",
+          "station": "遵义新蒲湘江集镇亿家华联超市店"
+        },
+        {
+          "code": "1-1-4956",
+          "station": "亚开好时嘉"
+        }
+      ],
+      "final": {
+        "added": 5,
+        "review": 0,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "1018-0079",
+          "station": "湘江集镇邮政",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        },
+        {
+          "code": "186-220",
+          "station": "湘江集镇盖斯美水店",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        },
+        {
+          "code": "186-139",
+          "station": "湘江集镇盖斯美水店",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        },
+        {
+          "code": "1-1-6086",
+          "station": "遵义新蒲湘江集镇亿家华联超市店",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        },
+        {
+          "code": "1-1-4956",
+          "station": "亚开好时嘉",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        }
+      ],
+      "expected": [
+        [
+          "1018-0079",
+          "湘江集镇邮政"
+        ],
+        [
+          "186-220",
+          "湘江集镇盖斯美水店"
+        ],
+        [
+          "186-139",
+          "湘江集镇盖斯美水店"
+        ],
+        [
+          "1-1-6086",
+          "遵义新蒲湘江集镇亿家华联超市店"
+        ],
+        [
+          "1-1-4956",
+          "亚开好时嘉"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "real-ocr-20261021:2",
+      "imageSha256": "1bbfc9703caa85dc6ad8db437a812204afb105ea00d89c098089dd69a19c882d",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 407,
+      "roundtripMs": 2135,
+      "totalMs": 4129,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "2-4-00827",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-11904",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-17817",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-22190",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-38389",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-43002",
+          "station": "待确认地点"
+        },
+        {
+          "code": "2-4-47696",
+          "station": "待确认地点"
+        }
+      ],
+      "final": {
+        "added": 0,
+        "review": 7,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "2-4-00827",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        },
+        {
+          "code": "2-4-11904",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        },
+        {
+          "code": "2-4-17817",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        },
+        {
+          "code": "2-4-22190",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        },
+        {
+          "code": "2-4-38389",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        },
+        {
+          "code": "2-4-43002",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        },
+        {
+          "code": "2-4-47696",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        }
+      ],
+      "expected": [
+        [
+          "2-4-00827",
+          "待确认地点"
+        ],
+        [
+          "2-4-11904",
+          "待确认地点"
+        ],
+        [
+          "2-4-17817",
+          "待确认地点"
+        ],
+        [
+          "2-4-22190",
+          "待确认地点"
+        ],
+        [
+          "2-4-38389",
+          "待确认地点"
+        ],
+        [
+          "2-4-43002",
+          "待确认地点"
+        ],
+        [
+          "2-4-47696",
+          "待确认地点"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "real-ocr-20261021:3",
+      "imageSha256": "f9328afd3e8e26ea133aa48a9d12449f2410de2d338804b1e64111900c2bda33",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 703,
+      "roundtripMs": 2653,
+      "totalMs": 3851,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "603402",
+          "station": "一中看台"
+        }
+      ],
+      "final": {
+        "added": 1,
+        "review": 0,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "603402",
+          "station": "一中看台",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        }
+      ],
+      "expected": [
+        [
+          "603402",
+          "一中看台"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "real-ocr-20261021:4",
+      "imageSha256": "ac7172c468e7ff47e387059b4dc2a20f6e138a778169fc3b52e3eaaf72d96536",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 663,
+      "roundtripMs": 2085,
+      "totalMs": 3357,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "in_transit",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 0,
+        "skipped": 1
+      },
+      "outcomes": [],
+      "expected": [],
+      "mismatches": []
+    },
+    {
+      "id": "real-ocr-20261021:5",
+      "imageSha256": "3e40174b4cb6bc8a4330e6e5eed81c9471bd65b5924d583b3f41edb0751a0d1c",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 694,
+      "roundtripMs": 2106,
+      "totalMs": 3152,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "B3-4-7401",
+          "station": "待确认地点"
+        },
+        {
+          "code": "B2-4-6423",
+          "station": "待确认地点"
+        }
+      ],
+      "final": {
+        "added": 0,
+        "review": 2,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "B3-4-7401",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        },
+        {
+          "code": "B2-4-6423",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_location"
+        }
+      ],
+      "expected": [
+        [
+          "B3-4-7401",
+          "待确认地点"
+        ],
+        [
+          "B2-4-6423",
+          "待确认地点"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "real-ocr-20261021:6",
+      "imageSha256": "27eedc3f491b58dec31c7c2d5751c0d76215da3eef0afe5a119ebb78a434dd4a",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 507,
+      "roundtripMs": 2023,
+      "totalMs": 3350,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "B3-4-7401",
+          "station": "河南工业大学服务站"
+        }
+      ],
+      "final": {
+        "added": 0,
+        "review": 1,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "B3-4-7401",
+          "station": "河南工业大学服务站",
+          "decision": "NEEDS_REVIEW",
+          "reason": "signed"
+        }
+      ],
+      "expected": [
+        [
+          "B3-4-7401",
+          "河南工业大学服务站"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "live-ocr-20261023:arrival-age",
+      "imageSha256": "1b165f30d5cf2d1493dda9b0b4e888de63e44217180120bcbaeef9c4be5044e9",
+      "labeled": true,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 413,
+      "roundtripMs": 2004,
+      "totalMs": 3130,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "127-3-5016",
+          "station": "河工大洗浴中心北侧菜鸟驿站"
+        }
+      ],
+      "final": {
+        "added": 0,
+        "review": 1,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "127-3-5016",
+          "station": "河工大洗浴中心北侧菜鸟驿站",
+          "decision": "NEEDS_REVIEW",
+          "reason": "signed"
+        }
+      ],
+      "expected": [
+        [
+          "127-3-5016",
+          "河工大洗浴中心北侧菜鸟驿站"
+        ]
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "unlabeled-93141d4eceb1",
+      "imageSha256": "93141d4eceb1c142c70047a2b809c0eff11c0f60df23b7d6c7766e1556052434",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 581,
+      "roundtripMs": 2075,
+      "totalMs": 3417,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "no_code",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 1,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_code"
+        }
+      ]
+    },
+    {
+      "id": "unlabeled-2d202ebbd02a",
+      "imageSha256": "2d202ebbd02a119c5f42407a8b5028fe89c981e43773c46a5ac89cdcbdfc35f9",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 889,
+      "roundtripMs": 2284,
+      "totalMs": 3614,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "111-1-4002",
+          "station": "河工大洗浴中心北侧菜鸟驿站"
+        }
+      ],
+      "final": {
+        "added": 1,
+        "review": 0,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "111-1-4002",
+          "station": "河工大洗浴中心北侧菜鸟驿站",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        }
+      ]
+    },
+    {
+      "id": "unlabeled-3e4d26668a0b",
+      "imageSha256": "3e4d26668a0b65a6bf44c0825a7b80f9ce1f3314529fa02b5439918606bf59af",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 716,
+      "roundtripMs": 2268,
+      "totalMs": 3406,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "87-6-4601",
+          "station": "河工大31号楼500以上在钟楼"
+        }
+      ],
+      "final": {
+        "added": 0,
+        "review": 1,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "87-6-4601",
+          "station": "河工大31号楼500以上在钟楼",
+          "decision": "NEEDS_REVIEW",
+          "reason": "status_conflict"
+        }
+      ]
+    },
+    {
+      "id": "unlabeled-60f09afeb238",
+      "imageSha256": "60f09afeb238e773b141c8c57a1526b04a06fb10b17de4918494c87be0a2f056",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 622,
+      "roundtripMs": 2282,
+      "totalMs": 3483,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "in_transit",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 0,
+        "skipped": 1
+      },
+      "outcomes": []
+    },
+    {
+      "id": "unlabeled-7805753498a4",
+      "imageSha256": "7805753498a46974bb98b04e4c8cc3bd59c9f393a4253c4f8a8a05905796df9d",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 730,
+      "roundtripMs": 2253,
+      "totalMs": 3392,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "in_transit",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 0,
+        "skipped": 1
+      },
+      "outcomes": []
+    },
+    {
+      "id": "unlabeled-5bdbb9bdcae0",
+      "imageSha256": "5bdbb9bdcae0d46fedec15f34fd2e01ac25c5852b42bbe6b430cbd92d0c9bc0d",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 484,
+      "roundtripMs": 1849,
+      "totalMs": 3043,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "in_transit",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 0,
+        "skipped": 1
+      },
+      "outcomes": []
+    },
+    {
+      "id": "unlabeled-bd9180f38dd4",
+      "imageSha256": "bd9180f38dd4db431a536784d44002c4b94dc1ccd9d90997f2a1ea3f47166ee9",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 573,
+      "roundtripMs": 2050,
+      "totalMs": 3223,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "arrived_no_code",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 1,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "missing_code"
+        }
+      ]
+    },
+    {
+      "id": "unlabeled-045a6be6a1ef",
+      "imageSha256": "045a6be6a1efc38a0ac5780812894cc68ba2001d3ea8bc728ff5764c34fd57d1",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 757,
+      "roundtripMs": 2242,
+      "totalMs": 3537,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "in_transit",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 0,
+        "skipped": 1
+      },
+      "outcomes": []
+    },
+    {
+      "id": "unlabeled-1ed74babb71c",
+      "imageSha256": "1ed74babb71c1b0c5070fc5a74bdb75c9fe2637e0cfa38c55c1b87d754a6483f",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 648,
+      "roundtripMs": 2139,
+      "totalMs": 3385,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "73-3-4003",
+          "station": "待确认地点"
+        }
+      ],
+      "final": {
+        "added": 0,
+        "review": 1,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "73-3-4003",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "record_conflict"
+        }
+      ]
+    },
+    {
+      "id": "unlabeled-1b6a395f7338",
+      "imageSha256": "1b6a395f7338bd7f1aed61162f2a6897a01f18d6d6eb7c7eca380363adf0cd1b",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 602,
+      "roundtripMs": 2057,
+      "totalMs": 3231,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "117-5-5028",
+          "station": "河工大洗浴中心北侧菜鸟驿站"
+        }
+      ],
+      "final": {
+        "added": 1,
+        "review": 0,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "117-5-5028",
+          "station": "河工大洗浴中心北侧菜鸟驿站",
+          "decision": "AUTO_IMPORT",
+          "reason": "reliable"
+        }
+      ]
+    },
+    {
+      "id": "unlabeled-f6f66023d04a",
+      "imageSha256": "f6f66023d04a6b3fc09f7724c799bc7fa841c87198989f70e9ec3faf81643f5b",
+      "labeled": false,
+      "control": false,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 654,
+      "roundtripMs": 2058,
+      "totalMs": 3065,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "code_found",
+      "parsed": [
+        {
+          "code": "313-3-3308",
+          "station": "待确认地点"
+        }
+      ],
+      "final": {
+        "added": 0,
+        "review": 1,
+        "skipped": 0
+      },
+      "outcomes": [
+        {
+          "code": "313-3-3308",
+          "station": "待确认地点",
+          "decision": "NEEDS_REVIEW",
+          "reason": "old_notice"
+        }
+      ]
+    },
+    {
+      "id": "unrelated-project-asset-control",
+      "imageSha256": "07cf1fbf5bab7388df174544c5ec3ec19bd018ddb56484c101a13ffd36d14a09",
+      "labeled": true,
+      "control": true,
+      "ocrSucceeded": true,
+      "error": null,
+      "ocrMs": 241,
+      "roundtripMs": 2636,
+      "totalMs": 3638,
+      "serverDeleted": true,
+      "cleanupPending": false,
+      "parseStatus": "no_code",
+      "parsed": [],
+      "final": {
+        "added": 0,
+        "review": 0,
+        "skipped": 1
+      },
+      "outcomes": [],
+      "expected": [],
+      "mismatches": []
+    }
+  ],
+  "limits": [
+    "23-image local sample only; not a population accuracy estimate",
+    "No ground truth for all carriers, full waybills, dates or logistics status; no accuracy claim for those fields",
+    "Cached local batch elapsed time excludes OCR; actual per-image API and full fileID timings are reported separately",
+    "Developer Tools session only; not Android physical-device evidence"
+  ]
+}

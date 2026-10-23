@@ -1,0 +1,55 @@
+[
+  {
+    "case": "arrival-age",
+    "source": "Fresh Tencent GeneralBasicOCR via existing fileID, 2026-10-23. Only pickup code, station heading, relative-age row and their original boxes retained. Manually reviewed station heading.",
+    "imageSha256": "1b165f30d5cf2d1493dda9b0b4e888de63e44217180120bcbaeef9c4be5044e9",
+    "result": {
+      "ok": true,
+      "mock": false,
+      "lines": [
+        "待取件1",
+        "河工大洗浴中心北侧菜鸟驿站>",
+        "127-3-5016",
+        "已到站9小时邮政快递包裹"
+      ],
+      "boxes": [
+        {
+          "x": 80,
+          "y": 442,
+          "width": 159,
+          "height": 42
+        },
+        {
+          "x": 116,
+          "y": 662,
+          "width": 588,
+          "height": 45
+        },
+        {
+          "x": 381,
+          "y": 856,
+          "width": 300,
+          "height": 55
+        },
+        {
+          "x": 384,
+          "y": 940,
+          "width": 491,
+          "height": 42
+        }
+      ],
+      "timings": {
+        "ocrMs": 413
+      }
+    },
+    "expected": [
+      [
+        "127-3-5016",
+        "河工大洗浴中心北侧菜鸟驿站"
+      ]
+    ],
+    "previousFailure": {
+      "station": "站9小时邮政快递包裹"
+    }
+  }
+]

@@ -10,6 +10,7 @@ function clean(text) {
 }
 function validPlace(s) {
   return s.length >= 2 && s.length <= 100 && /[\u4e00-\u9fff]/.test(s) && !noise.test(s) &&
+    !/^站?\d+\s*(?:小时|分钟|天)/.test(s) &&
     !/^(?:收|寄)?[\u4e00-\u9fff]+(?:省|市|县|区)$/.test(s);
 }
 function boxAt(boxes, i) {
@@ -125,6 +126,7 @@ function parse(lines, sourceIndex = 0, boxes = []) {
     let name = explicit ? explicit[1].replace(/[，,。；;].*$/, "").replace(/(?:请|凭).*$/, "").trim() : text[i].replace(/^支持退换货\s*/, "");
     const header = cainiao && /[>›〉]\s*绿色公益/.test(name);
     if (header) name = stationHeader(name);
+    name = name.replace(/((?:驿站|服务站|快递柜))[>›〉]\s*$/, '$1');
     const detailPlace = cainiao && text.includes("添加包裹") && /[栋楼]|\d+号|小区/.test(name) && codes.some(c => {
       const a = boxAt(boxes, c.i), b = boxAt(boxes, i);
       return a && b && b.y >= a.y + a.height && b.y - a.y - a.height <= a.height * 2 &&
