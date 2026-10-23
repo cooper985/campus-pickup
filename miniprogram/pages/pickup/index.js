@@ -12,7 +12,7 @@ const stationDrag = require("../../services/station-drag");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
@@ -31,36 +31,47 @@ Page({
     this.setData({ storageError: loaded.error, storageBlocked: loaded.blocked });
     this.updateRecords(loaded.records);
   },
-  async pasteNotification() {
+  openNotification() {
     if (this.data.loading || this.data.choosing || this.data.importing) return;
-    const epoch = this.importEpoch;
+    this.setData({ notificationOpen: true, error: "", errorScope: "import", editing: null });
+  },
+  notificationInput(e) { this.setData({ notificationText: e.detail.value, error: "" }); },
+  clearNotificationText() {
+    if (this.data.choosing || this.data.importing) return;
+    this.setDrafts(this.data.drafts.filter(r => r.sourceType !== "text"), { notificationText: "", error: "" });
+  },
+  cancelNotification() {
+    if (this.data.choosing || this.data.importing) return;
+    this.importEpoch++;
+    this.setDrafts(this.data.drafts.filter(r => r.sourceType !== "text"), { notificationOpen: false, notificationText: "",
+      error: "", completed: this.data.results.length > 0 });
+  },
+  async recognizeNotification() {
+    if (!this.data.notificationOpen || this.data.loading || this.data.choosing || this.data.importing) return;
+    const text = this.data.notificationText.trim(), epoch = this.importEpoch;
+    if (!text) { this.setData({ error: "请先粘贴通知", errorScope: "import" }); return; }
+    if (text.length > 20000) { this.setData({ error: "通知过长，请保留需要识别的内容", errorScope: "import" }); return; }
     this.setData({ choosing: true, error: "", errorScope: "import" });
     try {
-      if (this.data.drafts.length) {
-        const answer = await wx.showModal({ title: "替换待导入内容？", content: "当前尚未导入的结果会被替换。", confirmText: "继续粘贴" });
+      if (this.data.drafts.some(r => r.sourceType !== "text")) {
+        const answer = await wx.showModal({ title: "替换待导入结果？", content: "本次通知的识别结果将替换当前草稿。已保存的快递不受影响。", confirmText: "识别通知" });
         if (!answer.confirm || this.unloaded || epoch !== this.importEpoch) return;
       }
-      const result = await wx.getClipboardData();
-      if (this.unloaded || epoch !== this.importEpoch) return;
-      if (typeof result.data !== "string" || !result.data.trim()) {
-        this.setData({ errorScope: "import", error: "剪贴板没有文字，请先复制取件通知。" }); return;
-      }
-      if (result.data.length > 20000) { this.setData({ errorScope: "import", error: "文字过长，请只复制需要导入的取件通知。" }); return; }
-      const parsed = notifications.parse(result.data);
+      const parsed = notifications.parse(text);
       this.recognitionRun = null;
-      const drafts = parsed.map((r, i) => ({ ...r, id: `text-${Date.now()}-${i}`, taken: false }));
+      const batchId = ++this.taskSequence;
+      const drafts = parsed.map((r, i) => ({ ...r, id: `text-${Date.now()}-${batchId}-${i}`, taken: false }));
       this.setDrafts(drafts, { images: [], results: [], mock: false, completed: true, editing: null,
-        errorScope: "import", error: parsed.length ? "" : "未找到取件码，可选择手动添加。" });
-    } catch (_) { if (!this.unloaded && epoch === this.importEpoch) this.setData({ errorScope: "import", error: "未能读取剪贴板，请重试或检查微信的剪贴板权限。" }); }
-    finally { if (!this.unloaded && epoch === this.importEpoch) this.setData({ choosing: false }); }
+        notificationOpen: !parsed.length, errorScope: "import", error: parsed.length ? "" : "未找到取件码" });
+    } catch (_) {
+      if (!this.unloaded && epoch === this.importEpoch) this.setData({ errorScope: "import", error: "无法识别，请修改文字后重试" });
+    } finally { if (!this.unloaded && epoch === this.importEpoch) this.setData({ choosing: false }); }
+  },
+  showImportPrivacy() {
+    wx.showModal({ title: "隐私说明", content: "截图发送腾讯云识别；通知文字仅在本机解析，不上传。取件记录只保存在本机，清理小程序数据会丢失记录。", showCancel: false, confirmText: "知道了" });
   },
   setDrafts(drafts, extra = {}) {
     this.setData({ drafts, draftGroups: parser.group(drafts).map(g => ({ ...g, validCount: g.items.filter(r => validCode(r.code)).length })), validDraftCount: drafts.filter(r => validCode(r.code)).length, ...extra });
-  },
-  addManualDraft() {
-    if (this.data.importing || this.data.choosing) return;
-    this.setData({ editing: { id: `manual-${Date.now()}-${++this.taskSequence}`, code: "", station: parser.UNKNOWN,
-      carrier: "", sourceType: "manual", sourceIndex: -1, manual: true }, editError: "", error: "" });
   },
   removeDraft(e) {
     if (this.data.importing) return;
@@ -72,7 +83,7 @@ Page({
     this.recognitionRun = null;
     this.cancelRecognition();
     this.setDrafts([], { images: [], results: [], loading: false, choosing: false, completed: false,
-      mock: false, editing: null, editError: "", error: "", progress: "" });
+      mock: false, editing: null, editError: "", notificationOpen: false, notificationText: "", error: "", progress: "" });
   },
   clearImportResults() {
     if (this.data.importing) return;
@@ -281,7 +292,7 @@ Page({
       if (files.some(f => f.size > MAX_BYTES)) throw new Error("有图片超过 5 MB，请先裁剪或压缩。");
       selected = true;
       this.imagesSelectedAt = Date.now();
-      this.setData({ images: files.slice(0, 9).map(f => f.path), results: [], drafts: [], draftGroups: [], validDraftCount: 0, completed: false, editing: null });
+      this.setData({ images: files.slice(0, 9).map(f => f.path), results: [], drafts: [], draftGroups: [], validDraftCount: 0, notificationOpen: false, notificationText: "", completed: false, editing: null });
     } catch (err) {
       if (!this.unloaded && epoch === this.importEpoch && !/cancel/i.test(err && err.errMsg || "")) this.setData({ errorScope: "import", error: err.message || "无法打开相册，请重试。" });
     } finally { if (!this.unloaded && epoch === this.importEpoch) this.setData({ choosing: false }); }
@@ -322,6 +333,7 @@ Page({
   cancelRecognition() { this.imageJobs.forEach(job => job.cancel()); },
   onUnload() {
     this.unloaded = true;
+    this.data.notificationText = "";
     this.recognitionRun = null;
     this.cancelImportReview();
     this.cancelRecognition();
@@ -467,6 +479,7 @@ Page({
       const drafts = this.data.drafts.filter(r => !batchDrafts.some(imported => imported.id === r.id));
       this.setDrafts(drafts, {
         ...(!this.data.loading && !drafts.length ? { images: [], results: [], completed: false } : {}),
+        ...(!drafts.length ? { notificationOpen: false, notificationText: "" } : {}),
         error: "", errorScope: "", activeTab: "home",
         collapsedStations: this.data.collapsedStations.filter(station => !importingDrafts.some(r => r.station === station)) });
       this.showImportFeedback(`已新增 ${added} 件，更新 ${updated} 件，跳过重复 ${skipped} 件`);
@@ -520,6 +533,7 @@ Page({
     const activeTab = e.currentTarget.dataset.tab;
     if (!["home", "import", "history"].includes(activeTab) || this.data.importing || this.data.deleting || this.data.stationBusy) return;
     this.closeDelete();
+    if (this.data.notificationOpen && activeTab !== "import") this.cancelNotification();
     this.cancelStationDrag();
     clearTimeout(this.feedbackTimer);
     this.setData({ activeTab, editing: null, editError: "", error: "", errorScope: "", importFeedback: "" });
@@ -701,11 +715,7 @@ Page({
     }
     const changes = { station: edit.station.trim(), code: edit.code.trim(), carrier: (edit.carrier || "").trim() };
     const original = [...this.data.records, ...this.data.drafts].find(r => r.id === edit.id);
-    if (!original && !edit.manual) return;
-    if (edit.manual) {
-      const { manual, ...draft } = edit;
-      this.setDrafts([...this.data.drafts, { ...draft, ...changes, needsReview: changes.station === parser.UNKNOWN }], { editing: null, error: "" }); return;
-    }
+    if (!original) return;
     changes.confirmedFields = [...new Set([...(original.confirmedFields || []), ...Object.keys(changes).filter(key =>
       changes[key] !== (original[key] || "") || (changes[key] && changes[key] !== parser.UNKNOWN))])];
     if (this.data.drafts.some(r => r.id === edit.id)) {

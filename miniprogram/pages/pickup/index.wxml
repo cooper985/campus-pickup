@@ -5,65 +5,72 @@
   <view wx:if="{{stationError}}" class="error" role="alert">{{stationError}}</view>
   <view wx:if="{{activeTab === 'home'}}">
     <view wx:if="{{importFeedback}}" class="import-feedback" role="status">{{importFeedback}}</view>
-    <view class="page-header"><view><view class="eyebrow">校园取件助手</view><view class="heading">待取件 <text class="count">{{remaining}}</text> 件</view><view class="hint">{{locationCount}} 个取件地点{{unknownCount ? ' · ' + unknownCount + ' 件地点待确认' : ' · 按驿站找码'}}</view></view><button class="ui-button primary import-entry" data-tab="import" catchtap="switchTab">＋ 导入快递</button></view>
-    <view class="station-tools"><text wx:if="{{locationCount > 1}}" class="hint drag-hint">长按 ⠿ 拖动排序</text><button class="ui-button secondary manage-stations" catchtap="openStations">⚙ 管理驿站</button></view>
-    <view wx:if="{{!remaining}}" class="empty"><view class="empty-symbol">✓</view><view class="section-title">暂无待取快递</view><view class="hint">有新的取件截图时，导入就能整理好。</view><button class="ui-button primary" data-tab="import" catchtap="switchTab">导入快递</button></view>
+    <view class="page-header"><view><view class="heading">待取件 <text class="count">{{remaining}}</text> 件</view><view class="hint">{{locationCount}} 个驿站{{unknownCount ? ' · ' + unknownCount + ' 件地点待确认' : ''}}</view></view><button class="ui-button primary import-entry" data-tab="import" catchtap="switchTab">＋ 导入快递</button></view>
+    <view class="station-tools"><button size="mini" class="ui-button secondary manage-stations" catchtap="openStations">⚙ 管理驿站</button></view>
+    <view wx:if="{{!remaining}}" class="empty">暂无待取快递</view>
     <view wx:for="{{pendingGroups}}" wx:key="id" wx:for-item="group" class="card station-card home-station {{group.id !== '__unknown' ? 'sortable-station' : ''}} {{dragId === group.id ? 'station-lifted' : ''}} {{dragId ? 'station-sorting' : ''}}" style="{{group.dragStyle}}">
       <view class="station-header" data-station="{{group.station}}" catchtap="toggleGroup" role="button" aria-label="{{group.collapsed ? '展开' : '收起'}}{{group.station}}"><view wx:if="{{group.id !== '__unknown' && locationCount > 1}}" class="drag-handle" data-id="{{group.id}}" bindtouchstart="stationTouchStart" bindtouchmove="moveStationDrag" bindtouchend="finishStationDrag" bindtouchcancel="cancelStationDrag" catchlongpress="beginStationDrag" catchtap="noop" role="button" aria-label="长按拖动{{group.station}}排序">⠿</view><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.items.length}} 件　{{group.collapsed ? '＋' : '−'}}</text></view>
-      <view class="batch-row"><button size="mini" class="ui-button secondary batch-take-button" data-id="{{group.id}}" catchtap="takeStation" disabled="{{importing || deleting || storageBlocked || dragId}}">✓ 全部标记已取</button></view>
+
       <view wx:if="{{!group.collapsed}}">
         <view wx:for="{{group.items}}" wx:key="id" class="parcel-row">
           <view class="parcel-main"><text class="pickup-code copy-code" data-id="{{item.id}}" catchtap="copyCode" role="button" aria-label="复制取件码 {{item.code}}">{{item.code}}</text><view class="record-meta"><text wx:if="{{item.carrier}}">{{item.carrier}} · </text><text class="text-action" data-id="{{item.id}}" catchtap="editRecord" role="button">{{group.station === '待确认地点' ? '补充地点' : '修改'}}</text></view></view>
           <button size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} take-button" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked || dragId}}">我已取件</button>
         </view>
       </view>
+      <view class="batch-row"><button size="mini" class="ui-button secondary batch-take-button" data-id="{{group.id}}" catchtap="takeStation" disabled="{{importing || deleting || storageBlocked || dragId}}">✓ 全部标记已取</button></view>
     </view>
   </view>
 
   <view wx:if="{{activeTab === 'import'}}">
-    <view class="heading">导入快递</view><view class="subtitle">选择截图或粘贴通知，核对后保存</view>
-    <button class="ui-button {{(loading || choosing || importing) ? 'ui-disabled' : ''}} primary choose-button" bindtap="chooseImage" disabled="{{loading || choosing || importing}}" loading="{{choosing}}">{{images.length ? '重新选择截图' : '从相册选择截图'}}</button>
-    <view class="hint centered">一次最多 9 张 · 单张不超过 5 MB · 选择后自动识别</view>
-    <button class="ui-button secondary" bindtap="pasteNotification" disabled="{{loading || choosing || importing}}">粘贴识别通知</button>
-    <view class="hint centered">仅点击后读取剪贴板 · 文字在本机解析</view>
-    <button class="ui-button text-button manual-entry" bindtap="addManualDraft" disabled="{{choosing || importing}}">＋ 手动添加</button>
-    <view wx:if="{{loading}}" class="progress-line"><text>{{progress}}</text><button size="mini" class="ui-button text-button" bindtap="cancelRecognition">停止本批</button></view>
-    <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
-    <view wx:if="{{drafts.length}}" class="draft-section">
-      <view class="section-heading">核对结果 <text class="hint inline">{{validDraftCount}} 件有效待导入</text></view>
-      <view wx:if="{{mock}}" class="notice">模拟示例，与截图内容无关。</view>
-      <view wx:for="{{draftGroups}}" wx:key="station" wx:for-item="group" class="card station-card">
-        <view class="station-header"><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.validCount}} 件有效</text></view>
-        <view wx:for="{{group.items}}" wx:key="id" class="parcel-row">
-          <view class="parcel-main"><text class="pickup-code" user-select="{{true}}">{{item.code || '号码缺失'}}</text><view class="hint">{{item.sourceType === 'manual' ? '手动添加' : item.sourceType === 'text' ? '通知文本' : '截图 ' + (item.sourceIndex + 1)}}{{item.carrier ? ' · ' + item.carrier : ''}}{{item.needsReview ? ' · 地点待确认' : ''}}</view></view>
-          <view class="draft-actions"><button size="mini" class="ui-button {{(importing) ? 'ui-disabled' : ''}} secondary" data-id="{{item.id}}" bindtap="editRecord" disabled="{{importing}}">修改</button><button size="mini" class="ui-button text-button" data-id="{{item.id}}" bindtap="removeDraft" disabled="{{importing}}">移除</button></view>
+    <view class="heading">{{notificationOpen ? '粘贴通知' : '导入快递'}}</view>
+    <view wx:if="{{notificationOpen}}" class="notification-composer">
+      <textarea class="notification-input" value="{{notificationText}}" bindinput="notificationInput" placeholder="请粘贴完整的快递取件通知" maxlength="20000" disabled="{{choosing || importing}}" adjust-position="{{true}}" aria-label="完整快递取件通知" />
+      <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
+      <button wx:if="{{notificationText}}" class="ui-button text-button clear-text" bindtap="clearNotificationText" disabled="{{choosing || importing}}">清空文字</button>
+      <button class="ui-button primary full-button" bindtap="recognizeNotification" disabled="{{!notificationText || choosing || importing}}" loading="{{choosing}}">识别通知</button>
+      <button class="ui-button text-button" bindtap="cancelNotification" disabled="{{choosing || importing}}">取消</button>
+    </view>
+    <block wx:else>
+      <view class="import-sources">
+        <button class="ui-button primary import-source" bindtap="chooseImage" disabled="{{loading || choosing || importing}}" loading="{{choosing}}"><text class="source-symbol">▧</text><text>{{images.length ? '重新选择截图' : '从相册选择截图'}}</text></button>
+        <button class="ui-button secondary import-source" bindtap="openNotification" disabled="{{loading || choosing || importing}}"><text class="source-symbol">≡</text><text>粘贴通知</text></button>
+      </view>
+      <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
+      <view wx:if="{{loading}}" class="progress-line"><text>{{progress}}</text><button size="mini" class="ui-button text-button" bindtap="cancelRecognition">停止本批</button></view>
+      <view wx:if="{{drafts.length}}" class="draft-section">
+        <view class="result-heading"><view class="section-heading">核对结果 <text class="hint inline">{{validDraftCount}} 件</text></view><button wx:if="{{notificationText}}" size="mini" class="ui-button text-button" bindtap="openNotification" disabled="{{importing}}">修改文字</button></view>
+        <view wx:if="{{mock}}" class="notice">模拟示例，与截图内容无关。</view>
+        <view wx:for="{{draftGroups}}" wx:key="station" wx:for-item="group" class="card station-card">
+          <view class="station-header"><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.validCount}} 件</text></view>
+          <view wx:for="{{group.items}}" wx:key="id" class="parcel-row">
+            <view class="parcel-main"><text class="pickup-code" user-select="{{true}}">{{item.code || '号码缺失'}}</text><view wx:if="{{item.carrier}}" class="record-meta">{{item.carrier}}</view></view>
+            <view class="draft-actions"><button size="mini" class="ui-button secondary" data-id="{{item.id}}" bindtap="editRecord" disabled="{{importing}}">修改</button><button size="mini" class="ui-button text-button" data-id="{{item.id}}" bindtap="removeDraft" disabled="{{importing}}">移除</button></view>
+          </view>
         </view>
       </view>
-      <view wx:if="{{loading}}" class="hint">已完成的快递可先导入，其余图片继续识别。</view>
-    </view>
-    <view class="import-result-actions">
-      <button wx:if="{{drafts.length || results.length || loading || completed}}" class="ui-button text-button" bindtap="clearImportResults" disabled="{{importing}}">清空本次结果</button>
-      <button class="ui-button {{(!validDraftCount || importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} primary" bindtap="confirmImport" disabled="{{!validDraftCount || importing || deleting || storageBlocked}}" loading="{{importing}}">确认导入 {{validDraftCount}} 件</button>
-      <button class="ui-button text-button" bindtap="cancelImport" disabled="{{importing}}">取消本次导入</button>
-    </view>
-    <view wx:if="{{results.length}}" class="section-heading small-heading">截图处理 · {{images.length}} 张</view>
-    <view wx:for="{{results}}" wx:key="taskId" class="card image-result">
-      <image class="result-thumbnail" src="{{images[item.index - 1]}}" mode="aspectFill" data-index="{{item.index - 1}}" bindtap="previewImage" />
-      <view class="result-copy"><view class="result-label">截图 {{item.index}}</view><view class="result-status {{item.count ? 'success' : ''}}">{{item.error || item.message}}</view><view wx:if="{{item.retained}}" class="hint">上次成功结果已保留</view><view wx:if="{{item.uncertainCount}}" class="hint">有内容待核对，请点缩略图查看。</view></view>
-      <button wx:if="{{item.state === 'queued' || item.state === 'running'}}" size="mini" class="ui-button text-button" data-task-id="{{item.taskId}}" bindtap="skipImage">跳过</button>
-      <button wx:if="{{item.retryable}}" size="mini" class="ui-button {{(importing) ? 'ui-disabled' : ''}} secondary" data-task-id="{{item.taskId}}" bindtap="retryImage" disabled="{{importing}}">重试</button>
-    </view>
-    <view class="privacy">截图将交由腾讯云识别，请核对后导入。取件记录仅保存在本机，清理小程序数据会丢失记录。</view>
+      <view wx:if="{{drafts.length || results.length || loading || completed}}" class="import-result-actions">
+        <button class="ui-button {{(!validDraftCount || importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} primary full-button" bindtap="confirmImport" disabled="{{!validDraftCount || importing || deleting || storageBlocked}}" loading="{{importing}}">确认导入 {{validDraftCount}} 件</button>
+        <view class="session-actions"><button class="ui-button text-button" bindtap="clearImportResults" disabled="{{importing}}">清空本次结果</button><button class="ui-button text-button" bindtap="cancelImport" disabled="{{importing}}">取消本次导入</button></view>
+      </view>
+      <view wx:if="{{results.length}}" class="section-heading small-heading">截图 · {{images.length}} 张</view>
+      <view wx:for="{{results}}" wx:key="taskId" class="card image-result">
+        <image class="result-thumbnail" src="{{images[item.index - 1]}}" mode="aspectFill" data-index="{{item.index - 1}}" bindtap="previewImage" />
+        <view class="result-copy"><view class="result-label">截图 {{item.index}}</view><view class="result-status {{item.count ? 'success' : ''}}">{{item.error || item.message}}</view><view wx:if="{{item.retained}}" class="hint">上次成功结果已保留</view><view wx:if="{{item.uncertainCount}}" class="hint">部分内容待核对</view></view>
+        <button wx:if="{{item.state === 'queued' || item.state === 'running'}}" size="mini" class="ui-button text-button" data-task-id="{{item.taskId}}" bindtap="skipImage">跳过</button>
+        <button wx:if="{{item.retryable}}" size="mini" class="ui-button secondary" data-task-id="{{item.taskId}}" bindtap="retryImage" disabled="{{importing}}">重试</button>
+      </view>
+    </block>
+    <button class="ui-button text-button privacy-link" bindtap="showImportPrivacy">隐私说明</button>
   </view>
 
   <view wx:if="{{activeTab === 'history'}}">
-    <view class="heading">已取件记录</view><view class="subtitle">{{history.length}} 件已领取 · 左滑记录可删除</view>
-    <view wx:if="{{!history.length}}" class="empty"><view class="empty-symbol">✓</view><view class="section-title">暂无已取件记录</view><view class="hint">领取后的快递会保存在这里。</view></view>
+    <view class="page-header"><view class="heading">已取件</view><text class="station-count">{{history.length}} 件</text></view>
+    <view wx:if="{{!history.length}}" class="empty">暂无已取件记录</view>
     <view class="card history-card" wx:if="{{history.length}}">
       <view wx:for="{{history}}" wx:key="id" class="swipe-shell" data-id="{{item.id}}" bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel" catchtap="recordTap">
         <view wx:if="{{openDeleteId === item.id}}" class="delete-button" role="button" aria-label="删除已取件记录" data-id="{{item.id}}" catchtap="deleteRecord"><text class="delete-label">删除</text></view>
         <view class="swipe-content {{openDeleteId === item.id ? 'swipe-open' : ''}}">
-          <view class="history-top"><text class="pickup-code" user-select="{{true}}">{{item.code}}</text><text class="taken-badge">已取件</text></view>
+          <view class="history-top"><text class="pickup-code" user-select="{{true}}">{{item.code}}</text></view>
           <view class="history-station">{{item.station}}</view>
           <view class="history-bottom"><text class="hint">{{item.carrier}}</text><button size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} secondary" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked}}">恢复待取</button></view>
         </view>
@@ -73,28 +80,26 @@
 
   <view wx:if="{{activeTab === 'stations'}}">
     <view class="heading">管理驿站</view>
-    <view class="subtitle">修改驿站名称，或选择两个地点合并</view>
-    <view class="hint">仅空格、标点差异自动统一。相似名称需你确认；未知地点不参与合并。原记录地点保留。</view>
+    <view class="subtitle">选择两个驿站可合并</view>
     <view wx:if="{{!stationList.length}}" class="empty">导入快递后，这里会列出已知取件地点。</view>
-    <view wx:for="{{stationSuggestions}}" wx:key="*this" class="notice">可能属于同一驿站：{{item}}，请核实后手动选择。</view>
+    <view wx:for="{{stationSuggestions}}" wx:key="*this" class="notice">可能同站：{{item}}</view>
     <view wx:for="{{stationList}}" wx:key="id" wx:for-item="station" wx:for-index="stationIndex" class="card station-setting">
       <view class="station-setting-top">
         <button size="mini" class="ui-button station-select {{(stationSelection[0] === station.id || stationSelection[1] === station.id) ? 'option-selected' : 'secondary'}}" disabled="{{stationBusy || stationBlocked || storageBlocked}}" data-id="{{station.id}}" catchtap="selectStation" aria-label="选择{{station.name}}">{{(stationSelection[0] === station.id || stationSelection[1] === station.id) ? '✓ 已选' : '选择'}}</button>
         <view class="parcel-main"><view class="station-name">{{station.name}}</view><view class="hint">{{station.count}} 件待取</view></view>
         <button size="mini" class="ui-button text-button" data-id="{{station.id}}" catchtap="editStationName" disabled="{{stationBusy || stationBlocked || storageBlocked}}">修改名称</button>
       </view>
-      <view class="station-alias" wx:for="{{station.aliases}}" wx:key="*this" wx:for-item="alias"><text>原地点：{{alias}}</text><button wx:if="{{station.aliases.length > 1}}" size="mini" class="ui-button text-button" data-id="{{station.id}}" data-alias="{{alias}}" catchtap="unlinkStation" disabled="{{stationBusy || stationBlocked || storageBlocked}}">取消关联</button></view>
+      <view wx:if="{{station.aliases.length > 1 || alias !== station.name}}" class="station-alias" wx:for="{{station.aliases}}" wx:key="*this" wx:for-item="alias"><text class="alias-name">原地点：{{alias}}</text><button wx:if="{{station.aliases.length > 1}}" size="mini" class="ui-button text-button" data-id="{{station.id}}" data-alias="{{alias}}" catchtap="unlinkStation" disabled="{{stationBusy || stationBlocked || storageBlocked}}">取消关联</button></view>
       <view class="station-order"><button size="mini" class="ui-button secondary" data-id="{{station.id}}" data-direction="-1" catchtap="moveStation" disabled="{{stationIndex === 0 || stationBusy || stationBlocked || storageBlocked}}">↑ 上移</button><button size="mini" class="ui-button secondary" data-id="{{station.id}}" data-direction="1" catchtap="moveStation" disabled="{{stationIndex === stationList.length - 1 || stationBusy || stationBlocked || storageBlocked}}">↓ 下移</button></view>
     </view>
     <button wx:if="{{stationList.length > 1}}" class="ui-button primary" catchtap="beginStationMerge" disabled="{{stationSelection.length !== 2 || stationBusy || stationBlocked || storageBlocked}}">合并两个驿站（{{stationSelection.length}}/2）</button>
-    <view class="hint centered">首页长按 ⠿ 可拖动排序；这里的上移／下移为备用操作。顺序自动保存。</view>
     <button class="ui-button secondary" data-tab="home" catchtap="switchTab" disabled="{{stationBusy}}">返回待取件</button>
   </view>
   <view wx:if="{{stationEditor}}" class="modal-mask" catchtap="cancelStationEdit" catchtouchmove="noop">
     <view class="edit-sheet" catchtap="noop">
       <view class="section-title">{{stationEditor.mode === 'merge' ? '统一驿站名称' : '修改显示名称'}}</view>
       <input class="field-input" value="{{stationEditor.name}}" bindinput="stationNameInput" maxlength="100" placeholder="填写统一显示的驿站名" disabled="{{stationBusy}}" />
-      <view class="hint">只调整显示分组，保留每条快递原来的地点。</view>
+      <view class="hint">原记录地点保留</view>
       <view wx:if="{{stationError}}" class="error">{{stationError}}</view>
       <view class="actions"><button class="ui-button secondary" catchtap="cancelStationEdit" disabled="{{stationBusy}}">取消</button><button class="ui-button primary" catchtap="confirmStationEdit" disabled="{{stationBusy || stationBlocked || storageBlocked}}">{{stationEditor.mode === 'merge' ? '确认合并' : '保存名称'}}</button></view>
     </view>

@@ -24,24 +24,21 @@ test('普通数字、电话、运单、日期、时间、金额及无效标签�
   assert.equal(notifications.parse('取件码：456789')[0].station, '待确认地点');
   assert.equal(notifications.parse('取件码：456789，取件地址：东门驿站，取件地点：西门驿站')[0].station, '待确认地点');
 });
-test('点击才读剪贴板；经旧导入去重、落盘不含原文；失败保留旧草稿，无可靠结果可手工补全', async () => {
+test('通知由用户输入后识别；复用去重、落盘不含原文，无可靠结果不建草稿', async () => {
   const wx = fakeStorage(); let reads = 0;
-  wx.getClipboardData = async () => { reads++; return { data: '【菜鸟】已派送至31号楼驿站，取件码1-1-8。私人无关内容不保存' }; };
-  const p = page(wx); assert.equal(reads, 0);
-  await p.pasteNotification(); assert.equal(reads, 1); assert.equal(p.data.records.length, 0);
-  assert.equal(p.data.drafts[0].code, '1-1-8'); await p.confirmImport();
-  assert.equal(p.data.records.length, 1);
-  await p.pasteNotification(); await p.confirmImport(); assert.equal(p.data.records.length, 1);
+  wx.getClipboardData = () => { reads++; throw Error('must not read'); };
+  const p = page(wx);
+  p.openNotification(); p.notificationInput({ detail: { value: '【菜鸟】已派送至31号楼驿站，取件码1-1-8。私人无关内容不保存' } });
+  assert.equal(reads, 0); assert.equal(p.data.drafts.length, 0);
+  await p.recognizeNotification(); assert.equal(p.data.drafts[0].code, '1-1-8'); await p.confirmImport();
+  assert.equal(p.data.records.length, 1); assert.equal(p.data.notificationText, '');
+  p.openNotification(); p.notificationInput({ detail: { value: '已派送至31号楼驿站，取件码1-1-8' } });
+  await p.recognizeNotification(); await p.confirmImport(); assert.equal(p.data.records.length, 1);
   assert.ok(!JSON.stringify(wx.values).includes('私人无关内容'));
-  wx.getClipboardData = async () => { throw Error('denied'); };
-  p.data.drafts = [{ id: 'keep', code: '1111', station: '测试' }];
-  await p.pasteNotification(); assert.equal(p.data.drafts[0].id, 'keep');
-  wx.getClipboardData = async () => ({ data: '运单号123456789012' });
-  await p.pasteNotification(); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.editing, null);
-  p.addManualDraft(); assert.equal(p.data.editing.code, '');
-  await p.confirmImport(); assert.equal(p.data.records.length, 1);
-  p.data.editing.code = '8888'; p.data.editing.station = '西门驿站'; p.saveEdit();
-  await p.confirmImport(); assert.equal(p.data.records.length, 2); p.onUnload();
+  p.openNotification(); p.notificationInput({ detail: { value: '运单号123456789012' } });
+  await p.recognizeNotification(); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.editing, null);
+  assert.equal(p.data.notificationOpen, true); assert.equal(p.data.error, '未找到取件码');
+  p.cancelNotification(); assert.equal(p.data.notificationText, ''); assert.equal(reads, 0); p.onUnload();
 });
 test('别名仅确认后合并，修改名称、取消关联、重启与未来导入兼容，原记录字段保留', async () => {
   const wx = fakeStorage(), p = page(wx);
