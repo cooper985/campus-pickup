@@ -32,7 +32,7 @@ test('V2.3 九张有效截图：自动保存、无需确认，整批三并发并
   for (let i = 0; i < 8; i++) { releases[`p${i}`](response(`A${i}-1000`)); await tick(); assert.equal(p.data.records.length, 0); }
   releases.p8(response('A8-1000')); await run;
   assert.equal(p.data.records.length, 9); assert.equal(page(wx).data.remaining, 9); assert.equal(modals, 0);
-  assert.equal(p.data.activeTab, 'home'); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.recentImport.added, 9); p.onUnload();
+  assert.equal(p.data.activeTab, 'import'); assert.equal(p.data.drafts.length, 0); assert.equal(p.data.recentImport.added, 9); p.onUnload();
 });
 test('V2.3 完全重复图片只 OCR 一次；重启后再次选择相同摘要不调用 OCR，撤销后可重导', async () => {
   const wx = fakeStorage(); hashing(wx, { a: 1, duplicate: 1, b: 2 });
@@ -144,9 +144,9 @@ test('V2.3 导入后编辑或核销，再撤销保留后续操作；同毫秒修
 test('V2.3 缺地点稍后处理与选择跨重启保留；可直接加入待确认，不核对可靠号码', async () => {
   const { p, wx } = await batch({ a: response('A203-4010', '') });
   p.openExceptions(); const id = p.data.exceptionItems[0].id;
-  p.chooseException(event(id, 'new')); p.closeExceptions(); p.onUnload();
-  const q = page(wx); q.openExceptions(); assert.equal(q.data.exceptionItems[0].action, 'new'); assert.equal(q.data.exceptionItems[0].code, 'A203-4010');
-  q.applyExceptions(); assert.equal(q.data.records.length, 1); assert.equal(q.data.records[0].station, '待确认地点'); assert.equal(q.data.exceptionCount, 0);
+  p.closeExceptions(); p.onUnload();
+  const q = page(wx); q.openExceptions(); assert.equal(q.data.exceptionItems[0].action, ''); assert.equal(q.data.exceptionItems[0].code, 'A203-4010');
+  q.chooseException(event(id, 'new')); assert.equal(q.data.records.length, 1); assert.equal(q.data.records[0].station, '待确认地点'); assert.equal(q.data.exceptionCount, 0);
   q.applyExceptions(); assert.equal(q.data.records.length, 1); q.undoImport(); assert.equal(q.data.records.length, 0); q.onUnload();
 });
 test('V2.3 九张均不可靠不能造记录，快递无号码与失败不同于无关图片', async () => {
@@ -181,10 +181,10 @@ test('V2.3 影子评估是纯函数，状态时间证据不使用上传时间，
 
 test('V2.3 异常期间新增同码待取或核销原记录，过期选择不能再重复入库', async () => {
   const { p } = await batch({ a: response('1111', '') });
-  p.openExceptions(); const id = p.data.exceptionItems[0].id; p.chooseException(event(id, 'new'));
+  p.openExceptions(); const id = p.data.exceptionItems[0].id; p.updateException(id, { action: 'new' });
   p.persistRecords([store.newRecord(candidate(0, { code: '1111' }))]);
   p.applyExceptions(); assert.equal(p.data.records.length, 1); assert.equal(p.data.exceptionCount, 1);
-  assert.equal(p.data.exceptionItems[0].action, ''); assert.match(p.data.batchError, /发生变化/); p.onUnload();
+  assert.equal(p.data.exceptionItems[0].action, ''); assert.equal(p.data.currentException.reason, 'record_conflict'); p.onUnload();
 });
 test('V2.3 选择常用站或手动地点仅处理地点问题，取消不丢选择；同码冲突可明确保留两件', async () => {
   const { p, wx } = await batch({ a: response('1111', '') });
@@ -204,10 +204,10 @@ test('V2.3 哈希不可用时继续识别，不以相似性丢图；失败可由
   assert.equal(p.data.recentImport.failures, 0); assert.equal(p.importState.batches[0].images[2].state, 'failed');
   assert.equal(p.importState.batches[0].images[2].status, 'SKIPPED_BY_USER'); p.onUnload();
 });
-test('V2.3 撤销后重导同摘要可再次识别；同毫秒编辑再还原也属于后续操作', async () => {
+test('V2.3 撤销后重导同摘要复用识别证据；同毫秒编辑再还原也属于后续操作', async () => {
   const wx = fakeStorage(); hashing(wx, { a: 1 }); let calls = 0;
   const p = page(wx, async () => { calls++; return response('1111'); }); p.data.images = ['a']; await p.recognizeCloud(); p.undoImport();
-  assert.equal(p.data.records.length, 0); await p.recognizeCloud(); assert.equal(calls, 2); assert.equal(p.data.records.length, 1);
+  assert.equal(p.data.records.length, 0); await p.recognizeCloud(); assert.equal(calls, 1); assert.equal(p.data.records.length, 1);
   const b = p.importState.batches.at(-1), before = p.data.records[0];
   const changed = store.updateRecord(store.updateRecord(before, { carrier: '中通快递' }, before.updatedAt), { carrier: before.carrier }, before.updatedAt);
   assert.ok(changed.updatedAt > before.updatedAt); assert.equal(journal.undo(b, [changed]).conflicts.length, 1); p.onUnload();
@@ -235,7 +235,7 @@ test('V2.3 粘贴通知显式触发后也自动整理，不读取剪贴板，不
   const wx = fakeStorage(); wx.getClipboardData = () => { throw Error('must not read clipboard'); };
   const p = page(wx); p.openNotification(); p.notificationInput({ detail: { value: '【驿小哥】取件码C205-2004，已到东门驿站。【京东】取件码A203-4010。' } });
   await p.recognizeNotification(); assert.equal(p.data.records.length, 1); assert.equal(p.data.records[0].code, 'C205-2004');
-  assert.equal(p.data.exceptionCount, 1); assert.equal(p.data.activeTab, 'home'); assert.equal(p.data.notificationText, '');
+  assert.equal(p.data.exceptionCount, 1); assert.equal(p.data.activeTab, 'import'); assert.equal(p.data.notificationText, '');
   assert.ok(!JSON.stringify(wx.values).includes('【驿小哥】')); p.undoImport(); assert.equal(p.data.records.length, 0); assert.equal(p.data.exceptionCount, 0); p.onUnload();
 });
 test('V2.3 整批原文地址优先于驿站记忆，用户清空地址后不再沿用旧记忆', async () => {

@@ -34,7 +34,7 @@ test('选图自动走 fileID，缺地点只暂存异常；稍后处理与重新�
   const p = page(wx, async () => { calls++; return { mock: false, lines: ['取件码1111'] }; });
   p.switchTab(event({ tab: 'import' })); await p.chooseImage();
   assert.equal(calls, 1); assert.equal(p.data.results[0].transport, 'fileid'); assert.equal(p.data.drafts.length, 0);
-  assert.equal(p.data.activeTab, 'home'); assert.equal(p.data.exceptionCount, 1); assert.equal(p.data.records.length, 0);
+  assert.equal(p.data.activeTab, 'import'); assert.equal(p.data.exceptionCount, 1); assert.equal(p.data.records.length, 0);
   p.openExceptions(); p.closeExceptions();
   const q = page(wx); assert.equal(q.data.exceptionCount, 1); q.openExceptions();
   q.chooseException(event({ id: q.data.exceptionItems[0].id, action: 'new' })); q.applyExceptions();

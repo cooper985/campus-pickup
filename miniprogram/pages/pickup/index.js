@@ -13,19 +13,23 @@ const stationDrag = require("../../services/station-drag");
 const imageDedup = require("../../services/image-dedup");
 const decision = require("../../services/import-decision");
 const batches = require("../../services/import-batches");
+const importResults = require("../../services/import-results");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
-  data: { recentImport: null, exceptionCount: 0, exceptionOpen: false, exceptionItems: [], batchError: "", newStations: [], swipeId: "", swipeStyle: "", reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
+  data: { resultCategory: "", categoryItems: [], failureCount: 0, currentException: null, exceptionProgress: "", keyboardHeight: 0, recentImport: null, exceptionCount: 0, exceptionOpen: false, exceptionItems: [], batchError: "", newStations: [], swipeId: "", swipeStyle: "", reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
     this.unloaded = false;
     this.importEpoch = 0;
+    this.batchImagePaths = new Map();
     this.ocrQueue = createQueue();
     this.imageJobs = new Map();
     this.taskSequence = 0;
     this.setData({ diagnosticEnabled: task.isDevelopment() });
+    this.keyboardListener = e => this.setData({ keyboardHeight: e.height || 0 });
+    if (wx.onKeyboardHeightChange) wx.onKeyboardHeightChange(this.keyboardListener);
     this.store = storage.createStore(wx);
     const loaded = this.store.load();
     this.stationStore = stations.createStore(wx);
@@ -132,7 +136,7 @@ Page({
     this.recognitionRun = null;
     this.cancelRecognition();
     this.setDrafts([], { images: [], results: [], loading: false, choosing: false, completed: false,
-      mock: false, editing: null, editError: "", notificationOpen: false, notificationText: "", error: "", progress: "" });
+      mock: false, editing: null, editError: "", resultCategory: "", notificationOpen: false, notificationText: "", error: "", progress: "" });
   },
   clearImportResults() {
     if (this.data.importing) return;
@@ -142,7 +146,7 @@ Page({
   cancelImport() {
     if (this.data.importing) return;
     this.resetImport();
-    this.setData({ activeTab: "home", importFeedback: "", errorScope: "" });
+    this.setData({ activeTab: "import", importFeedback: "", errorScope: "" });
   },
   showImportFeedback(message) {
     clearTimeout(this.feedbackTimer);
@@ -374,7 +378,7 @@ Page({
       selected = true;
       this.imagesSelectedAt = Date.now();
       this.recognitionRun = null;
-      this.setData({ images: files.slice(0, 9).map(f => f.path), results: [], drafts: [], draftGroups: [], validDraftCount: 0, notificationOpen: false, notificationText: "", completed: false, editing: null });
+      this.setData({ activeTab: "import", resultCategory: "", batchError: "", images: files.slice(0, 9).map(f => f.path), results: [], drafts: [], draftGroups: [], validDraftCount: 0, notificationOpen: false, notificationText: "", completed: false, editing: null });
     } catch (err) {
       if (!this.unloaded && epoch === this.importEpoch && !/cancel/i.test(err && err.errMsg || "")) this.setData({ errorScope: "import", error: err.message || "无法打开相册，请重试。" });
     } finally { if (!this.unloaded && epoch === this.importEpoch) this.setData({ choosing: false }); }
@@ -397,12 +401,51 @@ Page({
       success: () => wx.showToast({ title: "诊断信息已复制", icon: "none" }),
       fail: () => wx.showToast({ title: "复制失败，请重试", icon: "none" }) });
   },
-  retryImage(e) {
-    const result = this.data.results.find(r => r.taskId === e.currentTarget.dataset.taskId ||
-      r.index === Number(e.currentTarget.dataset.index));
-    if (result && result.retryable && !this.data.importing && !this.data.choosing) {
-      return this.startImage(result.index - 1, this.recognitionRun);
+  async retryImage(e) {
+    if (this.retryBusy || this.data.importing || this.data.choosing || this.data.storageBlocked) return;
+    const data = e.currentTarget.dataset;
+    const result = this.data.results.find(r => r.taskId === data.taskId || r.index === Number(data.index));
+    const batchId = data.batchId || this.recognitionRun && this.recognitionRun.batchId;
+    const batch = this.importState.batches.find(b => b.id === batchId && b.status !== 'undone');
+    const index = data.imageIndex !== undefined ? Number(data.imageIndex) : result ? result.index - 1 : -1;
+    if (result && ['queued', 'running'].includes(result.state)) return;
+    if (index < 0 || !batch) {
+      if (result && result.retryable && this.recognitionRun) return this.startImage(result.index - 1, this.recognitionRun);
+      return;
     }
+    this.retryBusy = true;
+    try {
+      let paths = this.batchImagePaths.get(batchId) || batch.images.map(() => '');
+      if (!paths[index]) {
+        this.setData({ choosing: true });
+        try {
+          const selected = await wx.chooseImage({ count: 1, sizeType: ['original'], sourceType: ['album'] });
+          const file = (selected.tempFiles || [])[0];
+          if (!file || !file.path || !(file.size > 0) || file.size > MAX_BYTES) throw Error('请选择 5 MB 内的截图');
+          paths[index] = file.path;
+        } catch (_) { if (!this.unloaded) this.setData({ error: '请重新选择这张截图', errorScope: 'import' }); return; }
+        finally { if (!this.unloaded) this.setData({ choosing: false }); }
+      }
+      if (this.unloaded) return;
+      this.batchImagePaths.set(batchId, paths);
+      let run = this.recognitionRun;
+      if (!run || run.batchId !== batchId) {
+        run = { auto: true, batchId, imagePaths: paths, sources: new Map(batch.images.filter(i => i.candidates.length).map(i => [i.index, i.candidates])),
+          identities: batch.images.map(i => ({ hash: i.hash, duplicateOf: -1 })), edits: new Map(), dismissed: new Set(),
+          startedAt: Date.now(), selectedAt: Date.now(), useCloud: true, transport: 'fileid' };
+        this.recognitionRun = run;
+        this.setData({ images: paths, results: batch.images.map(i => ({ taskId: `saved-${batchId}-${i.index}`, index: i.index + 1,
+          state: i.state === 'failed' || i.state === 'queued' ? 'failed' : 'done', status: i.status, retryable: i.state === 'failed' })) });
+      }
+      run.retrying = true;
+      run.imagePaths = paths;
+      // A replacement selected after restart must get its own fingerprint.
+      const identities = await imageDedup.inspect(wx, [paths[index]]);
+      if (this.unloaded || this.recognitionRun !== run) return;
+      run.identities[index] = identities[0];
+      this.setData({ images: paths });
+      return await this.startImage(index, run);
+    } finally { this.retryBusy = false; }
   },
   dismissFailedImage(e) {
     if (this.data.loading || this.data.storageBlocked) return;
@@ -438,12 +481,13 @@ Page({
     clearTimeout(this.feedbackTimer);
     this.cancelStationDrag();
     this.undoRecord = null;
+    if (wx.offKeyboardHeightChange) wx.offKeyboardHeightChange(this.keyboardListener);
   },
   refreshRecognition() {
     const results = this.data.results;
     const pending = results.filter(r => r.state === "queued" || r.state === "running").length;
     this.setData({ loading: pending > 0, completed: pending === 0,
-      progress: `已完成 ${results.length - pending}/${results.length}`,
+      progress: `正在识别 ${results.length - pending}/${this.recognitionRun ? this.recognitionRun.imagePaths.length : results.length}`,
       mock: results.some(r => r.mock),
       error: "" });
     if (!pending && this.recognitionRun && results.length === this.recognitionRun.imagePaths.length && !this.recognitionRun.preparing) {
@@ -464,10 +508,12 @@ Page({
       edits: previous ? previous.edits : new Map(), dismissed: previous ? previous.dismissed : new Set(), startedAt: Date.now(), selectedAt: this.imagesSelectedAt || Date.now(), useCloud, transport };
     this.recognitionRun = run;
     if (run.auto) {
+      run.imageTasks = new Map();
       run.batchId = `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
       if (!this.persistBatch(batches.begin(run.batchId, run.imagePaths.length))) return;
+      this.batchImagePaths.set(run.batchId, run.imagePaths);
     }
-    this.setData({ results: [], loading: true, error: "", completed: false, editing: null,
+    this.setData({ activeTab: "import", resultCategory: "", results: [], loading: true, progress: `正在识别 0/${run.imagePaths.length}`, error: "", completed: false, editing: null,
       ...(changedMode ? { drafts: [], draftGroups: [], validDraftCount: 0 } : {}) });
     run.identities = useCloud && !shadow ? await imageDedup.inspect(wx, run.imagePaths) : run.imagePaths.map(() => ({ hash: '', duplicateOf: -1 }));
     if (this.recognitionRun !== run || this.unloaded) return;
@@ -479,7 +525,11 @@ Page({
       this.completeAutoBatch(run, []);
       return;
     }
-    return Promise.all(run.imagePaths.map((_, i) => this.startImage(i, run)));
+    return Promise.all(run.imagePaths.map((_, i) => {
+      const promise = this.startImage(i, run);
+      if (run.imageTasks) run.imageTasks.set(i, promise);
+      return promise;
+    }));
   },
   async startImage(i, run) {
     if (!run || this.recognitionRun !== run || run.auto && this.importState.batches.find(b => b.id === run.batchId && b.status === "undone")) return;
@@ -495,21 +545,40 @@ Page({
       this.setData({ results: this.data.results.map(r => r.taskId === taskId ? { ...r, ...changes } : r) });
     };
     const identity = (run.identities || [])[i] || { hash: '', duplicateOf: -1 };
-    const previousBatch = run.auto && identity.hash && this.importState.batches.slice().reverse().find(b => b.id !== run.batchId && b.status === 'completed' &&
-      !b.reviews.length && b.images.some(im => im.hash === identity.hash && im.state === 'done'));
-    if (identity.duplicateOf >= 0 || previousBatch) {
-      const entry = { taskId, traceId, index: i + 1, transport: run.transport, state: 'done', status: 'duplicate', message: '已跳过相同截图', error: '', count: 0, mock: false };
-      this.setData({ results: [...this.data.results.filter(r => r.index !== i + 1), entry].sort((a, b) => a.index - b.index) });
-      if (run.auto) this.checkpointImage(run, i, { state: 'duplicate', status: 'duplicate', hash: identity.hash, candidates: [] });
-      this.refreshRecognition();
-      return;
-    }
     const entry = { taskId, traceId, index: i + 1, transport: run.transport, state: "queued", status: "queued", message: "排队中", error: "",
       count: 0, uncertainCount: 0, retryable: false, mock: !run.useCloud };
     this.setData({ results: [...this.data.results.filter(r => r.index !== i + 1), entry].sort((a, b) => a.index - b.index) });
+    if (run.auto && run.retrying) this.checkpointImage(run, i, { hash: identity.hash, state: 'queued', status: 'queued', candidates: (run.sources.get(i) || []).map(batches.cleanCandidate) });
     this.refreshRecognition();
     const phases = { image_read: "识别中", image_compress: "识别中", compressed_read: "识别中", cloud_roundtrip: "识别中" };
     let phase = "image_prepare";
+    if (identity.duplicateOf >= 0 && !run.retrying) {
+      await run.imageTasks.get(identity.duplicateOf);
+      if (!current()) return;
+      const original = this.importState.batches.find(b => b.id === run.batchId);
+      const source = original && original.images[identity.duplicateOf];
+      if (source && source.state === 'done') {
+        update({ state: 'done', status: 'duplicate', message: '本批相同截图', count: 0 });
+        this.checkpointImage(run, i, { state: 'duplicate', status: 'duplicate', hash: identity.hash, candidates: [], duplicateOf: identity.duplicateOf });
+      } else {
+        update({ state: 'failed', status: 'OCR_FAILED', message: '', error: '识别失败，可重试', retryable: true });
+        this.checkpointImage(run, i, { state: 'failed', status: 'OCR_FAILED', hash: identity.hash, candidates: [] });
+      }
+      this.refreshRecognition();
+      return;
+    }
+    const cached = run.auto && !run.retrying && batches.cachedImage(this.importState, identity.hash, run.batchId);
+    if (cached) {
+      const parsed = cached.candidates.map((c, j) => {
+        const { sourceIds, sourceIndices, ...evidence } = c;
+        return { ...evidence, id: c.code ? `draft-${run.batchId}-${i}-${c.code}-${j}` : `issue-${run.batchId}-${i}`, sourceIndex: i };
+      });
+      run.sources.set(i, parsed);
+      this.checkpointImage(run, i, { hash: identity.hash, state: 'done', status: cached.status, candidates: parsed });
+      update({ state: 'done', status: cached.status, count: parsed.length, cached: true, message: '已识别' });
+      this.refreshRecognition();
+      return;
+    }
     const job = this.ocrQueue.add(control => {
       control.traceId = traceId;
       return run.useCloud ? fileidOcr.recognize(imagePath, control) : mockOcr.recognize();
@@ -517,7 +586,7 @@ Page({
       timeoutMs: this.recognitionTimeoutMs,
       onStart: () => { startedAt = Date.now(); task.log("queue_wait", queuedAt, "OK", { traceId }); update({ state: "running", message: "识别中" }); },
       onStage: stage => { phase = stage; update({ message: phases[stage] || "正在识别" }); },
-      onSlow: () => update({ message: "还在识别中，整批完成后统一补全；也可跳过此图" }),
+      onSlow: () => update({ message: "正在识别" }),
     });
     this.imageJobs.set(taskId, job);
     try {
@@ -609,22 +678,27 @@ Page({
       const newStations = [...new Set(plan.additions.filter(r => stations.known(r.station) && !this.stationState.groups.some(g => g.id === stations.resolve(this.stationState, r.station).id)).map(r => r.station))];
       if (!this.persistBatch(batch, plan.records)) return;
       run.committedSignature = signature;
-      this.setDrafts([], { activeTab: 'home', notificationOpen: false, notificationText: '', completed: true, batchError: '', newStations });
+      this.setDrafts([], { activeTab: 'import', notificationOpen: false, notificationText: '', completed: true, batchError: '', newStations });
+      if (batch.reviews.length) this.openExceptions();
       if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 0 });
     } catch (_) {
-      this.setData({ batchError: '自动整理未完成，已保留识别结果，请重新进入后继续。' });
+      this.setData({ batchError: '整理未完成，请重进导入页继续' });
     } finally { run.committing = false; }
   },
   refreshBatchSummary() {
     const all = this.importState.batches;
     const recent = all[all.length - 1];
     const exceptionCount = all.reduce((sum, b) => sum + b.reviews.length, 0);
-    const failures = recent ? recent.images.filter(i => i.state === 'failed' && i.status !== 'SKIPPED_BY_USER' || i.state === 'queued').length : 0;
-    this.setData({ exceptionCount, recentImport: recent ? { id: recent.id, added: recent.additions.length, updated: new Set(recent.updates.map(u => u.after.id)).size,
+    const details = recent ? importResults.details(recent) : [];
+    const failures = recent && recent.status !== 'undone' ? details.filter(i => i.failure.length).length : 0;
+    const failureCount = all.filter(b => b.status !== 'undone').reduce((n, b) => n + importResults.details(b).filter(i => i.failure.length).length, 0);
+    this.setData({ exceptionCount, failureCount, recentImport: recent ? { id: recent.id, added: recent.additions.length, updated: new Set(recent.updates.map(u => u.after.id)).size,
       skipped: (recent.skipped || 0) + (recent.duplicateImages || 0) + (recent.unrelatedImages || 0) + (recent.fusedSources || 0),
+      imageCount: recent.images.length, duplicate: details.filter(i => i.duplicate.length).length, unrelated: details.filter(i => i.unrelated.length).length,
       reviewCount: recent.reviews.length, failures, interrupted: recent.status === 'processing' || recent.status === 'interrupted',
       undone: recent.status === 'undone', canUndo: recent.status === 'completed' && !!(recent.additions.length || recent.updates.length || recent.reviews.length),
       conflicts: (recent.undoConflicts || []).length } : null });
+    if (this.data.resultCategory) this.showResultCategory({ currentTarget: { dataset: { category: this.data.resultCategory } } });
   },
   recoverInterrupted() {
     for (const batch of this.importState.batches.slice()) {
@@ -639,8 +713,35 @@ Page({
     }
   },
   showImportFailures() {
-    this.setData({ activeTab: 'import', batchError: this.recognitionRun ? '' : '上次识别中断或部分失败，请重新选择未完成的截图；已导入的内容会自动去重。' });
+    this.setData({ activeTab: 'import', batchError: '' });
+    this.showResultCategory({ currentTarget: { dataset: { category: 'allFailure' } } });
   },
+  retryFailures(e) {
+    const batchId = e.currentTarget.dataset.batchId;
+    const failed = this.importState.batches.filter(b => b.status !== 'undone' && (!batchId || b.id === batchId))
+      .flatMap(b => importResults.details(b).filter(i => i.failure.length));
+    if (failed.length === 1) return this.retryImage({ currentTarget: { dataset: { batchId: failed[0].batchId, imageIndex: failed[0].index } } });
+    this.setData({ activeTab: 'import' });
+    this.showResultCategory({ currentTarget: { dataset: { category: batchId ? 'failure' : 'allFailure' } } });
+  },
+  showResultCategory(e) {
+    const category = e.currentTarget.dataset.category;
+    if (!['duplicate', 'unrelated', 'failure', 'allFailure'].includes(category)) return;
+    const all = category === 'allFailure';
+    const key = all ? 'failure' : category;
+    const selected = this.importState.batches.filter(b => b.status !== 'undone' && (all || b.id === this.data.recentImport.id));
+    const items = selected.flatMap(b => importResults.details(b).filter(i => i[key].length).map(i => ({
+      ...i, key: `${b.id}-${i.index}`, reason: i[key].join('；'), path: (this.batchImagePaths.get(b.id) || [])[i.index] || '', retryable: key === 'failure',
+    })));
+    this.setData({ resultCategory: category, categoryItems: items, categoryTitle: { duplicate: '重复', unrelated: '无关', failure: '失败' }[key] });
+  },
+  closeResultCategory() { this.setData({ resultCategory: '', categoryItems: [] }); },
+  previewResultImage(e) {
+    const { batchId, imageIndex } = e.currentTarget.dataset;
+    const path = (this.batchImagePaths.get(batchId) || [])[Number(imageIndex)];
+    if (path) wx.previewImage({ current: path, urls: [path] });
+  },
+  viewPending() { this.setData({ activeTab: 'home', resultCategory: '' }); },
   undoImport() {
     if (this.data.loading || this.data.importing || this.data.deleting || this.data.storageBlocked) return;
     const recent = this.data.recentImport;
@@ -648,84 +749,99 @@ Page({
     if (!batch) return;
     const undone = batches.undo(batch, this.data.records);
     if (this.persistBatch(undone.batch, undone.records)) {
-      this.setData({ batchError: undone.conflicts.length ? `已撤销可恢复部分，${undone.conflicts.length} 件已有后续操作，已保留。` : '已撤销本次导入', newStations: [] });
+      this.setData({ batchError: '', newStations: [], resultCategory: '', exceptionOpen: false });
+      if (wx.showToast) wx.showToast({ title: undone.conflicts.length ? `已撤销，保留 ${undone.conflicts.length} 件后续修改` : '已撤销本次导入', icon: 'none' });
       if (this.recognitionRun && this.recognitionRun.batchId === batch.id) this.recognitionRun = null;
     }
   },
-  openExceptions() {
-    const entries = this.importState.batches.flatMap(b => b.reviews.map(r => ({ ...r.candidate, id: r.id, batchId: b.id, reason: r.reason,
-      message: decision.reasonText[r.reason], matches: r.matches, allowNew: r.allowNew, action: r.choice && r.choice.action || '',
-      selectedStation: r.choice ? r.choice.station : stations.known(r.candidate.station) ? r.candidate.station : '',
-      locationOnly: r.reason === 'missing_location', needsCode: !validCode(r.candidate.code),
-      options: r.candidate.locationOptions || [] })));
-    this.setData({ exceptionOpen: true, exceptionItems: entries });
+  openExceptions({ keepSession = false } = {}) {
+    const entries = this.importState.batches.flatMap(b => b.reviews.map(r => {
+      const index = (r.candidate.sourceIndices || [r.candidate.sourceIndex]).find(i => i >= 0);
+      return { ...r.candidate, id: r.id, batchId: b.id, reason: r.reason,
+        message: decision.reasonText[r.reason], matches: r.matches, allowNew: r.allowNew,
+        action: r.choice && r.choice.action || '', selectedStation: r.choice ? r.choice.station : stations.known(r.candidate.station) ? r.candidate.station : '',
+        locationOnly: r.reason === 'missing_location', needsCode: !validCode(r.candidate.code),
+        imageIndex: index, failed: b.images[index] && b.images[index].state === 'failed', path: (this.batchImagePaths.get(b.id) || [])[index] || '', options: r.candidate.locationOptions || [] };
+    }));
+    if (!keepSession || !this.exceptionSession) this.exceptionSession = { total: entries.length, deferred: new Set() };
+    const available = entries.filter(r => !this.exceptionSession.deferred.has(r.id));
+    const current = available[0] || null;
+    this.setData({ activeTab: 'import', exceptionOpen: !!current, exceptionItems: entries, currentException: current,
+      exceptionProgress: current ? `${this.exceptionSession.total - available.length + 1}/${this.exceptionSession.total}` : '', editing: null });
   },
-  closeExceptions() { this.setData({ exceptionOpen: false, editing: null }); },
-  chooseExceptionStation(e) {
-    const id = e.currentTarget.dataset.id, index = Number(e.detail.value);
-    const name = this.data.stationList[index] && this.data.stationList[index].name;
-    if (name) this.updateException(id, { station: name });
+  closeExceptions() { this.setData({ exceptionOpen: false, editing: null, activeTab: 'import' }); this.exceptionSession = null; },
+  deferException() {
+    if (!this.data.currentException || this.data.storageBlocked) return;
+    this.exceptionSession.deferred.add(this.data.currentException.id);
+    this.openExceptions({ keepSession: true });
+  },
+  async chooseExceptionStation(e) {
+    const entry = this.data.currentException;
+    if (!entry || entry.id !== e.currentTarget.dataset.id || this.data.choosing || this.data.storageBlocked) return;
+    const names = [...new Set([...entry.options, ...this.data.stationList.map(s => s.name)])];
+    const options = names.slice(0, 5);
+    this.setData({ choosing: true });
+    try {
+      const answer = await wx.showActionSheet({ itemList: [...options, '手动填写'] });
+      if (this.unloaded || !this.data.currentException || this.data.currentException.id !== entry.id) return;
+      if (answer.tapIndex === options.length) this.editException(e);
+      else if (options[answer.tapIndex]) this.chooseException({ currentTarget: { dataset: { id: entry.id, action: 'new', station: options[answer.tapIndex] } } });
+    } catch (_) { /* Dismiss keeps this issue. */ }
+    finally { if (!this.unloaded) this.setData({ choosing: false }); }
   },
   exceptionStationInput(e) { this.updateException(e.currentTarget.dataset.id, { station: e.detail.value }); },
   chooseException(e) {
     const { id, action, station } = e.currentTarget.dataset;
-    if (!['new', 'skip'].includes(action)) return;
-    this.updateException(id, { action, ...(station ? { station } : {}) });
+    if (!['new', 'skip'].includes(action) || !this.data.currentException || this.data.currentException.id !== id) return;
+    if (this.updateException(id, { action, ...(station ? { station } : {}) })) this.applyExceptions(id);
   },
   updateException(id, changes) {
-    if (this.data.storageBlocked || this.data.loading) return;
+    if (this.data.storageBlocked || this.data.loading) return false;
     const batch = this.importState.batches.find(b => b.reviews.some(r => r.id === id));
-    if (!batch) return;
+    if (!batch) return false;
     const next = JSON.parse(JSON.stringify(batch)), entry = next.reviews.find(r => r.id === id);
-    entry.choice = { action: '', station: stations.known(entry.candidate.station) ? entry.candidate.station : '', ...(entry.choice || {}), ...changes };
-    // Location choices persist now; the explicit save button applies them later.
-    if (!entry.choice.action) entry.choice.action = 'new';
-    if (entry.choice.station.length > 100) return;
-    if (this.persistBatch(next)) this.openExceptions();
+    entry.choice = { action: 'new', station: stations.known(entry.candidate.station) ? entry.candidate.station : '', ...(entry.choice || {}), ...changes };
+    if (entry.choice.station.length > 100) return false;
+    const saved = this.persistBatch(next);
+    if (saved) this.openExceptions({ keepSession: true });
+    return saved;
   },
-  applyExceptions() {
+  applyExceptions(id) {
     if (this.data.loading || this.data.importing || this.data.storageBlocked || this.data.deleting) return;
-    let records = this.data.records.slice(), state = this.importState;
-    let changed = false;
-    const remembered = [];
-    const initialRecords = records.slice();
-    for (const original of state.batches.slice()) {
-      const batch = JSON.parse(JSON.stringify(original));
-      const remaining = [];
-      for (const review of batch.reviews) {
-        if (!review.choice) { remaining.push(review); continue; }
-        const { action, station } = review.choice;
-        if (action === 'new') {
-          const c = review.candidate;
-          if (!validCode(c.code) || !review.allowNew) { remaining.push(review); continue; }
-          const current = decision.classify({ ...c, station: station.trim() || parser.UNKNOWN }, initialRecords, this.stationState);
-          const matchKey = matches => JSON.stringify((matches || []).map(m => [m.id, m.taken, m.code, m.station]).sort());
-          if (matchKey(current.matches) !== matchKey(review.matches)) {
-            review.matches = current.matches || []; review.allowNew = current.allowNew !== false;
-            review.reason = current.reason === 'missing_location' ? 'missing_location' : 'record_conflict'; delete review.choice;
-            remaining.push(review); changed = true;
-            this.setData({ batchError: '已有记录发生变化，请重新选择这些问题。' });
-            continue;
-          }
-          if (c.waybillNumber && records.some(r => r.waybillNumber === c.waybillNumber)) { delete review.choice; remaining.push(review); changed = true; continue; }
-          if (review.reason === 'missing_location' && records.some(r => !r.taken && stations.normalize(r.code) === stations.normalize(c.code) && stations.resolve(this.stationState, r.station).id === stations.resolve(this.stationState, station || parser.UNKNOWN).id)) {
-            batch.resolved = [...(batch.resolved || []), review.id]; changed = true; continue;
-          }
-          const added = storage.newRecord({ ...c, station: station.trim() || parser.UNKNOWN, confirmedFields: [...new Set([...(c.confirmedFields || []), 'code', ...(station.trim() ? ['station'] : [])])] }, records);
-          records.push(added); batch.additions.push(added);
-          if (station.trim()) remembered.push(added);
-        }
-        batch.resolved = [...(batch.resolved || []), review.id];
-        changed = true;
+    id = typeof id === 'string' ? id : this.data.currentException && this.data.currentException.id;
+    const original = this.importState.batches.find(b => b.reviews.some(r => r.id === id));
+    if (!original) return;
+    const batch = JSON.parse(JSON.stringify(original)), review = batch.reviews.find(r => r.id === id);
+    if (!review.choice) return;
+    const { action, station } = review.choice;
+    let records = this.data.records.slice(), added;
+    if (action === 'new') {
+      const c = review.candidate;
+      if (!validCode(c.code) || !review.allowNew) return;
+      const current = decision.classify({ ...c, station: station.trim() || parser.UNKNOWN }, records, this.stationState);
+      const owned = new Set(batch.additions.map(r => r.id));
+      const matchKey = matches => JSON.stringify((matches || []).filter(m => !owned.has(m.id)).map(m => [m.id, m.taken, m.code, m.station]).sort());
+      if (matchKey(current.matches) !== matchKey(review.matches)) {
+        review.matches = current.matches || []; review.allowNew = current.allowNew !== false;
+        review.reason = current.reason === 'missing_location' ? 'missing_location' : 'record_conflict'; delete review.choice;
+        if (this.persistBatch(batch)) this.openExceptions({ keepSession: true });
+        if (wx.showToast) wx.showToast({ title: '记录已变化，请重新选择', icon: 'none' });
+        return;
       }
-      batch.reviews = remaining;
-      state = batches.replace(state, batch);
+      if (c.waybillNumber && records.some(r => r.waybillNumber === c.waybillNumber)) return;
+      added = storage.newRecord({ ...c, station: station.trim() || parser.UNKNOWN,
+        confirmedFields: [...new Set([...(c.confirmedFields || []), 'code', ...(station.trim() ? ['station'] : [])])] }, records);
+      records.push(added); batch.additions.push(added);
     }
-    if (changed && !this.persistRecords(records, state)) return;
-    if (remembered.length) this.saveStations(remembered.reduce((settings, record) => stations.remember(settings, record), this.stationState));
-    this.openExceptions();
-    if (!this.data.exceptionItems.length) this.closeExceptions();
+    batch.resolved = [...(batch.resolved || []), id];
+    batch.reviews = batch.reviews.filter(r => r.id !== id);
+    batch.outcomes = batch.outcomes.map(o => o.id === id ? { id, decision: action === 'new' ? decision.AUTO_IMPORT : decision.AUTO_SKIP, reason: action === 'new' ? 'manual_new' : 'user_skip' } : o);
+    if (!this.persistBatch(batch, records)) return;
+    if (added && station.trim()) this.saveStations(stations.remember(this.stationState, added));
+    this.setData({ batchError: '' });
+    this.openExceptions({ keepSession: true });
   },
+  retryException(e) { return this.retryImage(e); },
   editException(e) {
     const entry = this.data.exceptionItems.find(r => r.id === e.currentTarget.dataset.id);
     if (entry) this.setData({ editing: { ...entry, station: entry.selectedStation || parser.UNKNOWN, exception: true }, editError: '' });
@@ -794,7 +910,7 @@ Page({
       this.setDrafts(drafts, {
         ...(!this.data.loading && !drafts.length ? { images: [], results: [], completed: false } : {}),
         ...(!drafts.length ? { notificationOpen: false, notificationText: "" } : {}),
-        error: "", errorScope: "", activeTab: "home",
+        error: "", errorScope: "", activeTab: "import",
         collapsedStations: this.data.collapsedStations.filter(station => !importingDrafts.some(r => r.station === station)) });
       this.showImportFeedback(`已新增 ${added} 件，更新 ${updated} 件，跳过重复 ${skipped} 件`);
       this.updateRecords(this.data.records);
@@ -933,6 +1049,30 @@ Page({
     } catch (_) { /* Closing the action sheet keeps the record. */ }
     finally { this.menuOpen = false; }
   },
+  async openHistoryMenu() {
+    if (this.menuOpen || this.data.loading || this.data.deleting || this.data.importing || this.data.storageBlocked || !this.data.history.length) return;
+    this.menuOpen = true;
+    try {
+      const answer = await wx.showActionSheet({ itemList: ['清空历史'] });
+      if (answer.tapIndex === 0 && !this.unloaded) await this.clearHistory();
+    } catch (_) { /* Dismiss keeps history. */ }
+    finally { this.menuOpen = false; }
+  },
+  async clearHistory() {
+    if (this.data.deleting || this.data.importing || this.data.loading || this.data.storageBlocked || !this.data.history.length) return;
+    this.setData({ deleting: true });
+    try {
+      const answer = await wx.showModal({ title: '清空已取历史？', content: '仅删除已取件记录，待取件和驿站保留。5 秒内可撤销。', confirmText: '清空历史', confirmColor: '#FF453A' });
+      if (!answer.confirm || this.unloaded || this.data.storageBlocked) return;
+      const before = this.data.records.slice(), after = before.filter(r => !r.taken);
+      if (!this.persistRecords(after)) return;
+      this.clearUndo();
+      this.undoRecord = { kind: 'clear-history', records: before, after: JSON.stringify(after), until: Date.now() + 5000 };
+      this.setData({ openDeleteId: '', undoAvailable: true, undoMessage: '已清空历史' });
+      this.undoTimer = setTimeout(() => this.clearUndo(), 5000);
+    } catch (_) { if (!this.unloaded) this.setData({ error: '清空未完成，请重试' }); }
+    finally { if (!this.unloaded) this.setData({ deleting: false }); }
+  },
   clearUndo() {
     clearTimeout(this.undoTimer);
     this.undoRecord = null;
@@ -965,6 +1105,15 @@ Page({
     if (!undo || Date.now() >= undo.until) { this.clearUndo(); return; }
     if (this.data.deleting || this.data.importing || this.data.storageBlocked) return;
     const records = this.data.records.slice();
+    if (undo.kind === 'clear-history') {
+      if (JSON.stringify(records) !== undo.after) {
+        this.clearUndo();
+        if (wx.showToast) wx.showToast({ title: '记录已变化，无法撤销清空', icon: 'none' });
+        return;
+      }
+      if (this.persistRecords(undo.records)) this.clearUndo();
+      return;
+    }
     if (undo.kind === "batch-taken") {
       if (undo.updates.some(u => !records.some(r => r.id === u.after.id && JSON.stringify(r) === JSON.stringify(u.after)))) {
         this.clearUndo(); wx.showToast({ title: "记录已变化，请在历史中恢复", icon: "none" }); return;
@@ -1057,7 +1206,7 @@ Page({
       const entry = next.reviews.find(r => r.id === edit.id);
       entry.candidate = batches.cleanCandidate({ ...entry.candidate, ...changes, memoryAddress: false, confirmedFields: ['code', 'station', 'carrier', 'pickupAddress'] });
       entry.choice = { action: 'new', station: changes.station };
-      if (this.persistBatch(next)) { this.setData({ editing: null }); this.openExceptions(); }
+      if (this.persistBatch(next)) { this.setData({ editing: null }); this.applyExceptions(edit.id); }
       return;
     }
     const original = [...this.data.records, ...this.data.drafts].find(r => r.id === edit.id);

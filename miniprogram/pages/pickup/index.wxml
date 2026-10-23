@@ -5,22 +5,9 @@
   <view wx:if="{{error && activeTab !== 'import' && errorScope !== 'import'}}" class="error" role="alert">{{error}}</view>
   <view wx:if="{{stationError}}" class="error" role="alert">{{stationError}}</view>
   <view wx:if="{{batchError}}" class="notice" role="status">{{batchError}}</view>
-  <view wx:if="{{recentImport && (activeTab === 'home' || activeTab === 'import')}}" class="card import-summary" role="status">
-    <view class="section-heading">{{recentImport.undone ? '本次导入已撤销' : recentImport.interrupted ? '正在整理截图…' : '已新增 ' + recentImport.added + ' 件'}}</view>
-    <view wx:if="{{!recentImport.interrupted && !recentImport.undone}}" class="hint">{{recentImport.updated ? '补全 ' + recentImport.updated + ' 件 · ' : ''}}跳过 {{recentImport.skipped}} 项重复或无关内容{{recentImport.reviewCount ? ' · 另有 ' + recentImport.reviewCount + ' 件需要处理' : ''}}</view>
-    <view wx:if="{{recentImport.failures}}" class="error">{{recentImport.failures}} 张截图未完成识别，不能判断其中的快递</view>
-    <view wx:if="{{recentImport.conflicts}}" class="hint">{{recentImport.conflicts}} 件已有后续操作，撤销时已保留</view>
-    <view wx:if="{{recentImport.canUndo}}" class="hint">可撤销至下一批导入；已编辑或核销的记录会保留。</view>
-    <view class="summary-actions">
-      <button wx:if="{{exceptionCount}}" size="mini" class="ui-button secondary" hover-class="button-pressed" bindtap="openExceptions" disabled="{{loading || storageBlocked}}">处理异常 {{exceptionCount}}</button>
-      <button wx:if="{{recentImport.failures}}" size="mini" class="ui-button text-button" hover-class="button-pressed" bindtap="showImportFailures">查看未完成截图</button>
-      <button wx:if="{{recentImport.canUndo}}" size="mini" class="ui-button text-button" hover-class="button-pressed" bindtap="undoImport" disabled="{{loading || importing || storageBlocked}}">撤销本次导入</button>
-    </view>
-    <view wx:if="{{newStations.length}}" class="hint new-station-hint">发现 {{newStations.length}} 个新取件地点 <text class="text-action" bindtap="addNewStations">加入常用驿站</text></view>
-  </view>
-  <view wx:if="{{exceptionCount && !recentImport.reviewCount && activeTab === 'home'}}" class="notice" bindtap="openExceptions">另有 {{exceptionCount}} 件先前暂存的问题，点击处理</view>
   <view class="page-panel" wx:if="{{activeTab === 'home'}}">
-    <view wx:if="{{importFeedback}}" class="import-feedback" role="status">{{importFeedback}}</view>
+    <view wx:if="{{exceptionCount}}" class="attention-row" hover-class="button-pressed" bindtap="openExceptions" role="button">待处理 {{exceptionCount}} 件 <text>›</text></view>
+    <view wx:if="{{failureCount}}" class="failure-banner"><text>{{failureCount}} 张识别失败</text><button class="ui-button secondary" hover-class="button-pressed" bindtap="retryFailures">重试</button></view>
     <view class="page-header"><view class="heading">待取件 <text class="count">{{remaining}}</text> 件</view><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button text-button manage-stations" catchtap="openStations">管理驿站</button></view>
     <view wx:if="{{!remaining}}" class="empty">暂无待取快递</view>
     <view wx:for="{{visiblePendingGroups}}" wx:key="id" wx:for-item="group" class="station-exit {{group.leaving ? 'station-leaving' : ''}}"><view class="station-exit-inner"><view class="card station-card home-station {{group.id !== '__unknown' ? 'sortable-station' : ''}} {{dragId === group.id ? 'station-lifted' : ''}} {{dragId ? 'station-sorting' : ''}}" style="{{group.dragStyle}}">
@@ -37,7 +24,6 @@
   </view>
 
   <view class="page-panel" wx:if="{{activeTab === 'import'}}">
-    <view wx:if="{{!notificationOpen}}" class="subtitle">最多 9 张，整批识别后自动保存，只有疑问需要处理。</view>
     <view class="heading">{{notificationOpen ? '粘贴通知' : '导入快递'}}</view>
     <view wx:if="{{notificationOpen}}" class="notification-composer">
       <textarea class="notification-input" value="{{notificationText}}" bindinput="notificationInput" placeholder="请粘贴完整的快递取件通知" maxlength="20000" cursor-spacing="24" disabled="{{choosing || importing}}" adjust-position="{{true}}" aria-label="完整快递取件通知" />
@@ -48,7 +34,7 @@
     </view>
     <block wx:else>
       <view class="import-sources">
-        <button hover-class="{{(loading || choosing || importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(loading || choosing || importing) ? 'ui-disabled' : ''}} primary import-source" bindtap="chooseImage" disabled="{{loading || choosing || importing}}" loading="{{choosing}}"><text class="source-symbol">▧</text><text>{{images.length ? '重新选择截图' : '从相册选择截图'}}</text></button>
+        <button hover-class="{{(loading || choosing || importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(loading || choosing || importing) ? 'ui-disabled' : ''}} primary import-source" bindtap="chooseImage" disabled="{{loading || choosing || importing}}" loading="{{choosing}}"><text class="source-symbol">▧</text><text>{{completed ? '继续选择截图' : '选择截图'}}</text></button>
         <button hover-class="{{(loading || choosing || importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(loading || choosing || importing) ? 'ui-disabled' : ''}} secondary import-source" bindtap="openNotification" disabled="{{loading || choosing || importing}}"><text class="source-symbol">≡</text><text>粘贴通知</text></button>
       </view>
       <view wx:if="{{error}}" class="error" role="alert">{{error}}</view>
@@ -64,23 +50,37 @@
           </view></view></view>
         </view></view></view>
       </view>
-      <view wx:if="{{drafts.length || results.length || loading || completed}}" class="import-result-actions">
-        <button wx:if="{{drafts.length}}" hover-class="{{(!validDraftCount || loading || importing || deleting || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(!validDraftCount || loading || importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} primary full-button" bindtap="confirmImport" disabled="{{!validDraftCount || loading || importing || deleting || storageBlocked}}" loading="{{importing}}">确认导入 {{validDraftCount}} 件</button>
-        <view class="session-actions"><button hover-class="{{(importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(importing) ? 'ui-disabled' : ''}} text-button" bindtap="clearImportResults" disabled="{{importing}}">清空本次结果</button><button hover-class="{{(importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(importing) ? 'ui-disabled' : ''}} text-button" bindtap="cancelImport" disabled="{{importing}}">取消本次导入</button></view>
+      <view wx:if="{{drafts.length}}" class="import-result-actions">
+        <button class="ui-button primary full-button" hover-class="button-pressed" bindtap="confirmImport" disabled="{{!validDraftCount || loading || importing || storageBlocked}}">确认导入 {{validDraftCount}} 件</button>
       </view>
-      <view wx:if="{{results.length}}" class="section-heading small-heading">截图 · {{images.length}} 张</view>
-      <view wx:for="{{results}}" wx:key="taskId" class="card image-result">
-        <image class="result-thumbnail" src="{{images[item.index - 1]}}" mode="aspectFill" data-index="{{item.index - 1}}" bindtap="previewImage" />
-        <view class="result-copy"><view class="result-label">截图 {{item.index}}</view><view class="result-status {{item.count ? 'success' : ''}}">{{item.error || item.message}}</view><view wx:if="{{item.retained}}" class="hint">上次成功结果已保留</view><view wx:if="{{item.uncertainCount}}" class="hint">部分内容待核对</view></view>
-        <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" wx:if="{{item.state === 'queued' || item.state === 'running'}}" size="mini" class="ui-button text-button" data-task-id="{{item.taskId}}" bindtap="skipImage">跳过</button>
-        <button wx:if="{{item.state === 'failed' && item.retryable}}" size="mini" class="ui-button text-button" data-task-id="{{item.taskId}}" bindtap="dismissFailedImage">忽略此图</button>
-        <button hover-class="{{(importing) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" wx:if="{{item.retryable}}" size="mini" class="ui-button {{(importing) ? 'ui-disabled' : ''}} secondary" data-task-id="{{item.taskId}}" bindtap="retryImage" disabled="{{importing}}">重试</button>
+      <view wx:if="{{recentImport && !recentImport.undone && !loading && !recentImport.interrupted}}" class="card import-summary">
+        <view class="section-title">{{recentImport.imageCount ? '已整理 ' + recentImport.imageCount + ' 张截图' : '已整理通知'}}</view>
+        <view class="import-totals"><text>新增 {{recentImport.added}} 件</text><button wx:if="{{recentImport.reviewCount}}" class="ui-button pending-total" hover-class="button-pressed" bindtap="openExceptions">待处理 {{recentImport.reviewCount}} 件 ›</button></view>
+        <view class="category-links">
+          <button class="ui-button secondary" hover-class="button-pressed" data-category="duplicate" bindtap="showResultCategory">重复 {{recentImport.duplicate}} ›</button>
+          <button class="ui-button secondary" hover-class="button-pressed" data-category="unrelated" bindtap="showResultCategory">无关 {{recentImport.unrelated}} ›</button>
+          <button class="ui-button secondary" hover-class="button-pressed" data-category="failure" bindtap="showResultCategory">失败 {{recentImport.failures}} ›</button>
+        </view>
+        <view wx:if="{{recentImport.failures}}" class="failure-banner"><text>{{recentImport.failures}} 张识别失败</text><button class="ui-button primary" hover-class="button-pressed" data-batch-id="{{recentImport.id}}" bindtap="retryFailures">重试</button></view>
+        <view class="summary-actions"><button class="ui-button secondary" hover-class="button-pressed" bindtap="viewPending">查看待取件</button><button wx:if="{{recentImport.canUndo}}" class="ui-button text-button" hover-class="button-pressed" bindtap="undoImport" disabled="{{importing || storageBlocked}}">撤销导入</button></view>
+      </view>
+      <button wx:if="{{exceptionCount > recentImport.reviewCount}}" class="ui-button secondary full-button" hover-class="button-pressed" bindtap="openExceptions">待处理 {{exceptionCount}} 件 ›</button>
+      <view wx:if="{{failureCount > recentImport.failures}}" class="failure-banner"><text>另有 {{failureCount - recentImport.failures}} 张识别失败</text><button class="ui-button secondary" hover-class="button-pressed" bindtap="retryFailures">重试</button></view>
+      <view wx:if="{{resultCategory}}" class="category-details">
+        <view class="page-header"><view class="section-title">{{categoryTitle}} · {{categoryItems.length}} 张</view><button class="ui-button text-button" hover-class="button-pressed" bindtap="closeResultCategory">收起</button></view>
+        <view wx:if="{{!categoryItems.length}}" class="empty">暂无{{categoryTitle}}截图</view>
+        <view wx:for="{{categoryItems}}" wx:key="key" class="card image-result">
+          <image wx:if="{{item.path}}" class="result-thumbnail" src="{{item.path}}" mode="aspectFill" data-batch-id="{{item.batchId}}" data-image-index="{{item.index}}" bindtap="previewResultImage" />
+          <view class="result-copy"><view class="result-label">截图 {{item.index + 1}}</view><view class="result-status">{{item.reason}}</view></view>
+          <button wx:if="{{item.retryable}}" class="ui-button primary" hover-class="button-pressed" data-batch-id="{{item.batchId}}" data-image-index="{{item.index}}" bindtap="retryImage" disabled="{{loading || choosing || storageBlocked}}">{{item.path ? '重试' : '选图重试'}}</button>
+        </view>
       </view>
     </block>
     <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button text-button privacy-link" bindtap="showImportPrivacy">隐私说明</button>
   </view>
 
   <view class="page-panel" wx:if="{{activeTab === 'history'}}">
+    <view class="page-header"><view class="heading">已取历史</view><button wx:if="{{history.length}}" class="ui-button secondary history-menu" hover-class="button-pressed" aria-label="历史菜单" bindtap="openHistoryMenu" disabled="{{deleting || importing || storageBlocked}}">•••</button></view>
     <view wx:if="{{!history.length}}" class="empty">暂无已取件记录</view>
     <view class="card history-card" wx:if="{{visibleHistory.length}}">
       <view wx:for="{{visibleHistory}}" wx:key="id" class="swipe-shell exit-row {{item.leaving ? 'row-leaving' : ''}}" data-id="{{item.id}}" bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel" catchtap="recordTap">
@@ -113,7 +113,7 @@
     <button hover-class="{{(stationBusy) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(stationBusy) ? 'ui-disabled' : ''}} secondary" data-tab="home" catchtap="switchTab" disabled="{{stationBusy}}">返回待取件</button>
   </view>
   <view wx:if="{{stationEditor}}" class="modal-mask" catchtap="cancelStationEdit">
-    <view class="edit-sheet" catchtap="noop">
+    <view class="edit-sheet" style="{{keyboardHeight ? 'max-height: calc(100vh - ' + keyboardHeight + 'px - 16px);' : ''}}" catchtap="noop">
       <view class="section-title">{{stationEditor.mode === 'merge' ? '统一驿站名称' : '修改显示名称'}}</view>
       <input class="field-input" value="{{stationEditor.name}}" bindinput="stationNameInput" maxlength="100" placeholder="填写统一显示的驿站名" disabled="{{stationBusy}}" />
       <view class="hint">原记录地点保留</view>
@@ -130,26 +130,32 @@
   <view wx:if="{{undoAvailable}}" class="undo-bar" catchtap="recordTap"><text>{{undoMessage}} · 5 秒内可撤销</text><button hover-class="{{(storageBlocked || importing || deleting) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(storageBlocked || importing || deleting) ? 'ui-disabled' : ''}} undo-action" size="mini" catchtap="undoDelete" disabled="{{storageBlocked || importing || deleting}}">撤销</button></view>
 
   </view>
-  <view wx:if="{{exceptionOpen}}" class="review-screen exception-screen" catchtap="noop">
-    <view class="review-header"><view class="section-title">只处理这些疑问</view><view class="hint">可靠快递已自动保存。未处理的问题会留在这里。</view></view>
+  <view wx:if="{{exceptionOpen && currentException}}" class="review-screen exception-screen" catchtap="noop">
+    <view class="review-header"><view class="exception-progress">{{loading ? progress : exceptionProgress}}</view></view>
     <view class="review-list-slot"><scroll-view class="review-list" scroll-y="{{true}}">
-      <view wx:for="{{exceptionItems}}" wx:key="id" wx:for-item="entry" class="review-item">
-        <view class="review-code">{{entry.code || '取件码待补充'}}</view><view class="review-reason">{{entry.message}}</view>
-        <view wx:if="{{!entry.locationOnly && entry.station !== '待确认地点'}}" class="hint">本次地点：{{entry.station}}</view>
-        <view wx:for="{{entry.sourceIndices}}" wx:key="*this" class="hint">来源：截图 {{item + 1}}</view>
-        <view wx:for="{{entry.matches}}" wx:key="id" class="match-info">{{item.taken ? '曾经取过' : '已有待取'}}：{{item.code}} · {{item.station}}</view>
-        <view wx:if="{{entry.locationOnly || entry.options.length}}">
-          <picker range="{{stationList}}" range-key="name" data-id="{{entry.id}}" bindchange="chooseExceptionStation"><view class="ui-button review-option">选择已有驿站</view></picker>
-          <input class="field-input" value="{{entry.selectedStation}}" data-id="{{entry.id}}" bindchange="exceptionStationInput" placeholder="也可手动填写地点" maxlength="100" />
-          <button wx:for="{{entry.options}}" wx:key="*this" class="ui-button review-option" data-id="{{entry.id}}" data-action="new" data-station="{{item}}" bindtap="chooseException">使用 {{item}}</button>
-        </view>
-        <button wx:if="{{entry.allowNew && !entry.needsCode}}" class="ui-button review-option {{entry.action === 'new' ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="new" bindtap="chooseException">{{entry.action === 'new' ? '✓ ' : ''}}{{entry.locationOnly ? (entry.selectedStation ? '加入此地点' : '先加入待取，地点待确认') : entry.reason === 'uncertain_code' ? '原图号码无误，加入待取' : '是新包裹，加入待取'}}</button>
-        <button wx:if="{{entry.needsCode || entry.reason === 'uncertain_code'}}" class="ui-button review-option" data-id="{{entry.id}}" bindtap="editException">{{entry.needsCode ? '手动补充号码和地点' : '修改有疑问的号码'}}</button>
-        <button class="ui-button review-option {{entry.action === 'skip' ? 'option-selected' : ''}}" data-id="{{entry.id}}" data-action="skip" bindtap="chooseException">{{entry.action === 'skip' ? '✓ ' : ''}}已有记录或无需领取，跳过</button>
-        <view wx:if="{{entry.allowNew === false}}" class="hint">运单已存在，保留现有记录；需要纠错时可在首页修改。</view>
+      <view class="exception-parcel">
+        <image wx:if="{{currentException.needsCode && currentException.path}}" class="exception-thumbnail" src="{{currentException.path}}" mode="aspectFit" data-batch-id="{{currentException.batchId}}" data-image-index="{{currentException.imageIndex}}" bindtap="previewResultImage" />
+        <view wx:else class="review-code">{{currentException.code || '取件码待补充'}}</view>
+        <view class="review-reason">{{currentException.message}}</view>
+        <view wx:if="{{currentException.selectedStation && currentException.locationOnly}}" class="hint">{{currentException.selectedStation}}</view>
       </view>
     </scroll-view></view>
-    <view class="review-footer"><view wx:if="{{batchError}}" class="error">{{batchError}}</view><view wx:if="{{storageError}}" class="error">{{storageError}}</view><view class="actions"><button class="ui-button secondary" hover-class="button-pressed" bindtap="closeExceptions">稍后处理</button><button class="ui-button primary" hover-class="button-pressed" bindtap="applyExceptions" disabled="{{storageBlocked || loading}}">保存已选处理</button></view></view>
+    <view class="review-footer exception-actions">
+      <view wx:if="{{storageError}}" class="error">{{storageError}}</view>
+      <view wx:if="{{currentException.failed && !loading}}" class="error">1 张识别失败</view>
+      <block wx:if="{{currentException.needsCode}}">
+        <button class="ui-button primary" hover-class="button-pressed" data-batch-id="{{currentException.batchId}}" data-image-index="{{currentException.imageIndex}}" bindtap="retryException" disabled="{{loading || choosing || storageBlocked}}">{{currentException.path ? '重试识别' : '选图重试识别'}}</button>
+        <button class="ui-button secondary" hover-class="button-pressed" data-id="{{currentException.id}}" bindtap="editException" disabled="{{loading || storageBlocked}}">手动补充</button>
+        <button class="ui-button secondary" hover-class="button-pressed" data-id="{{currentException.id}}" data-action="skip" bindtap="chooseException" disabled="{{loading || storageBlocked}}">跳过</button>
+      </block>
+      <block wx:else>
+        <button wx:if="{{currentException.locationOnly || currentException.options.length}}" class="ui-button primary" hover-class="button-pressed" data-id="{{currentException.id}}" bindtap="chooseExceptionStation" disabled="{{choosing || loading || storageBlocked}}">选择驿站</button>
+        <button wx:if="{{currentException.allowNew}}" class="ui-button {{currentException.locationOnly || currentException.options.length ? 'secondary' : 'primary'}}" hover-class="button-pressed" data-id="{{currentException.id}}" data-action="new" bindtap="chooseException" disabled="{{loading || storageBlocked}}">{{currentException.locationOnly ? '先加入待取' : currentException.reason === 'uncertain_code' ? '号码无误，加入待取' : '是新包裹，加入待取'}}</button>
+        <button wx:if="{{currentException.reason === 'uncertain_code'}}" class="ui-button secondary" hover-class="button-pressed" data-id="{{currentException.id}}" bindtap="editException" disabled="{{loading || storageBlocked}}">修改取件码</button>
+        <button wx:if="{{!currentException.locationOnly}}" class="ui-button secondary" hover-class="button-pressed" data-id="{{currentException.id}}" data-action="skip" bindtap="chooseException" disabled="{{loading || storageBlocked}}">{{currentException.reason === 'historical_code' ? '已经取过，跳过' : '无需领取，跳过'}}</button>
+      </block>
+      <button class="ui-button text-button" hover-class="button-pressed" bindtap="deferException" disabled="{{loading}}">稍后处理</button>
+    </view>
   </view>
   <view wx:if="{{reviewOpen}}" class="review-screen" catchtap="noop">
       <view class="review-header"><view class="section-title">核对重复快递</view><view class="hint">仅补全空缺信息，保留原记录状态。确认后统一保存。</view></view>
@@ -168,15 +174,15 @@
       </scroll-view></view>
       <view class="review-footer"><view class="review-summary">{{reviewSummary}}</view><view class="actions"><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button secondary" catchtap="cancelImportReview">返回核对</button><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button primary" catchtap="finishImportReview">按以上选择导入</button></view></view>
   </view>
-  <view wx:if="{{editing}}" class="modal-mask" catchtap="cancelEdit">
-    <view class="edit-sheet" catchtap="noop">
+  <view wx:if="{{editing}}" class="modal-mask" style="{{keyboardHeight ? 'bottom: ' + keyboardHeight + 'px;' : ''}}" catchtap="cancelEdit">
+    <view class="edit-sheet" style="{{keyboardHeight ? 'max-height: calc(100vh - ' + keyboardHeight + 'px - 16px);' : ''}}" catchtap="noop">
       <view class="section-title">核对并修改</view>
       <text class="field-label">取件码</text><input class="field-input" value="{{editing.code}}" bindinput="editCode" placeholder="填写完整取件码" maxlength="32" adjust-position="{{true}}" />
       <text class="field-label">取件地点</text><textarea class="station-input" value="{{editing.station}}" bindinput="editStation" placeholder="填写驿站名称" maxlength="100" auto-height="{{true}}" adjust-position="{{true}}" />
       <text class="field-label">详细取件地址（选填）</text><textarea class="station-input" value="{{editing.pickupAddress}}" bindinput="editPickupAddress" maxlength="100" auto-height="{{true}}" adjust-position="{{true}}" />
       <text class="field-label">快递公司（选填）</text><input class="field-input" value="{{editing.carrier}}" bindinput="editCarrier" placeholder="如：中通快递" maxlength="40" adjust-position="{{true}}" />
       <view wx:if="{{editError}}" class="error">{{editError}}</view>
-      <view class="actions"><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button secondary" bindtap="cancelEdit">取消</button><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button primary" bindtap="saveEdit">保存修改</button></view>
+      <view class="actions"><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button secondary" bindtap="cancelEdit">取消</button><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button primary" bindtap="saveEdit">{{editing.exception ? '加入待取' : '保存修改'}}</button></view>
     </view>
   </view>
 </view>

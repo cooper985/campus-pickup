@@ -22,7 +22,8 @@ function validate(state) {
       if (!Number.isInteger(image.index) || image.index < 0 || image.index > 8 || !Array.isArray(image.candidates) ||
         typeof image.hash !== 'string' || image.hash && !/^[a-f0-9]{40}:\d+$/.test(image.hash) ||
         !['queued', 'done', 'failed', 'duplicate'].includes(image.state) || !string(image.status, 50) ||
-        !onlyKeys(image, ['index', 'hash', 'state', 'status', 'candidates'])) throw Error('导入图片状态异常');
+        !onlyKeys(image, ['index', 'hash', 'state', 'status', 'candidates', 'duplicateOf']) ||
+        image.duplicateOf !== undefined && (!Number.isInteger(image.duplicateOf) || image.duplicateOf < 0 || image.duplicateOf >= image.index)) throw Error('导入图片状态异常');
       image.candidates.forEach(checkCandidate);
     }
     for (const r of b.reviews) {
@@ -70,7 +71,12 @@ function apply(batch, plan, images, now = Date.now()) {
     return { id: d.candidate.id, candidate: cleanCandidate(d.candidate), reason: d.reason, matches: d.matches || [], allowNew: d.allowNew !== false,
       ...(previous && previous.choice ? { choice: previous.choice } : {}) };
   });
-  b.outcomes = plan.decisions.map(d => ({ id: d.candidate.id, decision: d.decision, reason: d.reason }));
+  b.outcomes = [...batch.outcomes.filter(o => resolved.has(o.id)), ...plan.decisions.map(d => {
+    const previous = batch.outcomes.find(o => o.id === d.candidate.id);
+    if (previous && previous.decision === 'AUTO_IMPORT' && d.decision === 'AUTO_SKIP' &&
+      (d.matches || []).some(m => batch.additions.some(r => r.id === m.id))) return previous;
+    return { id: d.candidate.id, decision: d.decision, reason: d.reason };
+  })];
   return b;
 }
 function undo(batch, records) {
@@ -95,4 +101,14 @@ function replace(state, batch) {
   // Keep unresolved work; cap only older finished receipts and their image fingerprints.
   return { version: 1, batches: all.filter((b, i) => i >= all.length - 10 || b.reviews.length || b.status === 'processing' || b.status === 'interrupted' || b.images.some(im => im.state === 'failed' && im.status !== 'SKIPPED_BY_USER')) };
 }
-module.exports = { empty, validate, cleanCandidate, begin, apply, undo, replace };
+// A fingerprint caches recognition evidence, never the existence of a parcel.
+function cachedImage(state, hash, batchId) {
+  if (!hash) return null;
+  for (const b of state.batches.slice().reverse()) {
+    if (b.id === batchId) continue;
+    const image = b.images.find(i => i.hash === hash && i.state === 'done');
+    if (image) return image;
+  }
+  return null;
+}
+module.exports = { empty, validate, cleanCandidate, begin, apply, undo, replace, cachedImage };

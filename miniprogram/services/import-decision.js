@@ -5,11 +5,11 @@ const { UNKNOWN } = require('./pickup-parser');
 const norm = stations.normalize;
 const AUTO_IMPORT = 'AUTO_IMPORT', AUTO_SKIP = 'AUTO_SKIP', NEEDS_REVIEW = 'NEEDS_REVIEW';
 const reasonText = {
-  missing_location: '尚未确定取件地点', uncertain_code: '号码存在疑问，请对照原图修改或确认',
-  batch_conflict: '同码的地点、运单或通知信息不同，请判断是否为不同包裹',
-  status_conflict: '取件状态存在矛盾，无法判断现在是否仍待取', signed: '通知显示已签收，无法判断是否仍需到站取件',
-  old_notice: '通知日期不是今天，无法确认现在是否仍待取', historical_code: '这个取件码曾经取过，是新的包裹吗？',
-  record_conflict: '与已有包裹信息不同，请判断是否为新的包裹', missing_code: '发现快递信息，但没有可靠取件码，请重试原图或手动补充',
+  missing_location: '这件快递缺少驿站', uncertain_code: '请核对取件码',
+  batch_conflict: '这些通知可能是不同包裹',
+  status_conflict: '这件快递的取件状态不明确', signed: '截图显示已签收，是否还需取件？',
+  old_notice: '这是一条旧通知，还需取件吗？', historical_code: '这件快递以前取过',
+  record_conflict: '与已有包裹信息不同', missing_code: '未找到可靠取件码',
 };
 function classify(candidate, records, state, now = Date.now()) {
   const c = { ...candidate };
@@ -53,10 +53,12 @@ function classify(candidate, records, state, now = Date.now()) {
 }
 // Pure shadow evaluation: callers decide whether to commit this plan.
 function evaluate(candidates, records, state = { version: 1, groups: [] }, now = Date.now()) {
-  const decisions = candidates.map(c => classify(c, records, state, now));
+  const decisions = [];
   let next = records.slice();
   const additions = [], updates = [];
-  for (const d of decisions) {
+  for (const c of candidates) {
+    const d = classify(c, next, state, now);
+    decisions.push(d);
     if (d.decision === AUTO_IMPORT) {
       const record = newRecord(d.candidate, next, now); additions.push(record); next.push(record);
     } else if (d.update) {

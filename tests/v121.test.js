@@ -49,7 +49,7 @@ test('移除、清空和取消仅影响草稿；有效计数精确，成功后�
   p.setDrafts([{ id: 'a', station: '北门', code: '4444' }]); p.clearImportResults(); assert.equal(p.data.drafts.length, 0);
   assert.equal(JSON.stringify(p.data.records[0]), JSON.stringify(JSON.parse(before)[0]));
   p.setDrafts([{ id: 'a', station: '北门', code: '4444' }]); p.data.error = '旧识别错误'; p.cancelImport();
-  assert.equal(p.data.activeTab, 'home'); assert.equal(p.data.error, ''); assert.equal(p.data.validDraftCount, 0); assert.equal(p.data.records.length, 2); p.onUnload();
+  assert.equal(p.data.activeTab, 'import'); assert.equal(p.data.error, ''); assert.equal(p.data.validDraftCount, 0); assert.equal(p.data.records.length, 2); p.onUnload();
 });
 test('清空/取消隔离仍运行的识别；离开通知输入界面清理文字和提示', async () => {
   const wx = fakeStorage(); let release;
