@@ -21,8 +21,8 @@
       "name": "跨图补地点和相似页新增信息",
       "records": [],
       "candidates": [
-        {"id": "a","code": "B3-4-7401","station": "待确认地点","label": {"parcelId": "complement","decision": "AUTO_IMPORT","fields": {"code": "B3-4-7401","station": "河南工业大学服务站"}}},
-        {"id": "b","code": "B3-4-7401","station": "河南工业大学服务站","label": {"parcelId": "complement","decision": "AUTO_IMPORT","fields": {"code": "B3-4-7401","station": "河南工业大学服务站"}}},
+        {"id": "a","waybillNumber": "SF123456789012","code": "B3-4-7401","station": "待确认地点","label": {"parcelId": "complement","decision": "AUTO_IMPORT","fields": {"code": "B3-4-7401","station": "河南工业大学服务站"}}},
+        {"id": "b","waybillNumber": "SF123456789012","code": "B3-4-7401","station": "河南工业大学服务站","label": {"parcelId": "complement","decision": "AUTO_IMPORT","fields": {"code": "B3-4-7401","station": "河南工业大学服务站"}}},
         {"id": "c","code": "C205-2004","station": "北校洗浴中心驿站","label": {"parcelId": "c","decision": "AUTO_IMPORT","fields": {"code": "C205-2004","station": "北校洗浴中心驿站"}}},
         {"id": "d","code": "A203-4010","station": "东门驿站","label": {"parcelId": "d","decision": "AUTO_IMPORT","fields": {"code": "A203-4010","station": "东门驿站"}}},
         {"id": "e","code": "C2-3-1304","station": "西门服务站","label": {"parcelId": "e","decision": "AUTO_IMPORT","fields": {"code": "C2-3-1304","station": "西门服务站"}}}
@@ -56,8 +56,8 @@
       "name": "同码不同运单",
       "records": [],
       "candidates": [
-        {"id": "w1","code": "5678","station": "大学服务站","waybillNumber": "SF123456789012","label": {"parcelId": "w1","decision": "NEEDS_REVIEW","fields": {"code": "5678","station": "大学服务站"}}},
-        {"id": "w2","code": "5678","station": "大学服务站","waybillNumber": "SF999999999999","label": {"parcelId": "w2","decision": "NEEDS_REVIEW","fields": {"code": "5678","station": "大学服务站"}}}
+        {"id": "w1","code": "5678","station": "大学服务站","waybillNumber": "SF123456789012","label": {"parcelId": "w1","decision": "AUTO_IMPORT","fields": {"code": "5678","station": "大学服务站"}}},
+        {"id": "w2","code": "5678","station": "大学服务站","waybillNumber": "SF999999999999","label": {"parcelId": "w2","decision": "AUTO_IMPORT","fields": {"code": "5678","station": "大学服务站"}}}
       ]
     },
     {

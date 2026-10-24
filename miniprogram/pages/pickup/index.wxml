@@ -10,8 +10,8 @@
     <view wx:if="{{failureCount}}" class="failure-banner"><text>{{failureCount}} 张识别失败</text><button class="ui-button secondary" hover-class="button-pressed" bindtap="retryFailures">重试</button></view>
     <view class="page-header"><view class="heading">待取件 <text class="count">{{remaining}}</text> 件</view><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button text-button manage-stations" catchtap="openStations">管理驿站</button></view>
     <view wx:if="{{!remaining}}" class="empty">暂无待取快递</view>
-    <view wx:for="{{visiblePendingGroups}}" wx:key="id" wx:for-item="group" class="station-exit {{group.leaving ? 'station-leaving' : ''}}"><view class="station-exit-inner"><view class="card station-card home-station {{group.id !== '__unknown' ? 'sortable-station' : ''}} {{dragId === group.id ? 'station-lifted' : ''}} {{dragId ? 'station-sorting' : ''}}" style="{{group.dragStyle}}">
-      <view class="station-header" data-station="{{group.station}}" catchtap="toggleGroup" role="button" aria-label="{{group.collapsed ? '展开' : '收起'}}{{group.station}}"><view wx:if="{{group.id !== '__unknown' && locationCount > 1}}" class="drag-handle" data-id="{{group.id}}" bindtouchstart="stationTouchStart" bindtouchmove="moveStationDrag" bindtouchend="finishStationDrag" bindtouchcancel="cancelStationDrag" catchlongpress="beginStationDrag" catchtap="noop" role="button" aria-label="长按拖动{{group.station}}排序">⠿</view><view class="station-mark tone-{{group.tone}}">{{group.id === '__unknown' ? '!' : '▤'}}</view><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.items.length}} 件　{{group.collapsed ? '＋' : '−'}}</text></view>
+    <view wx:for="{{visiblePendingGroups}}" wx:key="id" wx:for-item="group" class="station-exit {{group.leaving ? 'station-leaving' : ''}}"><view class="station-exit-inner"><view class="card station-card home-station {{group.sortable ? 'sortable-station' : ''}} {{dragId === group.id ? 'station-lifted' : ''}} {{dragId ? 'station-sorting' : ''}}" style="{{group.dragStyle}}">
+      <view class="station-header" data-station="{{group.station}}" catchtap="toggleGroup" role="button" aria-label="{{group.collapsed ? '展开' : '收起'}}{{group.station}}"><view wx:if="{{group.sortable && locationCount > 1}}" class="drag-handle" data-id="{{group.id}}" bindtouchstart="stationTouchStart" bindtouchmove="moveStationDrag" bindtouchend="finishStationDrag" bindtouchcancel="cancelStationDrag" catchlongpress="beginStationDrag" catchtap="noop" role="button" aria-label="长按拖动{{group.station}}排序">⠿</view><view class="station-mark tone-{{group.tone}}">{{group.id === '__unknown' ? '!' : '▤'}}</view><view class="station-name {{group.station === '待确认地点' ? 'review' : ''}}">{{group.station}}</view><text class="station-count">{{group.items.length}} 件　{{group.collapsed ? '＋' : '−'}}</text></view>
 
       <view class="group-content {{group.collapsed ? 'is-collapsed' : ''}}" aria-hidden="{{group.collapsed}}"><view class="group-inner">
         <view wx:for="{{group.items}}" wx:key="id" class="exit-row {{item.leaving ? 'row-leaving' : ''}}"><view class="exit-inner"><view class="parcel-row">
@@ -96,29 +96,35 @@
 
   <view class="page-panel" wx:if="{{activeTab === 'stations'}}">
     <view class="heading">管理驿站</view>
-    <view class="subtitle">选择两个驿站可合并</view>
+    <view class="subtitle">点击驿站可修改、合并或删除配置</view>
     <view wx:if="{{!stationList.length}}" class="empty">导入快递后，这里会列出已知取件地点。</view>
     <view wx:for="{{stationSuggestions}}" wx:key="*this" class="notice">可能同站：{{item}}</view>
-    <view wx:for="{{stationList}}" wx:key="id" wx:for-item="station" wx:for-index="stationIndex" class="card station-setting">
-      <view class="station-setting-top">
-        <button hover-class="{{(stationBusy || stationBlocked || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(stationBusy || stationBlocked || storageBlocked) ? 'ui-disabled' : ''}} station-select {{(stationSelection[0] === station.id || stationSelection[1] === station.id) ? 'option-selected' : 'secondary'}}" disabled="{{stationBusy || stationBlocked || storageBlocked}}" data-id="{{station.id}}" catchtap="selectStation" aria-label="选择{{station.name}}">{{(stationSelection[0] === station.id || stationSelection[1] === station.id) ? '✓ 已选' : '选择'}}</button>
-        <view class="parcel-main"><view class="station-name">{{station.name}}</view><view class="hint">{{station.count}} 件待取</view></view>
-        <button hover-class="{{(stationBusy || stationBlocked || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(stationBusy || stationBlocked || storageBlocked) ? 'ui-disabled' : ''}} text-button" data-id="{{station.id}}" catchtap="editStationName" disabled="{{stationBusy || stationBlocked || storageBlocked}}">修改名称</button>
-      </view>
-      <view wx:if="{{station.aliases.length > 1 || alias !== station.name}}" class="station-alias" wx:for="{{station.aliases}}" wx:key="*this" wx:for-item="alias"><text class="alias-name">原地点：{{alias}}</text><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" wx:if="{{station.aliases.length > 1}}" size="mini" class="ui-button text-button" data-id="{{station.id}}" data-alias="{{alias}}" catchtap="unlinkStation" disabled="{{stationBusy || stationBlocked || storageBlocked}}">取消关联</button></view>
-      <button wx:if="{{!station.confirmed}}" size="mini" class="ui-button text-button" data-id="{{station.id}}" bindtap="markStationCommon" disabled="{{stationBlocked || storageBlocked}}">加入常用驿站</button>
-      <view class="station-order"><button hover-class="{{(stationIndex === 0 || stationBusy || stationBlocked || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(stationIndex === 0 || stationBusy || stationBlocked || storageBlocked) ? 'ui-disabled' : ''}} secondary" data-id="{{station.id}}" data-direction="-1" catchtap="moveStation" disabled="{{stationIndex === 0 || stationBusy || stationBlocked || storageBlocked}}">↑ 上移</button><button hover-class="{{(stationIndex === stationList.length - 1 || stationBusy || stationBlocked || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(stationIndex === stationList.length - 1 || stationBusy || stationBlocked || storageBlocked) ? 'ui-disabled' : ''}} secondary" data-id="{{station.id}}" data-direction="1" catchtap="moveStation" disabled="{{stationIndex === stationList.length - 1 || stationBusy || stationBlocked || storageBlocked}}">↓ 下移</button></view>
+    <view class="hint">长按拖动排序，点击查看详情</view>
+    <view wx:for="{{stationList}}" wx:key="id" wx:for-item="station" class="card station-setting sortable-station {{dragId === station.id ? 'station-lifted' : ''}}" style="{{station.dragStyle}}" data-id="{{station.id}}" bindtap="openStationDetail" bindtouchstart="stationTouchStart" bindtouchmove="moveStationDrag" bindtouchend="finishStationDrag" bindtouchcancel="cancelStationDrag" catchlongpress="beginStationDrag" role="button" aria-label="{{station.name}}，长按拖动排序，点击详情">
+      <view class="station-setting-top"><text class="drag-symbol">⠿</text><view class="parcel-main"><view class="station-name">{{station.name}}</view><view class="hint">{{station.count}} 件待取{{station.confirmed ? ' · 常用' : ''}}</view></view><text>›</text></view>
     </view>
-    <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" wx:if="{{stationList.length > 1}}" class="ui-button primary" catchtap="beginStationMerge" disabled="{{stationSelection.length !== 2 || stationBusy || stationBlocked || storageBlocked}}">合并两个驿站（{{stationSelection.length}}/2）</button>
     <button hover-class="{{(stationBusy) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(stationBusy) ? 'ui-disabled' : ''}} secondary" data-tab="home" catchtap="switchTab" disabled="{{stationBusy}}">返回待取件</button>
   </view>
   <view wx:if="{{stationEditor}}" class="modal-mask" catchtap="cancelStationEdit">
     <view class="edit-sheet" style="{{keyboardHeight ? 'max-height: calc(100vh - ' + keyboardHeight + 'px - 16px);' : ''}}" catchtap="noop">
+      <view wx:if="{{stationEditor.mode === 'detail'}}">
+        <view class="section-title">{{stationEditor.name}}</view>
+        <view wx:if="{{stationEditor.suspicious}}" class="notice">名称可能混入通知正文，请核对后修改。包裹的原地点会保留。</view>
+        <button class="ui-button secondary" data-id="{{stationEditor.id}}" bindtap="editStationName">修改名称</button>
+        <view class="field-label">已关联的原地点</view>
+        <view class="station-alias" wx:for="{{stationEditor.aliases}}" wx:key="*this" wx:for-item="alias"><text class="alias-name">{{alias}}</text><button wx:if="{{stationEditor.aliases.length > 1}}" size="mini" class="ui-button text-button" data-id="{{stationEditor.id}}" data-alias="{{alias}}" bindtap="unlinkStation" disabled="{{stationBusy || stationBlocked || storageBlocked}}">取消关联</button></view>
+        <button wx:if="{{!stationEditor.confirmed && !stationEditor.suspicious}}" class="ui-button text-button" data-id="{{stationEditor.id}}" bindtap="markStationCommon" disabled="{{stationBlocked || storageBlocked}}">加入常用驿站</button>
+        <picker wx:if="{{stationList.length > 1}}" range="{{stationEditor.mergeNames}}" bindchange="mergeStationFromDetail" disabled="{{stationBusy || stationBlocked || storageBlocked}}"><view class="ui-button text-button">与另一驿站合并 ›</view></picker>
+        <button class="ui-button danger-button" bindtap="deleteStation" disabled="{{stationBusy || stationBlocked || storageBlocked}}">删除驿站</button>
+        <button class="ui-button text-button" bindtap="cancelStationEdit" disabled="{{stationBusy}}">关闭</button>
+      </view>
+      <block wx:else>
       <view class="section-title">{{stationEditor.mode === 'merge' ? '统一驿站名称' : '修改显示名称'}}</view>
       <input class="field-input" value="{{stationEditor.name}}" bindinput="stationNameInput" maxlength="100" placeholder="填写统一显示的驿站名" disabled="{{stationBusy}}" />
       <view class="hint">原记录地点保留</view>
       <view wx:if="{{stationError}}" class="error">{{stationError}}</view>
       <view class="actions"><button hover-class="{{(stationBusy) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(stationBusy) ? 'ui-disabled' : ''}} secondary" catchtap="cancelStationEdit" disabled="{{stationBusy}}">取消</button><button hover-class="{{(stationBusy || stationBlocked || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(stationBusy || stationBlocked || storageBlocked) ? 'ui-disabled' : ''}} primary" catchtap="confirmStationEdit" disabled="{{stationBusy || stationBlocked || storageBlocked}}">{{stationEditor.mode === 'merge' ? '确认合并' : '保存名称'}}</button></view>
+      </block>
     </view>
   </view>
 
@@ -134,9 +140,19 @@
     <view class="review-header"><view class="exception-progress">{{loading ? progress : exceptionProgress}}</view></view>
     <view class="review-list-slot"><scroll-view class="review-list" scroll-y="{{true}}">
       <view class="exception-parcel">
-        <image wx:if="{{currentException.needsCode && currentException.path}}" class="exception-thumbnail" src="{{currentException.path}}" mode="aspectFit" data-batch-id="{{currentException.batchId}}" data-image-index="{{currentException.imageIndex}}" bindtap="previewResultImage" />
-        <view wx:else class="review-code">{{currentException.code || '取件码待补充'}}</view>
+        <view class="review-code">{{currentException.code || '取件码待补充'}}</view>
         <view class="review-reason">{{currentException.message}}</view>
+        <view wx:if="{{currentException.conflictText}}" class="hint">请核对：{{currentException.conflictText}}</view>
+        <view class="exception-sources">
+          <view wx:for="{{currentException.sources}}" wx:key="imageId" wx:for-item="source" class="exception-source">
+            <view class="hint">{{source.label}}</view>
+            <image wx:if="{{source.path}}" class="exception-thumbnail" src="{{source.path}}" mode="aspectFit" data-batch-id="{{source.batchId}}" data-image-index="{{source.imageIndex}}" bindtap="previewResultImage" binderror="sourceImageError" aria-label="放大{{source.label}}" />
+            <view wx:else class="source-expired"><text>原图未保留或已失效</text><button class="ui-button text-button" data-batch-id="{{source.batchId}}" data-image-index="{{source.imageIndex}}" bindtap="selectSourceImage" disabled="{{choosing || loading}}">{{source.needsRecognition ? '选图重新识别' : '重新选择原图'}}</button></view>
+          </view>
+        </view>
+        <view wx:if="{{currentException.matches.length}}" class="existing-evidence"><view class="field-label">已有记录</view><view wx:for="{{currentException.matches}}" wx:key="id" wx:for-item="match" class="hint">{{match.code}} · {{match.station}} · {{match.taken ? '已取件' : '待取件'}}</view></view>
+        <view wx:if="{{currentException.sources.length}}" class="text-action" bindtap="toggleExceptionEvidence" role="button">{{currentException.evidenceOpen ? '收起识别依据' : '查看识别依据'}}</view>
+        <view wx:if="{{currentException.evidenceOpen}}" class="evidence-details"><view wx:for="{{currentException.matches}}" wx:key="id" wx:for-item="match"><view class="field-label">已有记录</view><view wx:if="{{match.pickupAddress}}" class="hint">详细地址：{{match.pickupAddress}}</view><view wx:if="{{match.carrier}}" class="hint">快递公司：{{match.carrier}}</view><view wx:if="{{match.waybillNumber}}" class="hint">运单号：{{match.waybillNumber}}</view></view><view wx:for="{{currentException.sources}}" wx:key="imageId" wx:for-item="source"><view class="hint">{{source.label}}：{{source.fields || '需要人工核对'}}</view><view wx:for="{{source.values}}" wx:key="*this" class="hint">{{item}}</view></view></view>
         <view wx:if="{{currentException.selectedStation && currentException.locationOnly}}" class="hint">{{currentException.selectedStation}}</view>
       </view>
     </scroll-view></view>
@@ -152,7 +168,7 @@
         <button wx:if="{{currentException.locationOnly || currentException.options.length}}" class="ui-button primary" hover-class="button-pressed" data-id="{{currentException.id}}" bindtap="chooseExceptionStation" disabled="{{choosing || loading || storageBlocked}}">选择驿站</button>
         <button wx:if="{{currentException.allowNew}}" class="ui-button {{currentException.locationOnly || currentException.options.length ? 'secondary' : 'primary'}}" hover-class="button-pressed" data-id="{{currentException.id}}" data-action="new" bindtap="chooseException" disabled="{{loading || storageBlocked}}">{{currentException.locationOnly ? '先加入待取' : currentException.reason === 'uncertain_code' ? '号码无误，加入待取' : '是新包裹，加入待取'}}</button>
         <button wx:if="{{currentException.reason === 'uncertain_code'}}" class="ui-button secondary" hover-class="button-pressed" data-id="{{currentException.id}}" bindtap="editException" disabled="{{loading || storageBlocked}}">修改取件码</button>
-        <button wx:if="{{!currentException.locationOnly}}" class="ui-button secondary" hover-class="button-pressed" data-id="{{currentException.id}}" data-action="skip" bindtap="chooseException" disabled="{{loading || storageBlocked}}">{{currentException.reason === 'historical_code' ? '已经取过，跳过' : '无需领取，跳过'}}</button>
+        <button wx:if="{{!currentException.locationOnly}}" class="ui-button secondary" hover-class="button-pressed" data-id="{{currentException.id}}" data-action="skip" bindtap="chooseException" disabled="{{loading || storageBlocked}}">{{currentException.reason === 'historical_code' ? '已经取过，跳过' : currentException.allowNew ? '无需领取，跳过' : '保留已有记录'}}</button>
       </block>
       <button class="ui-button text-button" hover-class="button-pressed" bindtap="deferException" disabled="{{loading}}">稍后处理</button>
     </view>

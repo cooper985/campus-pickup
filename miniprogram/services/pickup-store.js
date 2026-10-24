@@ -28,6 +28,7 @@ function validate(value) {
         r.takenAt < r.createdAt || r.takenAt > r.updatedAt : r.takenAt !== null)) {
       throw new Error("本地记录字段异常");
     }
+    if (r.parcelStatus !== undefined && !require('./import-evidence').statuses.includes(r.parcelStatus)) throw new Error('物流状态异常');
     if (r.confirmedFields !== undefined && (!Array.isArray(r.confirmedFields) ||
       r.confirmedFields.length > CONFIRMABLE.length || r.confirmedFields.some(f => CONFIRMABLE.indexOf(f) < 0))) {
       throw new Error("本地字段确认信息异常");
@@ -41,6 +42,7 @@ function storedRecord(record) {
   FIELDS.forEach(key => { result[key] = record[key]; });
   if (record.pickupAddress !== undefined) result.pickupAddress = record.pickupAddress;
   if (record.confirmedFields !== undefined) result.confirmedFields = record.confirmedFields.slice();
+  if (record.parcelStatus !== undefined) result.parcelStatus = record.parcelStatus;
   if (record.noticeAt !== undefined) result.noticeAt = record.noticeAt;
   return result;
 }
@@ -108,6 +110,7 @@ function newRecord(draft, existing = [], now = Date.now()) {
     ...(draft.pickupAddress !== undefined ? { pickupAddress: draft.pickupAddress.trim() } : {}),
     carrier: draft.carrier || "", waybillNumber: draft.waybillNumber || "",
     taken: false, createdAt: now, updatedAt: now, takenAt: null,
+    ...(draft.parcelStatus ? { parcelStatus: draft.parcelStatus } : {}),
     ...(draft.noticeAt ? { noticeAt: draft.noticeAt } : {}),
     ...(draft.confirmedFields ? { confirmedFields: draft.confirmedFields } : {}) });
 }

@@ -1,47 +1,56 @@
 const { validCode } = require('./pickup-code');
-const normalize = value => String(value || '').normalize('NFKC').toUpperCase().replace(/[—–－﹣−‐‑‒]/g, '-').replace(/\s/g, '');
-const known = value => !!normalize(value) && !/^(待确认|待确认地点|地点待确认)$/.test(normalize(value));
-const fields = ['station', 'pickupAddress', 'carrier', 'waybillNumber', 'noticeAt'];
-const carrierKey = value => normalize(value).replace(/^顺丰(?:快递|速运)$/, '顺丰').replace(/^京东(?:快递|物流)$/, '京东');
-// Only this batch is compared. A code is never a permanent parcel identity.
+const identity = require('./parcel-identity');
+const evidence = require('./import-evidence');
+const { normalize, known } = identity;
+const fields = ['code', 'station', 'pickupAddress', 'carrier', 'waybillNumber'];
 function fuse(candidates, stationKey = normalize) {
-  const groups = new Map();
-  for (const item of candidates) {
-    const key = normalize(item.code);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(item);
+  const groups = [];
+  // Prefer complete waybills, so an incomplete candidate cannot bridge two parcels.
+  const ordered = candidates.slice().sort((a, b) => Number(identity.validWaybill(b.waybillNumber)) - Number(identity.validWaybill(a.waybillNumber)));
+  for (const c of ordered) {
+    const compatible = groups.filter(group => !c.unresolvedRegion && !group.some(p => p.unresolvedRegion) && group.some(p => identity.same(c, p, stationKey)) && !group.some(p => identity.differentWaybill(c, p)));
+    if (compatible.length === 1) compatible[0].push(c);
+    else groups.push([c]);
   }
   const result = [];
-  for (const [code, members] of groups) {
-    const valueKey = (field, value) => field === 'station' ? stationKey(value) : field === 'carrier' ? carrierKey(value) : normalize(value);
-    const statuses = new Set(members.map(r => r.parcelStatus).filter(s => s && s !== 'unknown'));
-    const conflict = fields.some(field => new Set(members.filter(r => field === 'station' ? known(r[field]) : !!r[field])
-      .map(r => valueKey(field, r[field]))).size > 1);
-    const separate = members.length > 1 && (conflict || members.some(r => r.uncertainCode) ||
-      new Set(members.map(r => r.sourceIndex)).size !== members.length);
-    if (separate || members.length === 1) {
+  for (const group of groups) {
+    const members = group.sort((a, b) => candidates.indexOf(a) - candidates.indexOf(b));
+    const conflicts = [...new Set(members.flatMap(a => members.flatMap(b => identity.conflicts(a, b, stationKey))))];
+    if (new Set(members.map(r => r.noticeAt).filter(Boolean)).size > 1 && !members.every(r => identity.sameWaybill(r, members[0]))) conflicts.push('noticeAt');
+    if (members.some(r => r.uncertainCode)) conflicts.push('code');
+    if (members.length > 1 && new Set(members.map(r => r.sourceIndex)).size !== members.length) conflicts.push('identity');
+    if (conflicts.length) {
       result.push(...members.map(r => ({ ...r, sourceIds: [r.id], sourceIndices: [r.sourceIndex],
-        ...(separate ? { batchConflict: true, needsReview: true } : {}) })));
+        conflictFields: [...new Set(conflicts)], relatedSourceIndices: [...new Set(members.map(r => r.sourceIndex))], batchConflict: true, needsReview: true })));
       continue;
     }
-    if (!validCode(code)) { result.push(...members); continue; }
-    const merged = { ...members[0], code, sourceIds: members.map(r => r.id), sourceIndices: members.map(r => r.sourceIndex), fieldSources: {} };
+    const merged = { ...members[0], sourceIds: members.map(r => r.id), sourceIndices: [...new Set(members.map(r => r.sourceIndex))],
+      sourceRegions: members.flatMap(r => r.sourceRegions || []), fieldSources: {} };
     for (const field of fields) {
-      const providers = members.filter(r => (r.confirmedFields || []).includes(field) || (field === 'station' ? known(r[field]) : !!r[field]));
+      const providers = members.filter(r => field === 'station' ? known(r[field]) : !!r[field]);
       const provider = providers.find(r => (r.confirmedFields || []).includes(field)) || providers[0];
       if (provider) { merged[field] = provider[field]; merged.fieldSources[field] = provider.sourceIndex; }
     }
+    const status = evidence.reconcile(members, members.every(r => identity.sameWaybill(r, members[0])));
+    merged.parcelStatus = status.parcelStatus;
+    merged.timeConflict = members.some(r => r.timeConflict) && status.parcelStatus === 'conflict';
+    const times = members.map(r => r.noticeAt).filter(Boolean);
+    if (times.length) merged.noticeAt = Math.max(...times);
+    if (new Set(times).size > 1 && !members.every(r => identity.sameWaybill(r, members[0]))) { merged.batchConflict = true; merged.conflictFields = ['noticeAt']; }
+    if (status.parcelStatus === 'conflict' || merged.timeConflict) merged.conflictFields = [...new Set([...(merged.conflictFields || []), 'parcelStatus'])];
+    merged.statusEvents = members.flatMap(r => r.statusEvents || (r.noticeAt && r.parcelStatus ? [{ noticeAt: r.noticeAt, parcelStatus: r.parcelStatus }] : []));
     merged.confirmedFields = [...new Set(members.flatMap(r => r.confirmedFields || []))];
-    merged.parcelStatus = statuses.size > 1 ? 'conflict' : [...statuses][0] || 'unknown';
-    merged.timeConflict = members.some(r => r.timeConflict);
-    merged.needsReview = !known(merged.station) || statuses.size > 1;
+    merged.needsReview = !validCode(merged.code) || !known(merged.station) || status.parcelStatus === 'conflict' || !!merged.batchConflict;
+    if (known(merged.station)) delete merged.locationOptions;
     result.push(merged);
   }
-  // Flag plausible OCR substitutions for review; never rewrite or fuzzy-merge them.
-  const shape = code => normalize(code).replace(/[O]/g, '0').replace(/[IL]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
-  return result.map(r => {
-    if (r.waybillNumber && result.some(other => other !== r && other.waybillNumber === r.waybillNumber && normalize(other.code) !== normalize(r.code))) return { ...r, batchConflict: true, needsReview: true };
-    return result.some(other => other !== r && normalize(other.code) !== normalize(r.code) && shape(other.code) === shape(r.code))
+  const shape = code => normalize(code).replace(/O/g, '0').replace(/[IL]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+  return result.sort((a, b) => candidates.findIndex(c => (a.sourceIds || [a.id]).includes(c.id)) - candidates.findIndex(c => (b.sourceIds || [b.id]).includes(c.id))).map(r => {
+    const peers = result.filter(other => other !== r && !identity.differentWaybill(r, other));
+    const sameBillConflict = peers.some(other => identity.sameWaybill(r, other) && r.code && other.code && normalize(other.code) !== normalize(r.code));
+    const sameCodeConflict = peers.some(other => r.code && normalize(other.code) === normalize(r.code) && !identity.same(r, other, stationKey));
+    if (sameBillConflict || sameCodeConflict) return { ...r, relatedSourceIndices: [...new Set([...(r.sourceIndices || []), ...peers.filter(p => identity.sameWaybill(r, p) || r.code && normalize(r.code) === normalize(p.code)).flatMap(p => p.sourceIndices || [p.sourceIndex])])], batchConflict: true, conflictFields: [sameBillConflict ? 'code' : 'identity'], needsReview: true };
+    return peers.some(other => r.code && other.code && normalize(other.code) !== normalize(r.code) && shape(other.code) === shape(r.code))
       ? { ...r, uncertainCode: true, needsReview: true } : r;
   });
 }

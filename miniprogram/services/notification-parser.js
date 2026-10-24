@@ -2,6 +2,7 @@ const UNKNOWN = '待确认地点';
 const { metadata } = require('./pickup-duplicates');
 const { validCode } = require('./pickup-code');
 const evidence = require('./import-evidence');
+const { boundary } = require('./station-name');
 const signatures = { '邮政': '中国邮政', '中国邮政': '中国邮政', '邮政快递': '中国邮政', 'EMS': '中国邮政', '京东': '京东物流', '京东快递': '京东物流', '京东物流': '京东物流', '中通': '中通快递', '圆通': '圆通速递', '申通': '申通快递', '韵达': '韵达快递', '极兔': '极兔速递', '顺丰': '顺丰速运', '德邦': '德邦快递' };
 const token = '[A-Za-z0-9]{1,9}(?:\\s*-\\s*[A-Za-z0-9]{1,8}){0,3}';
 const codeHead = new RegExp('^\\s*[【\\[（(“"]?\\s*(' + token + ')(?![A-Za-z0-9.\\-:/年月日时分秒元])');
@@ -11,7 +12,7 @@ function places(text) {
   let match;
   while ((match = pattern.exec(text))) {
     if (/(?:未|没|预计|即将|将|尚未|还未|收件|收货|寄件|寄货|收件人|收货人)\s*$/.test(text.slice(0, match.index))) continue;
-    const name = match[1].replace(/^[【\[“「(]/, '').replace(/(?:可?凭|请|领取|提取|取件|取货|提货|取包裹|拿取).*$/, '').replace(/[】\]”」)]$/, '').trim();
+    const name = boundary(match[1]).replace(/^[【\[“「(]/, '').replace(/(?:可?凭|请|领取|提取|取件(?!区|点|处|柜|站)|取货(?!区|点|处|柜|站)|提货(?!区|点|处|柜|站)|取包裹|拿取).*$/, '').replace(/[】\]”」)]$/, '').trim();
     if (name.length >= 2 && name.length <= 100 && /[\u4e00-\u9fff]/.test(name) &&
       !/咨询|电话|运单|单号|https?:|\d{11}|运输中|派送中|验证码/.test(name)) result.push({ name, index: match.index, instruction: /^(?:凭|请|可)/.test(match[0]), detail: /^地址\s*[:：]/.test(match[0]) });
   }

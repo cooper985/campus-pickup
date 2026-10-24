@@ -44,7 +44,7 @@ test('OCR换行通知只连接相邻同列行，不把邻列另一条通知拼�
   assert.equal(records[1].pickupAddress,'西门31号楼京东快递');
 });
 test('三图逐步补全：同码补地点、公司、详细地址，来源仅在草稿；不同码不合并', () => {
-  const merged = fuse([item(0), item(1,{station:'大学服务站'}), item(2,{station:'大学服务站',carrier:'京东物流',pickupAddress:'31号楼北校超市'})]);
+  const merged = fuse([item(0), item(1,{station:'大学服务站'}), item(2,{station:'大学服务站',carrier:'京东物流',pickupAddress:'31号楼北校超市'})].map(c => ({ ...c, waybillNumber: 'SF123456789012' })));
   assert.equal(merged.length,1); assert.equal(merged[0].pickupAddress,'31号楼北校超市');
   assert.deepEqual(merged[0].sourceIndices,[0,1,2]); assert.equal(merged[0].fieldSources.station,1);
   const saved = storage.newRecord(merged[0]); assert.equal(saved.pickupAddress,'31号楼北校超市');
@@ -54,7 +54,6 @@ test('三图逐步补全：同码补地点、公司、详细地址，来源仅�
 test('整组冲突先检查：缺地址不能桥接不同站点；不同运单、同图同码和疑似字符都进入核对', () => {
   for (const inputs of [
     [item(0),item(1,{station:'东门'}),item(2,{station:'西门'})],
-    [item(0,{waybillNumber:'SF123456789012'}),item(1,{waybillNumber:'SF999999999999'})],
     [item(0),item(0,{id:'same-image-other'})],
     [item(0,{code:'A1-1200'}),item(1,{code:'A1-12O0'})],
   ]) {
@@ -83,20 +82,22 @@ test('真实OCR跨图互补：两种完成顺序一致，第三张失败不阻�
     releases[keys[order[0]]].resolve(responses[order[0]]); await tick();
     await p.confirmImport(); assert.equal(p.data.records.length,0); assert.equal(p.data.drafts.length,0);
     releases.failed.reject({code:'NETWORK_FAILED'}); releases[keys[order[1]]].resolve(responses[order[1]]); await run;
-    assert.equal(p.data.drafts.length,2);
+    assert.equal(p.data.drafts.length,3);
     const merged=p.data.drafts.find(r=>r.code==='B3-4-7401');
-    assert.equal(merged.station,'河南工业大学服务站'); assert.deepEqual(Array.from(merged.sourceIndices),[0,1]);
-    await p.confirmImport(); assert.equal(p.data.records.length,2); assert.equal(p.data.reviewOpen,false); p.onUnload();
+    assert.equal(merged.station,parser.UNKNOWN); assert.deepEqual(Array.from(merged.sourceIndices),[0]);
+    const confirmation = p.confirmImport();
+    p.data.reviewItems.forEach(r => p.chooseImportAction(event(r.id, r.station === parser.UNKNOWN ? 'skip' : 'new')));
+    p.finishImportReview(); await confirmation; assert.equal(p.data.records.length,2); assert.equal(p.data.reviewOpen,false); p.onUnload();
   }
 });
 test('手动修改在单图重试后保留，历史已取同码仍可选择新增而不覆盖', async () => {
   const wx=fakeStorage(); let failed=true;
-  const p=page(wx,async path=>{if(path==='bad'&&failed)throw {code:'NETWORK_FAILED'};return {mock:false,lines:['取件码1234']};});
+  const p=page(wx,async path=>{if(path==='bad'&&failed)throw {code:'NETWORK_FAILED'};return {mock:false,lines:['取件码1234','运单号：SF123456789012']};});
   p.data.images=['good','bad'];await p.runRecognition(true, { shadow: true });
   const id=p.data.drafts[0].id;p.editRecord(event(id));p.editStation({detail:{value:'用户确认驿站'}});p.saveEdit();
   failed=false;await p.retryImage({currentTarget:{dataset:{index:2}}});
   assert.equal(p.data.drafts.length,1);assert.equal(p.data.drafts[0].station,'用户确认驿站');
-  const old=storage.updateRecord(storage.newRecord(p.data.drafts[0]),{taken:true});p.persistRecords([old]);
+  const old={...storage.updateRecord(storage.newRecord(p.data.drafts[0]),{taken:true}),waybillNumber:''};p.persistRecords([old]);
   const importing=p.confirmImport();assert.equal(p.data.reviewOpen,true);
   p.chooseImportAction(event(p.data.reviewItems[0].id,'new'));p.finishImportReview();await importing;
   assert.equal(p.data.records.length,2);assert.deepEqual(p.data.records[0],old);p.onUnload();

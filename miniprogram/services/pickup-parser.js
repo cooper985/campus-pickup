@@ -2,6 +2,8 @@
 const notifications = require("./notification-parser");
 const { validCode } = require("./pickup-code");
 const evidence = require('./import-evidence');
+const { boundary } = require('./station-name');
+const { metadata } = require('./pickup-duplicates');
 const UNKNOWN = "待确认地点";
 const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|取货码|提货码|领取码|订单|商品|购买|付款|旗舰店|专营店/;
 const labels = /(?:取件码|取货码|提货码|领取码|自提码|提取码|取件密码)\s*[:：]?\s*/g;
@@ -47,6 +49,7 @@ function stationHeader(text) {
 function extractCodes(text, boxes) {
   const codes = [];
   let uncertainCount = 0;
+  const issues = [];
   const consumed = new Set(), cainiao = cainiaoPage(text);
   for (let i = 0; i < text.length; i++) {
     const matches = [...text[i].matchAll(labels)];
@@ -63,7 +66,7 @@ function extractCodes(text, boxes) {
       }
       const code = codeValue(value, cainiao);
       if (code) { codes.push({ i: valueIndex, code }); consumed.add(valueIndex); }
-      else if (!value || !/^[*＊·•●xX\s-]+$|已隐藏|点击.*查看|待生成|暂未生成/.test(value)) uncertainCount++;
+      else if (!value || !/^[*＊·•●xX\s-]+$|已隐藏|点击.*查看|待生成|暂未生成/.test(value)) { uncertainCount++; issues.push({ i: valueIndex }); }
     }
   }
   if (cainiao) {
@@ -81,13 +84,13 @@ function extractCodes(text, boxes) {
           : j < i && i - j <= 3;
       });
       if (!nearbyStation) continue;
-      const code = /^(?:[A-Za-z]?\d{1,4}-){1,2}\d{3,6}$/.test(value) ? codeValue(value) : "";
+      const code = /^(?:[A-Za-z]?\d{1,4}-){1,2}\d{1,6}$/.test(value) ? codeValue(value) : "";
       if (code) codes.push({ i, code });
-      else uncertainCount++;
+      else { uncertainCount++; issues.push({ i }); }
     }
   }
   codes.sort((a, b) => a.i - b.i);
-  return { codes, uncertainCount };
+  return { codes, uncertainCount, issues };
 }
 function placeName(candidates) {
   const explicit = candidates.filter(p => p.explicit);
@@ -98,7 +101,7 @@ function placeName(candidates) {
   return branches.length === 1 ? branches[0] : UNKNOWN;
 }
 function parse(lines, sourceIndex = 0, boxes = []) {
-  const text = lines.map(clean), extracted = extractCodes(text, boxes), places = [];
+  const text = lines.map(clean), eventText = evidence.withoutNavigation(text, boxes), extracted = extractCodes(text, boxes), places = [];
   // Join only contiguous notification rows, never the entire screenshot or adjacent columns.
   const notificationRecords = [], covered = new Set();
   for (let i = 0; i < text.length; i++) {
@@ -114,7 +117,7 @@ function parse(lines, sourceIndex = 0, boxes = []) {
     }
     const parsed = notifications.parse(paragraph);
     if (!parsed.length) continue;
-    notificationRecords.push(...parsed.map(r => ({ ...r, sourceType: 'image', sourceIndex, lineIndex: i })));
+    notificationRecords.push(...parsed.map(r => ({ ...r, sourceType: 'image', sourceIndex, lineIndex: i, sourceRegions: [region(sourceIndex, i, end, boxes, r)] })));
     for (let j = i; j <= end; j++) covered.add(j);
     i = end;
   }
@@ -123,7 +126,7 @@ function parse(lines, sourceIndex = 0, boxes = []) {
   for (let i = 0; i < text.length; i++) {
     if (covered.has(i) || /(?:收件|收货|寄件|寄货)(?:人)?地址/.test(text[i])) continue;
     const explicit = text[i].match(/(?:已派送至|已送至|已送达|已到达?|已入库(?:至|到|于)?|领取地点|自提地点|自提点|取件地址|取件地点|地址(?=\s*[:：]))\s*[:：]?\s*(.*)/);
-    let name = explicit ? explicit[1].replace(/[，,。；;].*$/, "").replace(/(?:请|凭).*$/, "").trim() : text[i].replace(/^支持退换货\s*/, "");
+    let name = explicit ? boundary(explicit[1]) : text[i].replace(/^支持退换货\s*/, "");
     const header = cainiao && /[>›〉]\s*绿色公益/.test(name);
     if (header) name = stationHeader(name);
     name = name.replace(/((?:驿站|服务站|快递柜))[>›〉]\s*$/, '$1');
@@ -136,6 +139,7 @@ function parse(lines, sourceIndex = 0, boxes = []) {
     if (explicit && !name && text[i + 1] && (!boxAt(boxes, i) || !boxAt(boxes, i + 1) || labelNeighbor(boxAt(boxes, i), boxAt(boxes, i + 1)))) {
       name = text[i + 1]; locationIndex = i + 1;
     }
+    name = boundary(name);
     name = name.replace(/^[【\[（(]([^】\]）)]+)[】\]）)].*$/, "$1");
     const next = text[i + 1] || "", a = boxAt(boxes, i), b = boxAt(boxes, i + 1);
     // Unfamiliar section names need an adjacent address, not just arbitrary Chinese text.
@@ -150,8 +154,9 @@ function parse(lines, sourceIndex = 0, boxes = []) {
   for (const code of codes) {
     const a = boxAt(boxes, code.i);
     const compatible = p => !a || !boxAt(boxes, p.i) || sameColumn(a, boxAt(boxes, p.i));
-    const previous = codes.filter(c => c.i < code.i && compatible(c)).pop();
-    const next = codes.find(c => c.i > code.i && compatible(c));
+    const anchors = [...codes, ...extracted.issues].sort((a, b) => a.i - b.i);
+    const previous = anchors.filter(c => c.i < code.i && compatible(c)).pop();
+    const next = anchors.find(c => c.i > code.i && compatible(c));
     let candidates = places.filter(p => compatible(p) && p.i > (previous ? previous.i : -1) && p.i <= code.i &&
       (!a || !boxAt(boxes, p.i) || boxAt(boxes, p.i).y <= a.y + a.height / 2));
     const after = places.filter(p => (p.explicit || codes.length === 1) && compatible(p) && p.i > code.i && p.i < (next ? next.i : text.length) &&
@@ -165,27 +170,44 @@ function parse(lines, sourceIndex = 0, boxes = []) {
     const nearbyPrevious = previousRecord && (!a || !boxAt(boxes, previous.i) ||
       Math.abs(a.y - boxAt(boxes, previous.i).y) <= Math.max(a.height, boxAt(boxes, previous.i).height) * 8);
     const station = candidates.length ? placeName(stationCandidates.length ? stationCandidates : candidates) : nearbyPrevious ? previousRecord.station : UNKNOWN;
-    const scope = codes.length === 1 && !notificationRecords.length ? text.join('\n') : text.slice(code.i, next ? next.i : text.length).filter((_, offset) => compatible({ i: code.i + offset })).join('\n');
+    const scope = codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? eventText.join('\n') : eventText.slice(code.i, next ? next.i : text.length).filter((_, offset) => compatible({ i: code.i + offset })).join('\n');
     const options = [...new Set(candidates.map(p => p.name))];
-    records.push({ station, ...(station === UNKNOWN && options.length > 1 ? { locationOptions: options } : {}), ...evidence.inspect(scope), ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, ...(/\d[OILSB](?:\d|-|$)/i.test(code.code) ? { uncertainCode: true } : {}), sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i });
+    const start = codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? 0 : Math.min(code.i, ...candidates.map(p => p.i));
+    const end = next ? Math.max(code.i, next.i - 2) : text.length - 1;
+    const record = { station, ...(station === UNKNOWN && options.length > 1 ? { locationOptions: options } : {}), ...evidence.inspect(scope), ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, ...(/\d[OILSB](?:\d|-|$)/i.test(code.code) ? { uncertainCode: true } : {}), sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i };
+    Object.assign(record, metadata(text.slice(start, end + 1), extracted.codes.length + notificationRecords.length + extracted.uncertainCount));
+    record.sourceRegions = [region(sourceIndex, start, end, boxes, record)];
+    records.push(record);
   }
   return [...records, ...notificationRecords].sort((a, b) => a.lineIndex - b.lineIndex).map(({ lineIndex, sourceType, ...r }) => r);
 }
+function region(imageIndex, start, end, boxes, record) {
+  return { imageIndex, start, end, boxes: boxes.slice(start, end + 1).filter(b => b && [b.x, b.y, b.width, b.height].every(Number.isFinite)).map(b => ({ x: b.x, y: b.y, width: b.width, height: b.height })),
+    fields: ['code', 'station', 'pickupAddress', 'carrier', 'waybillNumber', 'parcelStatus', 'noticeAt'].filter(f => record[f] && record[f] !== UNKNOWN && record[f] !== 'unknown') };
+}
 function analyze(lines, sourceIndex = 0, boxes = []) {
   const records = parse(lines, sourceIndex, boxes);
-  const { uncertainCount } = extractCodes(lines.map(clean), boxes);
-  if (records.length) return { records, uncertainCount, status: "code_found", reason: "code_found", message: `识别到 ${records.length} 件快递` };
+  const extracted = extractCodes(lines.map(clean), boxes), uncertainCount = extracted.uncertainCount;
+  const issues = extracted.issues.map(({ i }) => {
+    const previous = extracted.codes.filter(c => c.i < i).pop(), next = extracted.codes.find(c => c.i > i);
+    const start = previous ? previous.i + 1 : 0, end = next ? next.i - 1 : lines.length - 1;
+    const scope = evidence.withoutNavigation(lines.slice(start, end + 1), boxes.slice(start, end + 1));
+    const item = { code: '', station: UNKNOWN, sourceIndex, needsReview: true, ...metadata(scope, 1), ...evidence.inspect(scope.join('\n')) };
+    item.sourceRegions = [region(sourceIndex, start, end, boxes, item)];
+    return item;
+  });
+  if (records.length) return { records, issues, uncertainCount, status: "code_found", reason: "code_found", message: `识别到 ${records.length} 件快递` };
   const text = lines.map(clean).join("\n");
   if (!/[\u4e00-\u9fffA-Za-z0-9]/.test(text) || uncertainCount) {
-    return { records, uncertainCount, status: "unrecognized", reason: uncertainCount ? "candidate_unparsed" : "ocr_empty", message: "识别不出来" };
+    return { records, issues, uncertainCount, status: "unrecognized", reason: uncertainCount ? "candidate_unparsed" : "ocr_empty", message: "识别不出来" };
   }
   if (/已到站|已入库|已派送至|已送至|已签收|已取件|已领取|取件完成|待取件|等待领取|请.*(?:取件|领取)/.test(text)) {
-    return { records, uncertainCount, status: "arrived_no_code", reason: "no_valid_code", message: "没有取件码" };
+    return { records, issues, uncertainCount, status: "arrived_no_code", reason: "no_valid_code", message: "没有取件码" };
   }
   if (/运输中|已揽收|预计.*(?:送达|到达)|派送中|转运中/.test(text)) {
-    return { records, uncertainCount, status: "in_transit", reason: "no_valid_code", message: "还在运输" };
+    return { records, issues, uncertainCount, status: "in_transit", reason: "no_valid_code", message: "还在运输" };
   }
-  return { records, uncertainCount, status: "no_code", reason: "no_valid_code", message: "没有取件码" };
+  return { records, issues, uncertainCount, status: "no_code", reason: "no_valid_code", message: "没有取件码" };
 }
 function group(records) {
   const groups = [];
@@ -197,4 +219,4 @@ function group(records) {
   }
   return groups;
 }
-module.exports = { parse, analyze, group, UNKNOWN };
+module.exports = { parse, analyze, group, region, UNKNOWN };

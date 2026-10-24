@@ -1,10 +1,12 @@
 const { UNKNOWN } = require('./pickup-parser');
+const { suspicious } = require('./station-name');
 const KEY = 'campus-pickup.stations';
 const normalize = value => String(value || '').normalize('NFKC').toUpperCase().replace(/[—–－﹣−‐‑‒]/g, '-').replace(/[\s\u200b，,。!！?？:：;；、·•“”"'‘’()（）【】\[\]<>《》]/g, '');
 const known = value => !!normalize(value) && !/^(待确认|待确认地点|地点待确认|未知地点|未知)$/.test(normalize(value));
 const empty = () => ({ version: 1, groups: [] });
 function validate(state) {
   if (!state || state.version !== 1 || !Array.isArray(state.groups)) throw Error('驿站设置格式异常');
+  if (state.deletedNames !== undefined && (!Array.isArray(state.deletedNames) || state.deletedNames.some(n => typeof n !== 'string' || n.length > 150))) throw Error('驿站删除设置异常');
   const ids = new Set(), keys = new Set();
   for (const g of state.groups) {
     if (!g || typeof g.id !== 'string' || !g.id || ids.has(g.id) || typeof g.name !== 'string' ||
@@ -50,6 +52,7 @@ function createStore(api) {
 function sync(state, records) {
   const next = JSON.parse(JSON.stringify(state));
   for (const r of records) {
+    if ((next.deletedNames || []).includes(normalize(r.station))) continue;
     if (known(r.station) && !next.groups.some(g => g.aliases.some(a => normalize(a) === normalize(r.station)) || normalize(g.name) === normalize(r.station))) {
       let id = normalize(r.station);
       while (next.groups.some(g => g.id === id)) id += '-new';
@@ -97,17 +100,25 @@ function merge(state, ids, name) {
   if (state.groups.some(g => !ids.includes(g.id) && [g.name, ...g.aliases].some(a => normalize(a) === normalize(name)))) throw Error('名称已属于其他驿站，请选择该驿站合并。');
   const aliases = [...new Set(selected.flatMap(g => [...g.aliases, g.name]))];
   const unique = aliases.filter((a, i) => aliases.findIndex(b => normalize(a) === normalize(b)) === i);
-  return { version: 1, groups: state.groups.filter(g => g.id !== selected[1].id).map(g => g.id === selected[0].id ? { ...g, name, aliases: unique, confirmed: true } : g) };
+  return { ...state, groups: state.groups.filter(g => g.id !== selected[1].id).map(g => g.id === selected[0].id ? { ...g, name, aliases: unique, confirmed: true } : g) };
 }
 function assist(state, candidate) {
-  const g = state.groups.find(g => [g.name, ...g.aliases].some(a => normalize(a) === normalize(candidate.station)));
+  const g = state.groups.find(g => !suspicious(g.name) && [g.name, ...g.aliases].some(a => normalize(a) === normalize(candidate.station)));
   return g ? { ...candidate, station: g.name, ...(!candidate.pickupAddress && g.confirmed && g.pickupAddress ? { pickupAddress: g.pickupAddress, memoryAddress: true } : {}) } : candidate;
 }
 function remember(state, record) {
-  const next = sync(state, [record]);
+  if (suspicious(record.station)) throw Error('地点含通知正文，请先修改驿站名称');
+  const restored = { ...state, ...(state.deletedNames ? { deletedNames: state.deletedNames.filter(n => n !== normalize(record.station)) } : {}) };
+  const next = sync(restored, [record]);
   const g = next.groups.find(g => [g.name, ...g.aliases].some(a => normalize(a) === normalize(record.station)));
   if (g) { g.confirmed = true; if (record.pickupAddress !== undefined) g.pickupAddress = record.pickupAddress; }
   return next;
+}
+function remove(state, id) {
+  const g = state.groups.find(g => g.id === id);
+  if (!g) return state;
+  return { ...state, groups: state.groups.filter(g => g.id !== id),
+    deletedNames: [...new Set([...(state.deletedNames || []), ...[g.name, ...g.aliases].map(normalize)])] };
 }
 function suggestions(state) {
   const pairs = [];
@@ -117,4 +128,4 @@ function suggestions(state) {
   }));
   return pairs.slice(0, 3);
 }
-module.exports = { KEY, normalize, known, createStore, sync, resolve, natural, group, merge, suggestions, assist, remember };
+module.exports = { KEY, normalize, known, createStore, sync, resolve, natural, group, merge, suggestions, assist, remember, remove, suspicious };

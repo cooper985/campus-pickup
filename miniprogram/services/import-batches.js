@@ -1,5 +1,5 @@
 const copy = value => JSON.parse(JSON.stringify(value));
-const candidateFields = ['id', 'code', 'station', 'pickupAddress', 'carrier', 'waybillNumber', 'sourceIndex', 'sourceIndices', 'sourceIds', 'confirmedFields', 'needsReview', 'batchConflict', 'uncertainCode', 'parcelStatus', 'noticeAt', 'timeConflict', 'locationOptions', 'memoryAddress'];
+const candidateFields = ['id', 'code', 'station', 'pickupAddress', 'carrier', 'waybillNumber', 'sourceIndex', 'sourceIndices', 'sourceIds', 'confirmedFields', 'needsReview', 'batchConflict', 'uncertainCode', 'parcelStatus', 'noticeAt', 'timeConflict', 'locationOptions', 'memoryAddress', 'sourceRegions', 'fieldSources', 'statusEvents', 'conflictFields', 'relatedSourceIndices', 'unresolvedRegion'];
 const cleanCandidate = c => candidateFields.reduce((result, key) => { if (c[key] !== undefined) result[key] = copy(c[key]); return result; }, {});
 const empty = () => ({ version: 1, batches: [] });
 const onlyKeys = (value, keys) => Object.keys(value).every(k => keys.indexOf(k) >= 0);
@@ -29,8 +29,9 @@ function validate(state) {
     for (const r of b.reviews) {
       checkCandidate(r.candidate);
       if (!string(r.id) || r.id !== r.candidate.id || !string(r.reason, 50) || !Array.isArray(r.matches) || typeof r.allowNew !== 'boolean' ||
-        !onlyKeys(r, ['id', 'candidate', 'reason', 'matches', 'allowNew', 'choice']) ||
-        r.matches.some(m => !m || !string(m.id) || !string(m.code, 32) || !string(m.station, 100) || typeof m.taken !== 'boolean' || !onlyKeys(m, ['id', 'code', 'station', 'taken']))) throw Error('异常记录格式异常');
+        !onlyKeys(r, ['id', 'candidate', 'reason', 'matches', 'allowNew', 'choice', 'conflictFields']) ||
+        r.conflictFields !== undefined && (!Array.isArray(r.conflictFields) || r.conflictFields.some(f => !string(f, 30))) ||
+        r.matches.some(m => !m || !string(m.id) || !string(m.code, 32) || !string(m.station, 100) || typeof m.taken !== 'boolean' || ['carrier', 'pickupAddress', 'waybillNumber'].some(k => m[k] !== undefined && !string(m[k], k === 'carrier' ? 40 : 100)) || !onlyKeys(m, ['id', 'code', 'station', 'taken', 'carrier', 'pickupAddress', 'waybillNumber']))) throw Error('异常记录格式异常');
       if (r.choice && (!['new', 'skip'].includes(r.choice.action) || !string(r.choice.station, 100) || !onlyKeys(r.choice, ['action', 'station']))) throw Error('异常选择格式异常');
     }
     if (b.outcomes.some(o => !o || !string(o.id) || !['AUTO_IMPORT', 'AUTO_SKIP', 'NEEDS_REVIEW'].includes(o.decision) || !string(o.reason, 50) || !onlyKeys(o, ['id', 'decision', 'reason']))) throw Error('导入决策格式异常');
@@ -41,10 +42,15 @@ function checkCandidate(c) {
   if (!c || !string(c.id) || typeof c.code !== 'string' || c.code.length > 32 ||
     typeof c.station !== 'string' || c.station.length > 100 || JSON.stringify(c) !== JSON.stringify(cleanCandidate(c)) ||
     ['carrier', 'pickupAddress', 'waybillNumber'].some(k => c[k] !== undefined && !string(c[k], k === 'carrier' ? 40 : 100)) ||
-    ['needsReview', 'batchConflict', 'uncertainCode', 'timeConflict', 'memoryAddress'].some(k => c[k] !== undefined && typeof c[k] !== 'boolean') ||
+    ['needsReview', 'batchConflict', 'uncertainCode', 'timeConflict', 'memoryAddress', 'unresolvedRegion'].some(k => c[k] !== undefined && typeof c[k] !== 'boolean') ||
     c.noticeAt !== undefined && (!Number.isSafeInteger(c.noticeAt) || c.noticeAt <= 0) ||
-    c.parcelStatus !== undefined && !['unknown', 'pending', 'terminal', 'signed', 'conflict'].includes(c.parcelStatus) ||
+    c.parcelStatus !== undefined && !require('./import-evidence').statuses.includes(c.parcelStatus) ||
     ['sourceIds', 'locationOptions', 'confirmedFields'].some(k => c[k] !== undefined && (!Array.isArray(c[k]) || c[k].some(s => !string(s)))) ||
+    c.sourceRegions !== undefined && (!Array.isArray(c.sourceRegions) || c.sourceRegions.length > 40 || c.sourceRegions.some(r => !r || !onlyKeys(r, ['imageIndex', 'start', 'end', 'boxes', 'fields']) || !Number.isInteger(r.imageIndex) || r.imageIndex < 0 || r.imageIndex > 8 || !Number.isInteger(r.start) || r.start < 0 || !Number.isInteger(r.end) || r.end < r.start || !Array.isArray(r.boxes) || r.boxes.some(b => !onlyKeys(b, ['x', 'y', 'width', 'height']) || ![b.x,b.y,b.width,b.height].every(Number.isFinite)) || !Array.isArray(r.fields) || r.fields.some(f => !string(f, 30)))) ||
+    c.fieldSources !== undefined && (!c.fieldSources || Object.values(c.fieldSources).some(i => !Number.isInteger(i) || i < -1 || i > 8)) ||
+    c.statusEvents !== undefined && (!Array.isArray(c.statusEvents) || c.statusEvents.some(e => !e || !onlyKeys(e, ['parcelStatus', 'noticeAt']) || !require('./import-evidence').statuses.includes(e.parcelStatus) || !Number.isSafeInteger(e.noticeAt) || e.noticeAt <= 0)) ||
+    ['conflictFields'].some(k => c[k] !== undefined && (!Array.isArray(c[k]) || c[k].some(f => !string(f, 30)))) ||
+    c.relatedSourceIndices !== undefined && (!Array.isArray(c.relatedSourceIndices) || c.relatedSourceIndices.some(i => !Number.isInteger(i) || i < -1 || i > 8)) ||
     c.sourceIndices !== undefined && (!Array.isArray(c.sourceIndices) || c.sourceIndices.some(i => !Number.isInteger(i) || i < -1 || i > 8))) throw Error('导入候选字段异常');
 }
 function begin(id, count, now = Date.now()) {
@@ -68,7 +74,7 @@ function apply(batch, plan, images, now = Date.now()) {
   const resolved = new Set((b.resolved || []));
   b.reviews = plan.reviews.filter(d => !resolved.has(d.candidate.id)).map(d => {
     const previous = batch.reviews.find(r => r.id === d.candidate.id);
-    return { id: d.candidate.id, candidate: cleanCandidate(d.candidate), reason: d.reason, matches: d.matches || [], allowNew: d.allowNew !== false,
+    return { id: d.candidate.id, candidate: cleanCandidate(d.candidate), reason: d.reason, matches: d.matches || [], allowNew: d.allowNew !== false, conflictFields: d.conflictFields || [],
       ...(previous && previous.choice ? { choice: previous.choice } : {}) };
   });
   b.outcomes = [...batch.outcomes.filter(o => resolved.has(o.id)), ...plan.decisions.map(d => {

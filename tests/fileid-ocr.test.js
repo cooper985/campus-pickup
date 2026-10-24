@@ -80,7 +80,7 @@ test("真实截图字节经 fileID 完整本地回放，原 OCR 返回及解析�
     for (const [code, station] of cases[i].expected) {
       const record = p.data.drafts.find(r => r.sourceIndices.includes(i) && r.code === code);
       assert.ok(record);
-      assert.equal(record.station, code === 'B3-4-7401' ? '河南工业大学服务站' : station);
+      assert.equal(record.station, station); // Insufficient identity evidence keeps separate source candidates.
     }
   }
   assert.ok(p.data.drafts.some(r => r.code === "603402"));

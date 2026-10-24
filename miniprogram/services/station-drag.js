@@ -24,7 +24,7 @@ function reorder(state, visibleIds, from, to) {
   const ids = visibleIds.slice();
   ids.splice(to, 0, ids.splice(from, 1)[0]);
   let index = 0;
-  return { version: state.version, groups: state.groups.map(g => {
+  return { ...state, groups: state.groups.map(g => {
     if (!visibleIds.includes(g.id)) return g;
     const id = ids[index++];
     return state.groups.find(item => item.id === id);

@@ -45,7 +45,7 @@ test('V2.3 完全重复图片只 OCR 一次；重启后再次选择相同摘要�
 });
 test('V2.3 相似页面保留新增信息，同码两图补地点只新增一件，一图多通知独立保存', async () => {
   const wx = fakeStorage(); hashing(wx, { a: 1, b: 2, multi: 3 });
-  const { p, calls } = await batch({ a: response('B3-4-7401', ''), b: response('B3-4-7401', '河南工业大学服务站'),
+  const { p, calls } = await batch({ a: response('B3-4-7401', '', ['运单号：SF123456789012']), b: response('B3-4-7401', '河南工业大学服务站', ['运单号：SF123456789012']),
     multi: { mock: false, lines: ['【驿小哥】取件码C205-2004，已到北门驿站。', '【京东】取件码A203-4010，已到西门服务站。'] } }, wx);
   assert.equal(calls, 3); assert.equal(p.data.records.length, 3);
   assert.equal(p.data.records.find(r => r.code === 'B3-4-7401').station, '河南工业大学服务站');
@@ -74,7 +74,8 @@ test('V2.3 历史同码重新出现必须确认；相同运单跳过，异运单
   assert.equal(decision.evaluate([c], [old]).reviews[0].reason, 'historical_code');
   const waybillNumber = 'SF123456789012';
   assert.equal(decision.evaluate([{ ...c, waybillNumber }], [{ ...old, waybillNumber }]).skipped, 1);
-  for (const changes of [{ waybillNumber: 'SF999999999999' }, { station: '西门服务站' }]) {
+  assert.equal(decision.evaluate([{ ...c, waybillNumber: 'SF999999999999' }], [{ ...old, taken: false, takenAt: null, waybillNumber }]).additions.length, 1);
+  for (const changes of [{ station: '西门服务站' }]) {
     assert.equal(decision.evaluate([{ ...c, ...changes }], [{ ...old, taken: false, takenAt: null, waybillNumber }]).reviews.length, 1);
   }
   assert.equal(decision.evaluate([{ ...c, parcelStatus: 'terminal' }], []).skipped, 1);
@@ -84,7 +85,6 @@ test('V2.3 跨图整组检查防传递误合并：地点、运单、状态冲突
   const c = extra => candidate(0, extra);
   for (const values of [
     [c({ id: 'a', sourceIndex: 0, station: '东门驿站' }), c({ id: 'b', sourceIndex: 1, station: '待确认地点' }), c({ id: 'c', sourceIndex: 2, station: '西门驿站' })],
-    [c({ id: 'a', sourceIndex: 0, waybillNumber: 'SF123456789012' }), c({ id: 'b', sourceIndex: 1, waybillNumber: 'SF999999999999' })],
     [c({ id: 'a', sourceIndex: 0, parcelStatus: 'pending' }), c({ id: 'b', sourceIndex: 1, parcelStatus: 'terminal' })],
     [c({ id: 'a', code: 'A1-1200', sourceIndex: 0 }), c({ id: 'b', code: 'A1-12O0', sourceIndex: 1 })],
   ]) {
@@ -176,7 +176,7 @@ test('V2.3 影子评估是纯函数，状态时间证据不使用上传时间，
   assert.equal(evidence.inspect('文件创建时间：2020-01-01').noticeAt, undefined);
   assert.equal(evidence.inspect('今天收到，取件码1111').noticeAt, undefined);
   assert.equal(evidence.inspect('2020-02-31').noticeAt, undefined);
-  assert.equal(evidence.inspect('2026-10-22 已入库 2026-10-23 已取件').timeConflict, true);
+  assert.equal(evidence.inspect('2026-10-22 已入库 2026-10-23 已取件').parcelStatus, 'collected');
 });
 
 test('V2.3 异常期间新增同码待取或核销原记录，过期选择不能再重复入库', async () => {

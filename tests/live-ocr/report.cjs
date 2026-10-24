@@ -80,15 +80,16 @@ async function buildReport() {
     const pairs = actual.outcomes.filter(o => o.code);
     for (const [code, station] of gold) {
       const found = pairs.filter(o => o.code === code);
-      if (found.length !== 1 || norm(found[0].station) !== norm(station)) mismatches.push({ code, expectedStation: station, actual: found });
+      const identityUncertain = found.length > 1 && found.every(o => o.decision === 'NEEDS_REVIEW') && found.some(o => norm(o.station) === norm(station));
+      if (!identityUncertain && (found.length !== 1 || norm(found[0].station) !== norm(station))) mismatches.push({ code, expectedStation: station, actual: found });
     }
     pairs.filter(o => !gold.has(o.code)).forEach(o => mismatches.push({ unexpectedCode: o.code }));
     scenarios.push({ name, images: selected.map(s => s.id), expected, expectedPackages: [...gold].map(([code, station]) => ({ code, station })), actual, passed: !mismatches.length, mismatches });
   };
   const control = samples.find(s => s.control);
   await add('九图混合：多包裹、缺地点、跨图互补、重复与无关图', [real(1), real(2), real(3), real(5), real(6), cn('list'), cn('detail'), control, real(1)],
-    { added: 8, reviews: 9, duplicateImages: 1, fusedSources: 2, cachedReads: 8 });
-  await add('两图互补：补全地点但签收证据保留待确认', [real(5), real(6)], { added: 0, reviews: 2, fusedSources: 1 });
+    { added: 7, reviews: 11, duplicateImages: 1, fusedSources: 1, cachedReads: 8 });
+  await add('两图同码：身份不足保留来源与签收证据', [real(5), real(6)], { added: 0, reviews: 3, fusedSources: 0 });
   await add('同包裹列表和详情融合', [cn('list'), cn('detail')], { added: 2, reviews: 0, fusedSources: 1 });
   const pending = cn('list').expected.map(([code, station]) => storage.newRecord({ code, station }));
   await add('已有待取重复跳过', [cn('list')], { added: 0, reviews: 0, skipped: 2 }, pending);

@@ -14,6 +14,8 @@ const imageDedup = require("../../services/image-dedup");
 const decision = require("../../services/import-decision");
 const batches = require("../../services/import-batches");
 const importResults = require("../../services/import-results");
+const evidence = require("../../services/import-evidence");
+const identity = require("../../services/parcel-identity");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 Page({
@@ -40,7 +42,7 @@ Page({
     this.importState = loaded.imports || batches.empty();
     this.updateRecords(loaded.records);
     this.refreshBatchSummary();
-    if (!loaded.blocked) this.recoverInterrupted();
+    if (!loaded.blocked) { this.recoverInterrupted(); this.reconcileExceptions(); }
   },
   toggleMotion() {
     this.setData({ reduceMotion: !this.data.reduceMotion });
@@ -168,13 +170,6 @@ Page({
       return true;
     } catch (err) { this.setData({ stationError: err.message, stationBlocked: true }); return false; }
   },
-  selectStation(e) {
-    if (this.data.stationBusy) return;
-    const id = e.currentTarget.dataset.id, selected = this.data.stationSelection;
-    if (selected.includes(id)) this.setData({ stationSelection: selected.filter(s => s !== id) });
-    else if (selected.length < 2) this.setData({ stationSelection: [...selected, id] });
-    else wx.showToast({ title: "每次选择两个驿站", icon: "none" });
-  },
   stationTouchStart(e) {
     if (this.data.dragId) { this.cancelStationDrag(); return; }
     if (!e.touches || e.touches.length !== 1) return;
@@ -189,7 +184,8 @@ Page({
     clearTimeout((this.presentationTimers || {}).visiblePendingGroups);
     const touch = this.stationTouch;
     if (!touch || touch.moved || this.data.stationBusy || this.data.importing || this.data.deleting || this.data.storageBlocked || this.data.stationBlocked) return;
-    const ids = this.data.pendingGroups.filter(g => this.stationState.groups.some(s => s.id === g.id)).map(g => g.id);
+    const dragField = this.data.activeTab === "stations" ? "stationList" : "visiblePendingGroups";
+    const ids = (dragField === "stationList" ? this.data.stationList : this.data.pendingGroups).filter(g => this.stationState.groups.some(s => s.id === g.id)).map(g => g.id);
     if (ids.length < 2 || !ids.includes(touch.id)) return;
     const query = wx.createSelectorQuery().in(this);
     query.selectAll(".sortable-station").boundingClientRect();
@@ -201,7 +197,7 @@ Page({
       if (rects.some(r => !Number.isFinite(r.top) || !Number.isFinite(r.bottom) || r.bottom <= r.top)) return;
       this.pageScrollTop = scrollTop;
       const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
-      this.stationDragging = { ids, rects, from: ids.indexOf(touch.id), startPageY: touch.startY + scrollTop,
+      this.stationDragging = { ids, rects, field: dragField, from: ids.indexOf(touch.id), startPageY: touch.startY + scrollTop,
         clientY: touch.lastY, height: windowInfo.windowHeight };
       this.setData({ dragId: touch.id });
       this.renderStationDrag();
@@ -227,10 +223,10 @@ Page({
     const preview = stationDrag.preview(drag.rects, drag.from, drag.clientY + (this.pageScrollTop || 0) - drag.startPageY);
     drag.target = preview.target;
     const patch = {};
-    this.data.visiblePendingGroups.forEach((g, index) => {
+    this.data[drag.field || "visiblePendingGroups"].forEach((g, index) => {
       const i = drag.ids.indexOf(g.id);
       const style = i < 0 ? "" : `transform: translateY(${preview.offsets[i]}px)${g.id === this.data.dragId ? " scale(1.02)" : ""};`;
-      if (g.dragStyle !== style) patch[`visiblePendingGroups[${index}].dragStyle`] = style;
+      if (g.dragStyle !== style) patch[`${drag.field || "visiblePendingGroups"}[${index}].dragStyle`] = style;
     });
     if (Object.keys(patch).length) this.setData(patch);
   },
@@ -265,8 +261,8 @@ Page({
     const offset = drag.target > drag.from
       ? drag.rects[drag.target].bottom - drag.rects[drag.from].bottom
       : drag.rects[drag.target].top - drag.rects[drag.from].top;
-    const index = this.data.visiblePendingGroups.findIndex(g => g.id === this.data.dragId);
-    this.setData({ [`visiblePendingGroups[${index}].dragStyle`]: `transform: translateY(${offset}px) scale(1); transition: transform ${this.data.reduceMotion ? 0 : 180}ms ease-out;` });
+    const index = this.data[drag.field || "visiblePendingGroups"].findIndex(g => g.id === this.data.dragId);
+    this.setData({ [`${drag.field || "visiblePendingGroups"}[${index}].dragStyle`]: `transform: translateY(${offset}px) scale(1); transition: transform ${this.data.reduceMotion ? 0 : 180}ms ease-out;` });
     if (this.data.reduceMotion) this.cancelStationDrag();
     else this.dragSettleTimer = setTimeout(() => this.cancelStationDrag(), 180);
   },
@@ -277,16 +273,36 @@ Page({
     const settled = this.stationDragging && this.stationDragging.settling;
     this.stationTouch = null;
     this.stationDragging = null;
-    if (!this.unloaded && this.data.dragId) this.setData({ dragId: "", ...(settled ? {} : { visiblePendingGroups: this.data.pendingGroups.map(g => ({ ...g, dragStyle: "" })) }) });
+    if (!this.unloaded && this.data.dragId) this.setData({ dragId: "", stationList: this.data.stationList.map(g => ({ ...g, dragStyle: "" })), ...(settled ? {} : { visiblePendingGroups: this.data.pendingGroups.map(g => ({ ...g, dragStyle: "" })) }) });
     if (!this.unloaded && settled) this.updateRecords(this.data.records);
   },
-  moveStation(e) {
-    if (this.data.stationBusy) return;
-    const groups = this.stationState.groups.slice(), index = groups.findIndex(g => g.id === e.currentTarget.dataset.id);
-    const target = index + Number(e.currentTarget.dataset.direction);
-    if (index < 0 || target < 0 || target >= groups.length) return;
-    [groups[index], groups[target]] = [groups[target], groups[index]];
-    this.saveStations({ version: 1, groups });
+  openStationDetail(e) {
+    if (Date.now() < (this.suppressGroupTapUntil || 0) || this.data.dragId) return;
+    const group = this.stationState.groups.find(g => g.id === e.currentTarget.dataset.id);
+    const others = this.stationState.groups.filter(g => g.id !== e.currentTarget.dataset.id);
+    if (group) this.setData({ stationEditor: { ...group, mergeIds: others.map(g => g.id), mergeNames: others.map(g => g.name), mode: 'detail', suspicious: stations.suspicious(group.name) } });
+  },
+  mergeStationFromDetail(e) {
+    const edit = this.data.stationEditor;
+    const id = edit && edit.mergeIds[Number(e.detail.value)];
+    if (!id || this.data.stationBusy) return;
+    this.setData({ stationSelection: [edit.id, id] }); this.beginStationMerge();
+  },
+  async deleteStation() {
+    const edit = this.data.stationEditor;
+    if (!edit || this.data.stationBusy || this.data.stationBlocked || this.data.storageBlocked) return;
+    this.setData({ stationBusy: true });
+    try {
+      const answer = await wx.showModal({ title: '删除驿站配置？', content: `删除「${edit.name}」及其别名和常用记忆。待取、历史包裹与原取件地点全部保留，可在 5 秒内撤销。`, confirmText: '删除驿站', confirmColor: '#b43b35' });
+      if (!answer.confirm || this.unloaded) return;
+      const before = JSON.parse(JSON.stringify(this.stationState));
+      if (!this.saveStations(stations.remove(before, edit.id))) return;
+      this.clearUndo();
+      this.undoRecord = { kind: 'station-delete', before, after: JSON.stringify(this.stationState), until: Date.now() + 5000 };
+      this.setData({ stationEditor: null, undoAvailable: true, undoMessage: '已删除驿站配置，包裹已保留' });
+      this.undoTimer = setTimeout(() => this.clearUndo(), 5000);
+    } catch (_) { if (!this.unloaded) this.setData({ stationError: '删除未完成，请重试' }); }
+    finally { if (!this.unloaded) this.setData({ stationBusy: false }); }
   },
   editStationName(e) {
     const id = e.currentTarget.dataset.id;
@@ -314,7 +330,7 @@ Page({
         const name = edit.name.trim();
         if (!stations.known(name) || name.length > 100) throw Error("请填写有效驿站名称（1–100 字）。");
         if (this.stationState.groups.some(g => g.id !== edit.id && [g.name, ...g.aliases].some(a => stations.normalize(a) === stations.normalize(name)))) throw Error("名称已属于其他驿站，请选择两个驿站合并。");
-        state = { version: 1, groups: this.stationState.groups.map(g => g.id === edit.id ? { ...g, name,
+        state = { ...this.stationState, groups: this.stationState.groups.map(g => g.id === edit.id ? { ...g, name,
           aliases: g.aliases.some(a => stations.normalize(a) === stations.normalize(g.name)) ? g.aliases : [...g.aliases, g.name] } : g) };
       }
       if (this.saveStations(state)) this.setData({ stationEditor: null, stationSelection: [] });
@@ -336,8 +352,8 @@ Page({
       let newId = stations.normalize(alias);
       while (groups.some(g => g.id === newId)) newId += "-split";
       groups.push({ id: newId, name: alias, aliases: [alias] });
-      this.saveStations({ version: 1, groups });
-      this.setData({ stationSelection: [] });
+      this.saveStations({ ...this.stationState, groups });
+      this.setData({ stationSelection: [], stationEditor: null });
     } catch (_) { this.setData({ stationError: "取消关联未完成，请重试。" }); }
     finally { if (!this.unloaded) this.setData({ stationBusy: false }); }
   },
@@ -416,7 +432,7 @@ Page({
     this.retryBusy = true;
     try {
       let paths = this.batchImagePaths.get(batchId) || batch.images.map(() => '');
-      if (!paths[index]) {
+      if (!this.availableImage(batchId, index)) {
         this.setData({ choosing: true });
         try {
           const selected = await wx.chooseImage({ count: 1, sizeType: ['original'], sourceType: ['album'] });
@@ -471,6 +487,7 @@ Page({
   },
   onUnload() {
     this.unloaded = true;
+    this.batchImagePaths.clear();
     Object.values(this.presentationTimers || {}).forEach(clearTimeout);
     this.data.notificationText = "";
     this.recognitionRun = null;
@@ -567,11 +584,12 @@ Page({
       this.refreshRecognition();
       return;
     }
-    const cached = run.auto && !run.retrying && batches.cachedImage(this.importState, identity.hash, run.batchId);
+    const cache = run.auto && !run.retrying && batches.cachedImage(this.importState, identity.hash, run.batchId);
+    const cached = cache && !cache.candidates.some(c => (!validCode(c.code) || c.parcelStatus === 'conflict' || c.timeConflict) && !(c.sourceRegions || []).length) && cache;
     if (cached) {
       const parsed = cached.candidates.map((c, j) => {
-        const { sourceIds, sourceIndices, ...evidence } = c;
-        return { ...evidence, id: c.code ? `draft-${run.batchId}-${i}-${c.code}-${j}` : `issue-${run.batchId}-${i}`, sourceIndex: i };
+        const { sourceIds, sourceIndices, fieldSources, ...evidence } = c;
+        return { ...evidence, id: c.code ? `draft-${run.batchId}-${i}-${c.code}-${j}` : `issue-${run.batchId}-${i}`, sourceIndex: i, sourceRegions: (c.sourceRegions || []).map(r => ({ ...r, imageIndex: i })) };
       });
       run.sources.set(i, parsed);
       this.checkpointImage(run, i, { hash: identity.hash, state: 'done', status: cached.status, candidates: parsed });
@@ -595,11 +613,17 @@ Page({
       if (!result || typeof result.mock !== "boolean" || !Array.isArray(result.lines) || !result.lines.every(s => typeof s === "string")) throw task.error("BAD_RESPONSE");
       const parseStarted = Date.now();
       const analysis = parser.analyze(result.lines, i, result.boxes);
-      const labels = result.lines.join("\n").match(/取件码|取货码|提货码|领取码/g) || [];
-      const metadata = duplicates.metadata(result.lines, Math.max(analysis.records.length, labels.length));
-      const parsed = analysis.records.map((r, j) => ({ ...metadata, ...r, id: `draft-${run.auto ? run.batchId : run.id}-${i}-${r.code}-${j}`, taken: false }));
-      if (run.auto && (!parsed.length && (/arrived_no_code|unrecognized/.test(analysis.status) || analysis.status !== 'in_transit' && /快递|包裹|取件|驿站/.test(result.lines.join(''))) || analysis.uncertainCount)) {
-        parsed.push({ id: `issue-${run.batchId}-${i}`, code: '', station: parser.UNKNOWN, sourceIndex: i, needsReview: true });
+      const parsed = analysis.records.map((r, j) => ({ ...r, id: `draft-${run.auto ? run.batchId : run.id}-${i}-${r.code}-${j}`, taken: false }));
+      if (run.auto) {
+        const issues = analysis.issues.slice();
+        if (!parsed.length && !issues.length && (analysis.status !== 'in_transit' && /快递|包裹|取件|驿站/.test(result.lines.join('')) || analysis.status === 'unrecognized' || analysis.status === 'in_transit')) {
+          const scope = evidence.withoutNavigation(result.lines, result.boxes);
+          const item = { code: '', station: parser.UNKNOWN, sourceIndex: i, needsReview: true,
+            ...duplicates.metadata(scope, (result.lines.join('').match(/取件码|取货码|提货码|领取码/g) || []).length > 1 ? 2 : 1), ...evidence.inspect(scope.join('\n')) };
+          item.sourceRegions = [parser.region(i, 0, Math.max(0, result.lines.length - 1), result.boxes || [], item)];
+          if (analysis.status !== 'in_transit' || item.waybillNumber) issues.push(item);
+        }
+        issues.forEach((item, j) => parsed.push({ ...item, id: `issue-${run.batchId}-${i}-${j}`, unresolvedRegion: !!analysis.records.length || analysis.issues.length > 1 }));
       }
       // A valid no-code response must also replace old drafts from this image.
       run.sources.set(i, parsed);
@@ -736,10 +760,51 @@ Page({
     this.setData({ resultCategory: category, categoryItems: items, categoryTitle: { duplicate: '重复', unrelated: '无关', failure: '失败' }[key] });
   },
   closeResultCategory() { this.setData({ resultCategory: '', categoryItems: [] }); },
+  availableImage(batchId, index) {
+    const paths = this.batchImagePaths.get(batchId) || [];
+    const path = paths[index];
+    if (!path) return '';
+    try {
+      if (wx.getFileSystemManager && wx.getFileSystemManager().accessSync) wx.getFileSystemManager().accessSync(path);
+      return path;
+    } catch (_) { paths[index] = ''; return ''; }
+  },
+  sourceImageError(e) {
+    const { batchId, imageIndex } = e.currentTarget.dataset;
+    const paths = this.batchImagePaths.get(batchId) || []; paths[Number(imageIndex)] = '';
+    if (this.data.exceptionOpen) this.openExceptions({ keepSession: true });
+  },
+  async selectSourceImage(e) {
+    if (this.data.choosing || this.data.loading) return;
+    const { batchId, imageIndex } = e.currentTarget.dataset, index = Number(imageIndex);
+    const batch = this.importState.batches.find(b => b.id === batchId);
+    if (!batch || !batch.images[index]) return;
+    this.setData({ choosing: true });
+    try {
+      const selected = await wx.chooseImage({ count: 1, sizeType: ['original'], sourceType: ['album'] });
+      const file = (selected.tempFiles || [])[0];
+      if (!file || !file.path || !(file.size > 0) || file.size > MAX_BYTES) return;
+      const [identity] = await imageDedup.inspect(wx, [file.path]);
+      if (this.unloaded) return;
+      if (batch.images[index].hash && identity.hash !== batch.images[index].hash) {
+        if (wx.showToast) wx.showToast({ title: '请选择同一张原图', icon: 'none' }); return;
+      }
+      const paths = this.batchImagePaths.get(batchId) || batch.images.map(() => '');
+      paths[index] = file.path; this.batchImagePaths.set(batchId, paths);
+      if (!batch.images[index].hash || batch.images[index].candidates.some(c => !(c.sourceRegions || []).length)) {
+        this.setData({ choosing: false });
+        return await this.retryImage(e);
+      }
+      this.openExceptions({ keepSession: true });
+    } catch (_) { /* Selection cancellation leaves the exception intact. */ }
+    finally { if (!this.unloaded) this.setData({ choosing: false }); }
+  },
+  toggleExceptionEvidence() { this.setData({ 'currentException.evidenceOpen': !this.data.currentException.evidenceOpen }); },
   previewResultImage(e) {
     const { batchId, imageIndex } = e.currentTarget.dataset;
-    const path = (this.batchImagePaths.get(batchId) || [])[Number(imageIndex)];
-    if (path) wx.previewImage({ current: path, urls: [path] });
+    const path = this.availableImage(batchId, Number(imageIndex));
+    if (path) wx.previewImage({ current: path, urls: [path], fail: () => this.sourceImageError(e) });
+    else if (this.data.exceptionOpen) this.openExceptions({ keepSession: true });
   },
   viewPending() { this.setData({ activeTab: 'home', resultCategory: '' }); },
   undoImport() {
@@ -754,14 +819,51 @@ Page({
       if (this.recognitionRun && this.recognitionRun.batchId === batch.id) this.recognitionRun = null;
     }
   },
+  reconcileExceptions() {
+    if (this.data.storageBlocked || this.data.loading) return;
+    let changed = false;
+    const next = { ...this.importState, batches: this.importState.batches.map(batch => {
+      const completed = [], reviews = [];
+      for (const r of batch.reviews) {
+        const d = decision.classify(r.candidate, this.data.records, this.stationState);
+        if (d.decision === decision.AUTO_SKIP && !d.update) { completed.push({ ...r, finalReason: d.reason }); changed = true; continue; }
+        const matches = d.matches || [], conflictFields = d.conflictFields || [];
+        if (JSON.stringify([r.matches, r.conflictFields || [], r.allowNew]) !== JSON.stringify([matches, conflictFields, d.allowNew !== false])) {
+          const updated = { ...r, matches, conflictFields, allowNew: d.allowNew !== false };
+          delete updated.choice; reviews.push(updated); changed = true;
+        } else reviews.push(r);
+      }
+      const completedReasons = new Map(completed.map(r => [r.id, r.finalReason]));
+      return { ...batch, reviews,
+        resolved: [...new Set([...(batch.resolved || []), ...completed.flatMap(r => r.candidate.sourceIds || [r.id])])],
+        outcomes: batch.outcomes.map(o => completedReasons.has(o.id) ? { ...o, decision: decision.AUTO_SKIP, reason: completedReasons.get(o.id) } : o) };
+    }) };
+    if (changed) this.persistRecords(this.data.records, next);
+  },
   openExceptions({ keepSession = false } = {}) {
+    this.reconcileExceptions();
     const entries = this.importState.batches.flatMap(b => b.reviews.map(r => {
-      const index = (r.candidate.sourceIndices || [r.candidate.sourceIndex]).find(i => i >= 0);
+      const indices = [...new Set([...(r.candidate.sourceIndices || [r.candidate.sourceIndex]), ...(r.candidate.relatedSourceIndices || [])])].filter(i => i >= 0);
+      const index = indices[0];
+      const statusNames = { unknown: '未知', transit: '运输中', pending: '待取件', signed: '物流签收', collected: '已领取', cancelled: '取消或退回', terminal: '已取或退回', conflict: '状态矛盾' };
+      const sources = indices.map(imageIndex => {
+        const raw = b.images[imageIndex] ? b.images[imageIndex].candidates : [];
+        const candidates = raw.filter(c => (r.candidate.sourceIds || [r.id]).includes(c.id) || identity.sameWaybill(c, r.candidate) || c.code && c.code === r.candidate.code);
+        const values = candidates.flatMap(c => ['code', 'station', 'pickupAddress', 'carrier', 'waybillNumber', 'parcelStatus', 'noticeAt'].filter(f => c[f]).map(f => {
+          const value = f === 'noticeAt' ? new Date(c[f]).toLocaleString() : f === 'parcelStatus' ? statusNames[c[f]] : c[f];
+          return `${identity.labels[f]}：${value}`;
+        }));
+        const regions = (r.candidate.sourceRegions || []).filter(s => s.imageIndex === imageIndex);
+        return { imageIndex, imageId: `${b.id}:${imageIndex}`, batchId: b.id, label: `本次截图 ${imageIndex + 1}`,
+          path: this.availableImage(b.id, imageIndex), needsRecognition: !b.images[imageIndex].hash || b.images[imageIndex].candidates.some(c => !(c.sourceRegions || []).length), values: [...new Set(values)], regions,
+          fields: [...new Set(regions.flatMap(s => s.fields))].map(f => identity.labels[f] || f).join('、') };
+      });
+      const conflicts = r.conflictFields && r.conflictFields.length ? r.conflictFields : r.candidate.conflictFields || (r.reason === 'status_conflict' ? ['parcelStatus'] : []);
       return { ...r.candidate, id: r.id, batchId: b.id, reason: r.reason,
-        message: decision.reasonText[r.reason], matches: r.matches, allowNew: r.allowNew,
+        message: decision.reasonText[r.reason], sources, conflictText: conflicts.map(f => identity.labels[f] || f).join('、'), evidenceOpen: false, matches: r.matches, allowNew: r.allowNew,
         action: r.choice && r.choice.action || '', selectedStation: r.choice ? r.choice.station : stations.known(r.candidate.station) ? r.candidate.station : '',
         locationOnly: r.reason === 'missing_location', needsCode: !validCode(r.candidate.code),
-        imageIndex: index, failed: b.images[index] && b.images[index].state === 'failed', path: (this.batchImagePaths.get(b.id) || [])[index] || '', options: r.candidate.locationOptions || [] };
+        imageIndex: index, failed: b.images[index] && b.images[index].state === 'failed', path: this.availableImage(b.id, index), options: r.candidate.locationOptions || [] };
     }));
     if (!keepSession || !this.exceptionSession) this.exceptionSession = { total: entries.length, deferred: new Set() };
     const available = entries.filter(r => !this.exceptionSession.deferred.has(r.id));
@@ -820,7 +922,7 @@ Page({
       if (!validCode(c.code) || !review.allowNew) return;
       const current = decision.classify({ ...c, station: station.trim() || parser.UNKNOWN }, records, this.stationState);
       const owned = new Set(batch.additions.map(r => r.id));
-      const matchKey = matches => JSON.stringify((matches || []).filter(m => !owned.has(m.id)).map(m => [m.id, m.taken, m.code, m.station]).sort());
+      const matchKey = matches => JSON.stringify((matches || []).filter(m => !owned.has(m.id)).map(m => [m.id, m.taken, m.code, m.station, m.carrier || '', m.pickupAddress || '', m.waybillNumber || '']).sort());
       if (matchKey(current.matches) !== matchKey(review.matches)) {
         review.matches = current.matches || []; review.allowNew = current.allowNew !== false;
         review.reason = current.reason === 'missing_location' ? 'missing_location' : 'record_conflict'; delete review.choice;
@@ -828,16 +930,23 @@ Page({
         if (wx.showToast) wx.showToast({ title: '记录已变化，请重新选择', icon: 'none' });
         return;
       }
-      if (c.waybillNumber && records.some(r => r.waybillNumber === c.waybillNumber)) return;
-      added = storage.newRecord({ ...c, station: station.trim() || parser.UNKNOWN,
+      if (current.decision === decision.AUTO_SKIP && current.reason === 'pending_duplicate') {
+        batch.resolved = [...(batch.resolved || []), ...(c.sourceIds || [id])];
+        batch.reviews = batch.reviews.filter(r => r.id !== id);
+        batch.outcomes = batch.outcomes.map(o => o.id === id ? { id, decision: decision.AUTO_SKIP, reason: 'pending_duplicate' } : o);
+        if (this.persistBatch(batch, records)) this.openExceptions({ keepSession: true });
+        return;
+      }
+      if (c.waybillNumber && records.some(r => identity.sameWaybill(r, c))) return;
+      added = storage.newRecord({ ...c, parcelStatus: 'pending', station: station.trim() || parser.UNKNOWN,
         confirmedFields: [...new Set([...(c.confirmedFields || []), 'code', ...(station.trim() ? ['station'] : [])])] }, records);
       records.push(added); batch.additions.push(added);
     }
-    batch.resolved = [...(batch.resolved || []), id];
+    batch.resolved = [...new Set([...(batch.resolved || []), id, ...(review.candidate.sourceIds || [])])];
     batch.reviews = batch.reviews.filter(r => r.id !== id);
     batch.outcomes = batch.outcomes.map(o => o.id === id ? { id, decision: action === 'new' ? decision.AUTO_IMPORT : decision.AUTO_SKIP, reason: action === 'new' ? 'manual_new' : 'user_skip' } : o);
     if (!this.persistBatch(batch, records)) return;
-    if (added && station.trim()) this.saveStations(stations.remember(this.stationState, added));
+    if (added && station.trim() && !stations.suspicious(station)) this.saveStations(stations.remember(this.stationState, added));
     this.setData({ batchError: '' });
     this.openExceptions({ keepSession: true });
   },
@@ -848,7 +957,10 @@ Page({
   },
   markStationCommon(e) {
     const group = this.stationState.groups.find(g => g.id === e.currentTarget.dataset.id);
-    if (group) this.saveStations(stations.remember(this.stationState, { station: group.name }));
+    if (group) {
+      try { if (this.saveStations(stations.remember(this.stationState, { station: group.name }))) this.setData({ stationEditor: null }); }
+      catch (err) { this.setData({ stationError: err.message }); }
+    }
   },
   addNewStations() {
     const names = this.data.newStations;
@@ -1105,6 +1217,13 @@ Page({
     if (!undo || Date.now() >= undo.until) { this.clearUndo(); return; }
     if (this.data.deleting || this.data.importing || this.data.storageBlocked) return;
     const records = this.data.records.slice();
+    if (undo.kind === 'station-delete') {
+      if (this.data.stationBlocked || JSON.stringify(this.stationState) !== undo.after) {
+        this.clearUndo(); if (wx.showToast) wx.showToast({ title: '设置已变化，无法撤销', icon: 'none' }); return;
+      }
+      if (this.saveStations(undo.before)) this.clearUndo();
+      return;
+    }
     if (undo.kind === 'clear-history') {
       if (JSON.stringify(records) !== undo.after) {
         this.clearUndo();
@@ -1164,6 +1283,7 @@ Page({
       catch (err) { this.setData({ stationError: err.message, stationBlocked: true }); }
     }
     const pendingGroups = stations.group(this.stationState, pending).map(g => ({ ...g,
+      sortable: this.stationState.groups.some(s => s.id === g.id),
       tone: g.id === "__unknown" ? "orange" : ["blue", "purple", "cyan", "orange"][Array.from(g.id).reduce((hash, c) => (hash * 31 + c.charCodeAt(0)) >>> 0, 0) % 4],
       collapsed: this.data.collapsedStations.includes(g.station) }));
     const stationList = this.stationState.groups.map(g => ({ ...g,
@@ -1220,7 +1340,7 @@ Page({
     } else {
       if (this.data.storageBlocked || !this.persistRecords(this.data.records.map(r => r.id === edit.id ? storage.updateRecord(r, changes) : r))) return;
     }
-    if (this.data.records.some(r => r.id === edit.id) && stations.known(changes.station)) this.saveStations(stations.remember(this.stationState, changes));
+    if (this.data.records.some(r => r.id === edit.id) && stations.known(changes.station) && !stations.suspicious(changes.station)) this.saveStations(stations.remember(this.stationState, changes));
     this.setData({ editing: null });
   },
 });

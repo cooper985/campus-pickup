@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const notifications = require('../miniprogram/services/notification-parser');
+const drag = require('../miniprogram/services/station-drag');
 const stations = require('../miniprogram/services/stations');
 const storage = require('../miniprogram/services/pickup-store');
 const { page } = require('./helpers/page');
@@ -70,7 +71,7 @@ test('驿站顺序重启保持、新站追加、空站隐藏；同站自然排�
   const codes = ['1-1-100', '1-1-25', '1-1-8', '313-3-3308', '73-3-4003', 'B3-4-7401', 'B3-4-25', '未知码', '1-1-08'];
   const original = [...codes.map(code => record('A驿站', code)), record('B驿站', '2222')];
   p.persistRecords(original);
-  p.moveStation(event(p.data.stationList[1].id, { direction: '-1' }));
+  p.saveStations(drag.reorder(p.stationState, p.data.stationList.map(g => g.id), 1, 0));
   const q = page(wx); assert.equal(q.data.pendingGroups[0].station, 'B驿站');
   q.persistRecords([...q.data.records, record('C驿站', '3333')]);
   assert.deepEqual(Array.from(q.data.pendingGroups, g => g.station), ['B驿站', 'A驿站', 'C驿站']);
@@ -99,6 +100,6 @@ test('核销/撤销及设置保存失败不假装成功，独立保护不覆盖�
   wx.failWrite = storage.KEY; await p.takeStation(event(id)); assert.equal(p.data.remaining, 2); assert.equal(p.data.undoAvailable, false); p.onUnload();
   wx.failWrite = ''; const q = page(wx); await q.takeStation(event(id)); wx.failWrite = storage.KEY; q.undoDelete(); assert.equal(q.data.remaining, 1); q.onUnload();
   wx.failWrite = ''; const r = page(wx), before = JSON.stringify(r.stationState), records = JSON.stringify(r.data.records);
-  wx.failWrite = stations.KEY; r.moveStation(event(r.data.stationList[1].id, { direction: '-1' }));
+  wx.failWrite = stations.KEY; r.saveStations(drag.reorder(r.stationState, r.data.stationList.map(g => g.id), 1, 0));
   assert.equal(JSON.stringify(r.stationState), before); assert.equal(r.data.stationBlocked, true); assert.equal(JSON.stringify(r.data.records), records); r.onUnload();
 });

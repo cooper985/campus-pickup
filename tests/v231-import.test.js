@@ -28,7 +28,7 @@ test('V2.3.1 清空待取与历史后，跨重启命中旧摘要仍重新入库�
 });
 test('V2.3.1 同批相同截图共用一次 OCR，并与其他截图融合，重复图片与重复包裹分开说明', async () => {
   let calls = 0;
-  const { p } = setup(async path => { calls++; return response('1111', path === 'full' ? '大学服务站' : ''); }, { partial: 1, same: 1, full: 2 });
+  const { p } = setup(async path => { calls++; return response('1111', path === 'full' ? '大学服务站' : '', ['运单号：SF123456789012']); }, { partial: 1, same: 1, full: 2 });
   p.data.images = ['partial', 'same', 'full']; await p.recognizeCloud();
   assert.equal(calls, 2); assert.equal(p.data.records.length, 1); assert.equal(p.data.records[0].station, '大学服务站');
   assert.equal(p.data.recentImport.imageCount, 3); assert.equal(p.data.recentImport.added, 1); assert.equal(p.data.recentImport.duplicate, 2);
