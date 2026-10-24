@@ -675,7 +675,7 @@ Page({
     if (!original || this.data.storageBlocked || original.status === 'undone') return;
     const batch = JSON.parse(JSON.stringify(original));
     batch.status = 'processing';
-    batch.images[index] = { index, ...image };
+    batch.images[index] = { index, ...image, ...(image.state === 'done' ? { parserVersion: batches.PARSER_VERSION } : {}) };
     this.persistBatch(batch);
   },
   completeAutoBatch(run, candidates) {
@@ -791,7 +791,7 @@ Page({
       }
       const paths = this.batchImagePaths.get(batchId) || batch.images.map(() => '');
       paths[index] = file.path; this.batchImagePaths.set(batchId, paths);
-      if (!batch.images[index].hash || batch.images[index].candidates.some(c => !(c.sourceRegions || []).length)) {
+      if (!batch.images[index].hash || batch.images[index].parserVersion !== batches.PARSER_VERSION || batch.images[index].candidates.some(c => !(c.sourceRegions || []).length)) {
         this.setData({ choosing: false });
         return await this.retryImage(e);
       }
@@ -855,7 +855,7 @@ Page({
         }));
         const regions = (r.candidate.sourceRegions || []).filter(s => s.imageIndex === imageIndex);
         return { imageIndex, imageId: `${b.id}:${imageIndex}`, batchId: b.id, label: `本次截图 ${imageIndex + 1}`,
-          path: this.availableImage(b.id, imageIndex), needsRecognition: !b.images[imageIndex].hash || b.images[imageIndex].candidates.some(c => !(c.sourceRegions || []).length), values: [...new Set(values)], regions,
+          path: this.availableImage(b.id, imageIndex), needsRecognition: !b.images[imageIndex].hash || b.images[imageIndex].parserVersion !== batches.PARSER_VERSION || b.images[imageIndex].candidates.some(c => !(c.sourceRegions || []).length), values: [...new Set(values)], regions,
           fields: [...new Set(regions.flatMap(s => s.fields))].map(f => identity.labels[f] || f).join('、') };
       });
       const conflicts = r.conflictFields && r.conflictFields.length ? r.conflictFields : r.candidate.conflictFields || (r.reason === 'status_conflict' ? ['parcelStatus'] : []);

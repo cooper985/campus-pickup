@@ -1,3 +1,4 @@
+const PARSER_VERSION = '2.3.3';
 const copy = value => JSON.parse(JSON.stringify(value));
 const candidateFields = ['id', 'code', 'station', 'pickupAddress', 'carrier', 'waybillNumber', 'sourceIndex', 'sourceIndices', 'sourceIds', 'confirmedFields', 'needsReview', 'batchConflict', 'uncertainCode', 'parcelStatus', 'noticeAt', 'timeConflict', 'locationOptions', 'memoryAddress', 'sourceRegions', 'fieldSources', 'statusEvents', 'conflictFields', 'relatedSourceIndices', 'unresolvedRegion'];
 const cleanCandidate = c => candidateFields.reduce((result, key) => { if (c[key] !== undefined) result[key] = copy(c[key]); return result; }, {});
@@ -22,8 +23,9 @@ function validate(state) {
       if (!Number.isInteger(image.index) || image.index < 0 || image.index > 8 || !Array.isArray(image.candidates) ||
         typeof image.hash !== 'string' || image.hash && !/^[a-f0-9]{40}:\d+$/.test(image.hash) ||
         !['queued', 'done', 'failed', 'duplicate'].includes(image.state) || !string(image.status, 50) ||
-        !onlyKeys(image, ['index', 'hash', 'state', 'status', 'candidates', 'duplicateOf']) ||
+        !onlyKeys(image, ['index', 'hash', 'state', 'status', 'candidates', 'duplicateOf', 'parserVersion']) ||
         image.duplicateOf !== undefined && (!Number.isInteger(image.duplicateOf) || image.duplicateOf < 0 || image.duplicateOf >= image.index)) throw Error('导入图片状态异常');
+      if (image.parserVersion !== undefined && !string(image.parserVersion, 30)) throw Error('解析器版本异常');
       image.candidates.forEach(checkCandidate);
     }
     for (const r of b.reviews) {
@@ -112,9 +114,9 @@ function cachedImage(state, hash, batchId) {
   if (!hash) return null;
   for (const b of state.batches.slice().reverse()) {
     if (b.id === batchId) continue;
-    const image = b.images.find(i => i.hash === hash && i.state === 'done');
+    const image = b.images.find(i => i.hash === hash && i.state === 'done' && i.parserVersion === PARSER_VERSION);
     if (image) return image;
   }
   return null;
 }
-module.exports = { empty, validate, cleanCandidate, begin, apply, undo, replace, cachedImage };
+module.exports = { PARSER_VERSION, empty, validate, cleanCandidate, begin, apply, undo, replace, cachedImage };
