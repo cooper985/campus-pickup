@@ -13,7 +13,7 @@ function clean(text) {
 }
 function validPlace(s) {
   return s.length >= 2 && s.length <= 100 && /[\u4e00-\u9fff]/.test(s) && !noise.test(s) &&
-    !/^站?\d+\s*(?:小时|分钟|天)/.test(s) &&
+    !/^(?:站?\d+\s*(?:小时|分钟|天)|今日到站|已到(?:站)?\s*\d*\s*(?:天|小时)|已入库|等待领取|待取件)/.test(s) &&
     !/^(?:收|寄)?[\u4e00-\u9fff]+(?:省|市|县|区)$/.test(s);
 }
 function boxAt(boxes, i) {
@@ -46,6 +46,29 @@ function cainiaoPage(text) {
 function stationHeader(text) {
   // The storefront icon can be OCR'd as 公; strip it only on a Cainiao badge row.
   return text.replace(/[>›〉]\s*绿色公益.*$/, "").replace(/^公(?=.{2,}菜鸟驿站$)/, "");
+}
+const sectionStop = /同学都在买|猜你喜欢|为你推荐|收货地址示例|专属收货密令|还有包裹未显示|网购包裹到站都能查|^(?:已签收|已领取|已退回)\s*\d*$/;
+function badgeHeader(text, boxes, i) {
+  if (/[>›〉]\s*绿色公益/.test(text[i])) return true;
+  const a = boxAt(boxes, i);
+  return /[>›〉]\s*$/.test(text[i]) && text.slice(i + 1, i + 3).some((s, offset) => {
+    const b = boxAt(boxes, i + 1 + offset);
+    return /^绿色公益$/.test(s) && a && b && b.x >= a.x + a.width && Math.abs(b.y - a.y) <= Math.max(a.height, b.height);
+  });
+}
+// A station section owns every parcel card until the next heading or non-parcel area.
+function stationSection(text, boxes, index) {
+  if (!cainiaoPage(text)) return null;
+  const a = boxAt(boxes, index);
+  let heading = null;
+  for (let i = 0; i < index; i++) {
+    const b = boxAt(boxes, i);
+    if (a && b && (!sameColumn(a, b) || b.y >= a.y)) continue;
+    if (sectionStop.test(text[i])) heading = null;
+    const name = boundary(stationHeader(text[i]).replace(/[>›〉]\s*$/, ''));
+    if (validPlace(name) && (badgeHeader(text, boxes, i) || /驿站|服务站|快递柜/.test(name) && !/^(?:菜鸟驿站|妈妈驿站)$/.test(name))) heading = { i, name };
+  }
+  return heading;
 }
 function extractCodes(text, boxes) {
   const codes = [];
@@ -81,10 +104,15 @@ function extractCodes(text, boxes) {
       const nearbyStation = text.some((line, j) => {
         if (!/[>›〉]\s*绿色公益|驿站|服务站|快递柜/.test(line) || noise.test(line)) return false;
         const b = boxAt(boxes, j);
+        if (text.slice(j + 1, i).some(s => sectionStop.test(s))) return false;
         return a && b ? b.y + b.height <= a.y && a.y - b.y <= a.height * 5 && sameColumn(a, b)
           : j < i && i - j <= 3;
       });
-      if (!nearbyStation) continue;
+      const section = stationSection(text, boxes, i);
+      // Continued cards need their own arrival evidence; ads cannot extend a section.
+      const tail = text.slice(i + 1, i + 4).join(' ');
+      const continuedCard = section && /今日到站|已到(?:站)?\s*\d*|已入库|等待领取/.test(tail);
+      if (!nearbyStation && !continuedCard) continue;
       const code = /^(?:[A-Za-z]?\d{1,4}-){1,2}\d{1,6}$/.test(value) ? codeValue(value) : "";
       if (code) codes.push({ i, code });
       else { uncertainCount++; issues.push({ i }); }
@@ -128,8 +156,8 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
     if (covered.has(i) || /(?:收件|收货|寄件|寄货)(?:人)?地址/.test(text[i])) continue;
     const explicit = text[i].match(/(?:已派送至|已送至|已送达|已到达?|已入库(?:至|到|于)?|领取地点|自提地点|自提点|取件地址|取件地点|地址(?=\s*[:：]))\s*[:：]?\s*(.*)/);
     let name = explicit ? boundary(explicit[1]) : text[i].replace(/^支持退换货\s*/, "");
-    const header = cainiao && /[>›〉]\s*绿色公益/.test(name);
-    if (header) name = stationHeader(name);
+    const header = cainiao && badgeHeader(text, boxes, i);
+    if (header) name = stationHeader(name).replace(/[>›〉]\s*$/, '');
     name = name.replace(/((?:驿站|服务站|快递柜))[>›〉]\s*$/, '$1');
     const detailPlace = cainiao && text.includes("添加包裹") && /[栋楼]|\d+号|小区/.test(name) && codes.some(c => {
       const a = boxAt(boxes, c.i), b = boxAt(boxes, i);
@@ -167,6 +195,8 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
       (!next || !a || !boxAt(boxes, p.i) || !boxAt(boxes, next.i) ||
         Math.abs(boxAt(boxes, p.i).y - a.y) < Math.abs(boxAt(boxes, p.i).y - boxAt(boxes, next.i).y)));
     if (after.length) candidates = [...candidates, ...after];
+    const shared = stationSection(text, boxes, code.i);
+    if (shared && !candidates.some(p => !p.detail)) candidates.push({ ...shared, explicit: false });
     const previousRecord = previous && records.find(r => r.lineIndex === previous.i);
     const stationCandidates = candidates.filter(p => !p.detail);
     const addresses = [...new Set(candidates.filter(p => p.detail).map(p => p.name))];
@@ -175,10 +205,12 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
     const station = candidates.length ? placeName(stationCandidates.length ? stationCandidates : candidates) : nearbyPrevious ? previousRecord.station : UNKNOWN;
     const section = layout.sectionBounds(text, boxes, code.i);
     const bounds = section && [...extracted.codes, ...extracted.issues].filter(c => c.i >= section.start && c.i <= section.end).length === 1 ? section : null;
-    const scope = bounds ? eventText.slice(bounds.start, bounds.end + 1).join('\n') : codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? eventText.join('\n') : eventText.slice(code.i, next ? next.i : text.length).filter((_, offset) => compatible({ i: code.i + offset })).join('\n');
+    const stop = shared ? text.findIndex((line, i) => i > code.i && compatible({ i }) && (sectionStop.test(line) || badgeHeader(text, boxes, i))) : -1;
+    const parcelEnd = Math.min(next ? next.i : text.length, stop < 0 ? text.length : stop);
+    const scope = bounds ? eventText.slice(bounds.start, bounds.end + 1).join('\n') : codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? eventText.join('\n') : eventText.slice(code.i, parcelEnd).filter((_, offset) => compatible({ i: code.i + offset })).join('\n');
     const options = [...new Set(candidates.map(p => p.name))];
     const start = bounds ? bounds.start : codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? 0 : Math.min(code.i, ...candidates.map(p => p.i));
-    const end = bounds ? bounds.end : next ? Math.max(code.i, next.i - 2) : text.length - 1;
+    const end = bounds ? bounds.end : shared ? Math.max(code.i, parcelEnd - 1) : next ? Math.max(code.i, next.i - 2) : text.length - 1;
     const record = { station, ...(station === UNKNOWN && options.length > 1 ? { locationOptions: options } : {}), ...evidence.inspect(scope), ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, ...(/\d[OILSB](?:\d|-|$)/i.test(code.code) ? { uncertainCode: true } : {}), sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i };
     Object.assign(record, metadata(text.slice(start, end + 1), extracted.codes.length + notificationRecords.length + extracted.uncertainCount));
     record.sourceRegions = [region(sourceIndex, start, end, boxes, record)];

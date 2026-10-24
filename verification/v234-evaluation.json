@@ -1,0 +1,484 @@
+{
+  "baseline": "2329778",
+  "date": "2026-10-24",
+  "additionalCloudCalls": 0,
+  "engines": {
+    "old": {
+      "tencent": {
+        "images": 12,
+        "expectedCodes": 23,
+        "missing": 1,
+        "falseCandidates": 0,
+        "wrongLocations": 0
+      },
+      "rapid": {
+        "images": 4,
+        "expectedCodes": 6,
+        "missing": 2,
+        "falseCandidates": 0,
+        "wrongLocations": 0
+      },
+      "synthetic": {
+        "type": "synthetic",
+        "batches": 7,
+        "wrongMerges": 0,
+        "missingParcels": 0,
+        "unnecessaryReviews": 0
+      }
+    },
+    "current": {
+      "tencent": {
+        "images": 12,
+        "expectedCodes": 23,
+        "missing": 0,
+        "falseCandidates": 0,
+        "wrongLocations": 0
+      },
+      "rapid": {
+        "images": 4,
+        "expectedCodes": 6,
+        "missing": 0,
+        "falseCandidates": 0,
+        "wrongLocations": 0
+      },
+      "synthetic": {
+        "type": "synthetic",
+        "batches": 7,
+        "wrongMerges": 0,
+        "missingParcels": 0,
+        "unnecessaryReviews": 0
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "Tencent same-station two",
+      "results": {
+        "old": {
+          "parsed": [
+            {
+              "id": "real-tencent-two",
+              "records": [
+                {
+                  "code": "87-6-4601",
+                  "station": "河工大31号楼500以上在钟楼"
+                }
+              ],
+              "target313": "candidate_extraction"
+            }
+          ],
+          "final": {
+            "records": [
+              {
+                "code": "87-6-4601",
+                "station": "河工大31号楼500以上在钟楼"
+              }
+            ],
+            "exceptions": 0,
+            "fusedSources": 0,
+            "stations": [
+              {
+                "name": "河工大31号楼500以上在钟楼",
+                "discoveryStatus": "legacy"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "metrics": {
+              "missingParcels": 1,
+              "wrongMerges": 0,
+              "wrongLocationAssignments": 0,
+              "unnecessaryReviews": 0,
+              "unexpectedStationMemories": 0
+            }
+          }
+        },
+        "current": {
+          "parsed": [
+            {
+              "id": "real-tencent-two",
+              "records": [
+                {
+                  "code": "87-6-4601",
+                  "station": "河工大31号楼500以上在钟楼"
+                },
+                {
+                  "code": "313-3-3308",
+                  "station": "河工大31号楼500以上在钟楼"
+                }
+              ],
+              "target313": "parsed"
+            }
+          ],
+          "final": {
+            "records": [
+              {
+                "code": "87-6-4601",
+                "station": "河工大31号楼500以上在钟楼"
+              },
+              {
+                "code": "313-3-3308",
+                "station": "河工大31号楼500以上在钟楼"
+              }
+            ],
+            "exceptions": 0,
+            "fusedSources": 0,
+            "stations": [
+              {
+                "name": "河工大31号楼500以上在钟楼",
+                "discoveryStatus": "discovered"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "metrics": {
+              "missingParcels": 0,
+              "wrongMerges": 0,
+              "wrongLocationAssignments": 0,
+              "unnecessaryReviews": 0,
+              "unexpectedStationMemories": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Tencent three across images plus duplicate detail",
+      "results": {
+        "old": {
+          "parsed": [
+            {
+              "id": "live-ocr-20261023:arrival-age",
+              "records": [
+                {
+                  "code": "127-3-5016",
+                  "station": "河工大洗浴中心北侧菜鸟驿站"
+                }
+              ],
+              "target313": "ocr_missing"
+            },
+            {
+              "id": "real-tencent-two",
+              "records": [
+                {
+                  "code": "87-6-4601",
+                  "station": "河工大31号楼500以上在钟楼"
+                }
+              ],
+              "target313": "candidate_extraction"
+            },
+            {
+              "id": "cainiao-real-ocr-20261022:detail",
+              "records": [
+                {
+                  "code": "313-3-3308",
+                  "station": "河工大31号楼500以上在钟楼"
+                }
+              ],
+              "target313": "parsed"
+            }
+          ],
+          "final": {
+            "records": [
+              {
+                "code": "127-3-5016",
+                "station": "河工大洗浴中心北侧菜鸟驿站"
+              },
+              {
+                "code": "87-6-4601",
+                "station": "河工大31号楼500以上在钟楼"
+              },
+              {
+                "code": "313-3-3308",
+                "station": "河工大31号楼500以上在钟楼"
+              }
+            ],
+            "exceptions": 0,
+            "fusedSources": 0,
+            "stations": [
+              {
+                "name": "河工大洗浴中心北侧菜鸟驿站",
+                "discoveryStatus": "legacy"
+              },
+              {
+                "name": "河工大31号楼500以上在钟楼",
+                "discoveryStatus": "legacy"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "metrics": {
+              "missingParcels": 0,
+              "wrongMerges": 0,
+              "wrongLocationAssignments": 0,
+              "unnecessaryReviews": 0,
+              "unexpectedStationMemories": 0
+            }
+          }
+        },
+        "current": {
+          "parsed": [
+            {
+              "id": "live-ocr-20261023:arrival-age",
+              "records": [
+                {
+                  "code": "127-3-5016",
+                  "station": "河工大洗浴中心北侧菜鸟驿站"
+                }
+              ],
+              "target313": "ocr_missing"
+            },
+            {
+              "id": "real-tencent-two",
+              "records": [
+                {
+                  "code": "87-6-4601",
+                  "station": "河工大31号楼500以上在钟楼"
+                },
+                {
+                  "code": "313-3-3308",
+                  "station": "河工大31号楼500以上在钟楼"
+                }
+              ],
+              "target313": "parsed"
+            },
+            {
+              "id": "cainiao-real-ocr-20261022:detail",
+              "records": [
+                {
+                  "code": "313-3-3308",
+                  "station": "河工大31号楼500以上在钟楼"
+                }
+              ],
+              "target313": "parsed"
+            }
+          ],
+          "final": {
+            "records": [
+              {
+                "code": "127-3-5016",
+                "station": "河工大洗浴中心北侧菜鸟驿站"
+              },
+              {
+                "code": "87-6-4601",
+                "station": "河工大31号楼500以上在钟楼"
+              },
+              {
+                "code": "313-3-3308",
+                "station": "河工大31号楼500以上在钟楼"
+              }
+            ],
+            "exceptions": 0,
+            "fusedSources": 1,
+            "stations": [
+              {
+                "name": "河工大洗浴中心北侧菜鸟驿站",
+                "discoveryStatus": "discovered"
+              },
+              {
+                "name": "河工大31号楼500以上在钟楼",
+                "discoveryStatus": "discovered"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "metrics": {
+              "missingParcels": 0,
+              "wrongMerges": 0,
+              "wrongLocationAssignments": 0,
+              "unnecessaryReviews": 0,
+              "unexpectedStationMemories": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "RapidOCR original three in one image",
+      "results": {
+        "old": {
+          "parsed": [
+            {
+              "id": "real-rapid-three",
+              "records": [
+                {
+                  "code": "127-3-5016",
+                  "station": "河工大洗浴中心北侧菜鸟驿站"
+                }
+              ],
+              "target313": "candidate_extraction"
+            }
+          ],
+          "final": {
+            "records": [
+              {
+                "code": "127-3-5016",
+                "station": "河工大洗浴中心北侧菜鸟驿站"
+              }
+            ],
+            "exceptions": 0,
+            "fusedSources": 0,
+            "stations": [
+              {
+                "name": "河工大洗浴中心北侧菜鸟驿站",
+                "discoveryStatus": "legacy"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "metrics": {
+              "missingParcels": 2,
+              "wrongMerges": 0,
+              "wrongLocationAssignments": 0,
+              "unnecessaryReviews": 0,
+              "unexpectedStationMemories": 0
+            }
+          }
+        },
+        "current": {
+          "parsed": [
+            {
+              "id": "real-rapid-three",
+              "records": [
+                {
+                  "code": "127-3-5016",
+                  "station": "河工大洗浴中心北侧菜鸟驿站"
+                },
+                {
+                  "code": "87-6-4601",
+                  "station": "河工大31号楼500以上在钟楼"
+                },
+                {
+                  "code": "313-3-3308",
+                  "station": "河工大31号楼500以上在钟楼"
+                }
+              ],
+              "target313": "parsed"
+            }
+          ],
+          "final": {
+            "records": [
+              {
+                "code": "127-3-5016",
+                "station": "河工大洗浴中心北侧菜鸟驿站"
+              },
+              {
+                "code": "87-6-4601",
+                "station": "河工大31号楼500以上在钟楼"
+              },
+              {
+                "code": "313-3-3308",
+                "station": "河工大31号楼500以上在钟楼"
+              }
+            ],
+            "exceptions": 0,
+            "fusedSources": 0,
+            "stations": [
+              {
+                "name": "河工大洗浴中心北侧菜鸟驿站",
+                "discoveryStatus": "discovered"
+              },
+              {
+                "name": "河工大31号楼500以上在钟楼",
+                "discoveryStatus": "discovered"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "metrics": {
+              "missingParcels": 0,
+              "wrongMerges": 0,
+              "wrongLocationAssignments": 0,
+              "unnecessaryReviews": 0,
+              "unexpectedStationMemories": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "limits": [
+    "Three-parcel original exists; its historical Tencent response is unavailable. RapidOCR is separate offline evidence.",
+    "Counters cover only labelled samples, not population recognition accuracy.",
+    "Actual Android behavior and production OCR response remain unverified."
+  ],
+  "syntheticBoundary": {
+    "old": "河工大洗浴中心北侧菜鸟驿站尽早取",
+    "current": "河工大洗浴中心北侧菜鸟驿站"
+  },
+  "validation": {
+    "automated": {
+      "total": 216,
+      "passed": 216,
+      "failed": 0,
+      "skipped": 0,
+      "addedTests": 13
+    },
+    "devtools": {
+      "version": "Stable 2.01.2510260",
+      "baseLibrary": "3.17.4",
+      "compile": "passed",
+      "errors": 0,
+      "warnings": [
+        "automatic hot reload enabled",
+        "SharedArrayBuffer deprecation",
+        "getSystemInfo HarmonyOS API guidance"
+      ],
+      "ui": "management row and detail entries inspected; no user records changed for UI testing"
+    },
+    "android": "not tested",
+    "gitDiffCheck": "passed"
+  }
+}

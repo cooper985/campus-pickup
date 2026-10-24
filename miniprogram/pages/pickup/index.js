@@ -112,7 +112,7 @@ Page({
       if (parsed.length && !shadow) {
         const id = `text-import-${Date.now().toString(36)}-${batchId}`;
         if (this.persistBatch(batches.begin(id, 0))) this.completeAutoBatch({ batchId: id },
-          fuse(drafts, name => stations.resolve(this.stationState, name).id).map(c => stations.assist(this.stationState, c)));
+          fuse(drafts, (name, record) => stations.resolve(this.stationState, name, record).id).map(c => stations.assist(this.stationState, c)));
       }
     } catch (_) {
       if (!this.unloaded && epoch === this.importEpoch) this.setData({ errorScope: "import", error: "无法识别，请修改文字后重试" });
@@ -314,6 +314,16 @@ Page({
     if (ids.length !== 2) return;
     this.setData({ stationEditor: { ids, name: this.stationState.groups.find(g => g.id === ids[0]).name, mode: "merge" } });
   },
+  addStation() { this.setData({ stationEditor: { name: '', mode: 'add' }, stationError: '' }); },
+  addStationAlias() {
+    const edit = this.data.stationEditor;
+    if (edit) this.setData({ stationEditor: { id: edit.id, name: '', mode: 'alias' }, stationError: '' });
+  },
+  restoreStation(e) {
+    if (this.data.stationBlocked || this.data.storageBlocked || this.data.stationBusy) return;
+    const station = (this.data.deletedStationCandidates || [])[Number(e.detail.value)];
+    if (station) this.saveStations(stations.remember(this.stationState, { station }));
+  },
   stationNameInput(e) { this.setData({ "stationEditor.name": e.detail.value }); },
   cancelStationEdit() { if (!this.data.stationBusy) this.setData({ stationEditor: null }); },
   async confirmStationEdit() {
@@ -326,12 +336,16 @@ Page({
         state = stations.merge(this.stationState, edit.ids, edit.name);
         const answer = await wx.showModal({ title: "确认属于同一驿站？", content: `将所选两个地点统一显示为「${edit.name.trim()}」，以后识别到这些别名也会归入此处。原记录地点保留。`, confirmText: "确认合并" });
         if (!answer.confirm || this.unloaded) return;
+      } else if (edit.mode === 'alias') {
+        state = stations.addAlias(this.stationState, edit.id, edit.name);
+      } else if (edit.mode === 'add') {
+        state = stations.remember(this.stationState, { station: edit.name.trim() });
       } else {
         const name = edit.name.trim();
-        if (!stations.known(name) || name.length > 100) throw Error("请填写有效驿站名称（1–100 字）。");
+        if (!stations.reliable(name) || name.length > 100) throw Error("请填写有效驿站名称（1–100 字）。");
         if (this.stationState.groups.some(g => g.id !== edit.id && [g.name, ...g.aliases].some(a => stations.normalize(a) === stations.normalize(name)))) throw Error("名称已属于其他驿站，请选择两个驿站合并。");
-        state = { ...this.stationState, groups: this.stationState.groups.map(g => g.id === edit.id ? { ...g, name,
-          aliases: g.aliases.some(a => stations.normalize(a) === stations.normalize(g.name)) ? g.aliases : [...g.aliases, g.name] } : g) };
+        state = { ...this.stationState, groups: this.stationState.groups.map(g => g.id === edit.id ? { ...g, name, confirmed: true, discoveryStatus: 'confirmed',
+          aliases: [...new Set([...g.aliases, g.name, name])] } : g) };
       }
       if (this.saveStations(state)) this.setData({ stationEditor: null, stationSelection: [] });
     } catch (err) { this.setData({ stationError: err.message }); }
@@ -341,18 +355,12 @@ Page({
     if (this.data.stationBusy || this.data.stationBlocked || this.data.storageBlocked) return;
     const { id, alias } = e.currentTarget.dataset;
     const group = this.stationState.groups.find(g => g.id === id);
-    if (!group || group.aliases.length < 2 || !group.aliases.includes(alias)) return;
+    if (!group || !group.aliases.includes(alias) || alias === group.name) return;
     this.setData({ stationBusy: true });
     try {
-      const answer = await wx.showModal({ title: "取消别名关联？", content: `「${alias}」将独立显示，原记录会重新分组；如它是当前统一名称，剩余驿站将使用其第一个别名。`, confirmText: "取消关联" });
+      const answer = await wx.showModal({ title: "取消别名关联？", content: `「${alias}」将独立显示，原记录会重新分组。`, confirmText: "取消关联" });
       if (!answer.confirm || this.unloaded) return;
-      const aliases = group.aliases.filter(a => a !== alias);
-      const groups = this.stationState.groups.map(g => g.id === id ? { ...g, aliases,
-        name: stations.normalize(g.name) === stations.normalize(alias) ? aliases[0] : g.name } : g);
-      let newId = stations.normalize(alias);
-      while (groups.some(g => g.id === newId)) newId += "-split";
-      groups.push({ id: newId, name: alias, aliases: [alias] });
-      this.saveStations({ ...this.stationState, groups });
+      this.saveStations(stations.unlink(this.stationState, id, alias));
       this.setData({ stationSelection: [], stationEditor: null });
     } catch (_) { this.setData({ stationError: "取消关联未完成，请重试。" }); }
     finally { if (!this.unloaded) this.setData({ stationBusy: false }); }
@@ -511,7 +519,7 @@ Page({
       const run = this.recognitionRun;
       const raw = [...run.sources.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, records]) => records)
         .filter(r => !run.dismissed.has(r.id)).map(r => ({ ...r, ...(run.edits.get(r.id) || {}) }));
-      const candidates = fuse(raw, name => stations.resolve(this.stationState, name).id).map(c => stations.assist(this.stationState, c));
+      const candidates = fuse(raw, (name, record) => stations.resolve(this.stationState, name, record).id).map(c => stations.assist(this.stationState, c));
       if (run.auto) this.completeAutoBatch(run, candidates);
       else this.setDrafts(candidates);
     }
@@ -699,7 +707,7 @@ Page({
       batch.duplicateImages = original.images.filter(i => i.state === 'duplicate').length;
       batch.unrelatedImages = original.images.filter(i => i.state === 'done' && !i.candidates.length).length;
       batch.fusedSources = candidates.reduce((sum, c) => sum + Math.max(0, (c.sourceIds || []).length - 1), 0);
-      const newStations = [...new Set(plan.additions.filter(r => stations.known(r.station) && !this.stationState.groups.some(g => g.id === stations.resolve(this.stationState, r.station).id)).map(r => r.station))];
+      const newStations = []; // Reliable stations are discovered during record synchronization.
       if (!this.persistBatch(batch, plan.records)) return;
       run.committedSignature = signature;
       this.setDrafts([], { activeTab: 'import', notificationOpen: false, notificationText: '', completed: true, batchError: '', newStations });
@@ -731,7 +739,7 @@ Page({
       next.images = next.images.map(i => i.state === 'queued' ? { ...i, state: 'failed', status: 'INTERRUPTED' } : i);
       next.status = 'interrupted';
       const candidates = next.images.flatMap(i => i.candidates);
-      const plan = decision.evaluate(fuse(candidates, name => stations.resolve(this.stationState, name).id).map(c => stations.assist(this.stationState, c)).filter(c => !(next.resolved || []).includes(c.id)), this.data.records, this.stationState);
+      const plan = decision.evaluate(fuse(candidates, (name, record) => stations.resolve(this.stationState, name, record).id).map(c => stations.assist(this.stationState, c)).filter(c => !(next.resolved || []).includes(c.id)), this.data.records, this.stationState);
       const completed = batches.apply(next, plan, next.images);
       if (!this.persistBatch(completed, plan.records)) break;
     }
@@ -916,7 +924,7 @@ Page({
     const batch = JSON.parse(JSON.stringify(original)), review = batch.reviews.find(r => r.id === id);
     if (!review.choice) return;
     const { action, station } = review.choice;
-    let records = this.data.records.slice(), added;
+    let records = this.data.records.slice(), added, memory;
     if (action === 'new') {
       const c = review.candidate;
       if (!validCode(c.code) || !review.allowNew) return;
@@ -938,7 +946,10 @@ Page({
         return;
       }
       if (c.waybillNumber && records.some(r => identity.sameWaybill(r, c))) return;
-      added = storage.newRecord({ ...c, parcelStatus: 'pending', station: station.trim() || parser.UNKNOWN,
+      try { memory = station.trim() && stations.reliable(station) ? stations.remember(this.stationState, { station }, review.choice.rememberAlias) : null; }
+      catch (err) { this.setData({ batchError: err.message }); return; }
+      added = storage.newRecord({ ...c, originalPickupLocation: c.originalPickupLocation || c.station,
+        stationId: memory ? stations.resolve(memory, station).id : undefined, parcelStatus: 'pending', station: station.trim() || parser.UNKNOWN,
         confirmedFields: [...new Set([...(c.confirmedFields || []), 'code', ...(station.trim() ? ['station'] : [])])] }, records);
       records.push(added); batch.additions.push(added);
     }
@@ -946,7 +957,7 @@ Page({
     batch.reviews = batch.reviews.filter(r => r.id !== id);
     batch.outcomes = batch.outcomes.map(o => o.id === id ? { id, decision: action === 'new' ? decision.AUTO_IMPORT : decision.AUTO_SKIP, reason: action === 'new' ? 'manual_new' : 'user_skip' } : o);
     if (!this.persistBatch(batch, records)) return;
-    if (added && station.trim() && !stations.suspicious(station)) this.saveStations(stations.remember(this.stationState, added));
+    if (memory) this.saveStations(memory);
     this.setData({ batchError: '' });
     this.openExceptions({ keepSession: true });
   },
@@ -1288,7 +1299,7 @@ Page({
       collapsed: this.data.collapsedStations.includes(g.station) }));
     const stationList = this.stationState.groups.map(g => ({ ...g,
       count: (pendingGroups.find(p => p.id === g.id) || { items: [] }).items.length }));
-    this.setData({ records, groups: parser.group(records), pendingGroups, stationList, stationSuggestions: stations.suggestions(this.stationState),
+    this.setData({ records, groups: parser.group(records), pendingGroups, stationList, deletedStationCandidates: [...new Set(records.map(r => stations.canonical(r.station)).filter(n => stations.reliable(n) && stations.deleted(this.stationState, n)))], stationSuggestions: stations.suggestions(this.stationState),
       locationCount: pendingGroups.filter(g => g.station !== parser.UNKNOWN).length,
       unknownCount: pendingGroups.filter(g => g.id === "__unknown").reduce((sum, g) => sum + g.items.length, 0),
       history: records.filter(r => r.taken).sort((a, b) => b.takenAt - a.takenAt).map(r => {
@@ -1304,8 +1315,9 @@ Page({
     if (this.data.dragId || this.data.importing || this.data.deleting || Date.now() < (this.suppressTapUntil || 0)) return;
     this.closeDelete();
     const record = [...this.data.records, ...this.data.drafts].find(r => r.id === e.currentTarget.dataset.id);
-    if (record) this.setData({ editing: { ...record }, editError: "" });
+    if (record) this.setData({ editing: { ...record, originalPickupLocation: record.originalPickupLocation || record.station }, editError: "" });
   },
+  rememberLocationChange(e) { this.setData({ 'editing.rememberLocation': e.detail.value.includes('remember') }); },
   editStation(e) { this.setData({ "editing.station": e.detail.value }); },
   editPickupAddress(e) { this.setData({ "editing.pickupAddress": e.detail.value }); },
   editCarrier(e) { this.setData({ "editing.carrier": e.detail.value }); },
@@ -1325,14 +1337,19 @@ Page({
       const next = JSON.parse(JSON.stringify(batch));
       const entry = next.reviews.find(r => r.id === edit.id);
       entry.candidate = batches.cleanCandidate({ ...entry.candidate, ...changes, memoryAddress: false, confirmedFields: ['code', 'station', 'carrier', 'pickupAddress'] });
-      entry.choice = { action: 'new', station: changes.station };
+      entry.choice = { action: 'new', station: changes.station, ...(edit.rememberLocation ? { rememberAlias: entry.candidate.originalPickupLocation || entry.candidate.station } : {}) };
       if (this.persistBatch(next)) { this.setData({ editing: null }); this.applyExceptions(edit.id); }
       return;
     }
     const original = [...this.data.records, ...this.data.drafts].find(r => r.id === edit.id);
     if (!original) return;
-    changes.confirmedFields = [...new Set([...(original.confirmedFields || []), ...Object.keys(changes).filter(key =>
-      changes[key] !== (original[key] || "") || (changes[key] && changes[key] !== parser.UNKNOWN))])];
+    let memory;
+    try {
+      memory = stations.reliable(changes.station) ? stations.remember(this.stationState, changes, edit.rememberLocation ? (original.originalPickupLocation || original.station) : undefined) : null;
+    } catch (err) { this.setData({ editError: err.message }); return; }
+    Object.assign(changes, { stationId: memory ? stations.resolve(memory, changes.station).id : undefined });
+    changes.confirmedFields = [...new Set([...(original.confirmedFields || []), ...['station', 'code', 'carrier', 'pickupAddress'].filter(key =>
+      changes[key] !== undefined && (changes[key] !== (original[key] || "") || (changes[key] && changes[key] !== parser.UNKNOWN)))])];
     if (this.data.drafts.some(r => r.id === edit.id)) {
       const drafts = this.data.drafts.map(r => r.id === edit.id ? { ...r, ...changes, needsReview: false } : r);
       if (this.recognitionRun) (original.sourceIds || [original.id]).forEach(id => this.recognitionRun.edits.set(id, changes));
@@ -1340,7 +1357,7 @@ Page({
     } else {
       if (this.data.storageBlocked || !this.persistRecords(this.data.records.map(r => r.id === edit.id ? storage.updateRecord(r, changes) : r))) return;
     }
-    if (this.data.records.some(r => r.id === edit.id) && stations.known(changes.station) && !stations.suspicious(changes.station)) this.saveStations(stations.remember(this.stationState, changes));
+    if (memory && this.data.records.some(r => r.id === edit.id)) this.saveStations(memory);
     this.setData({ editing: null });
   },
 });

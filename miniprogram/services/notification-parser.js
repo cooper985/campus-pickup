@@ -12,7 +12,7 @@ function places(text) {
   let match;
   while ((match = pattern.exec(text))) {
     if (/(?:未|没|预计|即将|将|尚未|还未|收件|收货|寄件|寄货|收件人|收货人)\s*$/.test(text.slice(0, match.index))) continue;
-    const name = boundary(match[1]).replace(/^[【\[“「(]/, '').replace(/(?:可?凭|请|领取|提取|取件(?!区|点|处|柜|站)|取货(?!区|点|处|柜|站)|提货(?!区|点|处|柜|站)|取包裹|拿取).*$/, '').replace(/[】\]”」)]$/, '').trim();
+    const name = boundary(match[1]).replace(/^[【\[“「(]/, '').replace(/(?:可?凭|请|领取|提取|取件(?!区|点|处|柜|站|中心|大厅|窗口|服务)|取货(?!区|点|处|柜|站|中心|大厅|窗口|服务)|提货(?!区|点|处|柜|站|中心|大厅|窗口|服务)|取包裹|拿取).*$/, '').replace(/[】\]”」)]$/, '').trim();
     if (name.length >= 2 && name.length <= 100 && /[\u4e00-\u9fff]/.test(name) &&
       !/咨询|电话|运单|单号|https?:|\d{11}|运输中|派送中|验证码/.test(name)) result.push({ name, index: match.index, instruction: /^(?:凭|请|可)/.test(match[0]), detail: /^地址\s*[:：]/.test(match[0]) });
   }

@@ -97,8 +97,8 @@ test('V2.3 新地点直接导入；确认别名和地址参与补全，但不覆
   assert.equal(stations.assist(state, candidate(0, { station: '东门快递站' })).pickupAddress, '31号楼一层');
   assert.equal(stations.assist(state, candidate(0, { station: '西门驿站' })).station, '西门驿站');
   assert.equal(stations.assist(state, candidate(0, { station: '东门快递站', pickupAddress: '新明确地址' })).pickupAddress, '新明确地址');
-  const { p } = await batch({ a: response('C2-3-1304', '陌生大学服务站') }); assert.equal(p.data.records.length, 1); assert.equal(p.data.newStations.length, 1);
-  p.addNewStations(); assert.ok(p.stationState.groups[0].confirmed); p.onUnload();
+  const { p } = await batch({ a: response('C2-3-1304', '陌生大学服务站') }); assert.equal(p.data.records.length, 1); assert.equal(p.data.newStations.length, 0); assert.equal(p.stationState.groups[0].discoveryStatus, 'discovered');
+  p.markStationCommon({ currentTarget: { dataset: { id: p.stationState.groups[0].id } } }); assert.ok(p.stationState.groups[0].confirmed); p.onUnload();
 });
 test('V2.3 部分 OCR 失败：成功件自动保存，单图重试不重复写入；返回顺序不影响结果', async () => {
   for (const order of [[0, 1], [1, 0]]) {

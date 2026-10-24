@@ -14,14 +14,14 @@ const reasonText = {
   record_conflict: '与已有包裹信息不同', missing_code: '未找到可靠取件码',
 };
 function classify(candidate, records, state, now = Date.now()) {
-  const c = { ...candidate };
+  const c = stations.assist(state || { version: 1, groups: [] }, candidate);
   const result = (decision, reason, extra = {}) => ({ candidate: c, decision, reason, message: reasonText[reason] || '', ...extra });
   const sameCode = records.filter(r => c.code && norm(r.code) === norm(c.code) && !identity.differentWaybill(c, r));
   const exact = validWaybill(c.waybillNumber) ? records.filter(r => norm(r.waybillNumber) === norm(c.waybillNumber)) : [];
   const matches = exact.length ? exact : sameCode;
   const pending = matches.filter(r => !r.taken);
-  const sameStation = (a, b) => stations.resolve(state, a).id === stations.resolve(state, b).id;
-  const conflicts = r => identity.conflicts(r, { ...c, ...(c.memoryAddress ? { pickupAddress: '' } : {}) }, name => stations.resolve(state, name).id);
+  const sameStation = (a, b) => stations.resolve(state, a.station, a).id === stations.resolve(state, b.station, b).id;
+  const conflicts = r => identity.conflicts(r, { ...c, ...(c.memoryAddress ? { pickupAddress: '' } : {}) }, (name, record) => stations.resolve(state, name, record).id);
   const conflictFields = [...new Set([...(c.conflictFields || []), ...matches.flatMap(conflicts)])];
   const extra = { matches: matches.map(r => ({ id: r.id, code: r.code, station: r.station, taken: r.taken, carrier: r.carrier || '', pickupAddress: r.pickupAddress || '', waybillNumber: r.waybillNumber || '' })), allowNew: !exact.length, conflictFields };
   if (!validCode(c.code)) {
@@ -47,7 +47,7 @@ function classify(candidate, records, state, now = Date.now()) {
     if (exact.length && old.parcelStatus && old.parcelStatus !== 'unknown' && c.parcelStatus && c.parcelStatus !== 'unknown' && evidence.reconcile([old, c], true).parcelStatus === 'conflict') return result(NEEDS_REVIEW, 'status_conflict', { ...extra, conflictFields: ['parcelStatus'] });
     if (!exact.length && (!stations.known(old.station) || !stations.known(c.station) || c.noticeAt && c.noticeAt !== old.noticeAt)) return result(NEEDS_REVIEW, 'record_conflict', extra);
     // Code alone cannot justify changing an existing parcel's fields.
-    const canEnrich = exact.length === 1 || stations.known(c.station) && stations.known(old.station) && sameStation(c.station, old.station);
+    const canEnrich = exact.length === 1 || stations.known(c.station) && stations.known(old.station) && sameStation(c, old);
     if (!canEnrich && !stations.known(old.station) && stations.known(c.station)) return result(NEEDS_REVIEW, 'record_conflict', extra);
     if (stations.known(c.station) && !stations.known(old.station) && locked.indexOf('station') < 0) patch.station = c.station;
     for (const field of ['pickupAddress', 'carrier', 'waybillNumber']) {

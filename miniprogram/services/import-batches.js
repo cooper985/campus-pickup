@@ -1,6 +1,6 @@
-const PARSER_VERSION = '2.3.3';
+const PARSER_VERSION = '2.3.4';
 const copy = value => JSON.parse(JSON.stringify(value));
-const candidateFields = ['id', 'code', 'station', 'pickupAddress', 'carrier', 'waybillNumber', 'sourceIndex', 'sourceIndices', 'sourceIds', 'confirmedFields', 'needsReview', 'batchConflict', 'uncertainCode', 'parcelStatus', 'noticeAt', 'timeConflict', 'locationOptions', 'memoryAddress', 'sourceRegions', 'fieldSources', 'statusEvents', 'conflictFields', 'relatedSourceIndices', 'unresolvedRegion'];
+const candidateFields = ['id', 'code', 'station', 'stationId', 'originalPickupLocation', 'pickupAddress', 'carrier', 'waybillNumber', 'sourceIndex', 'sourceIndices', 'sourceIds', 'confirmedFields', 'needsReview', 'batchConflict', 'uncertainCode', 'parcelStatus', 'noticeAt', 'timeConflict', 'locationOptions', 'memoryAddress', 'sourceRegions', 'fieldSources', 'statusEvents', 'conflictFields', 'relatedSourceIndices', 'unresolvedRegion'];
 const cleanCandidate = c => candidateFields.reduce((result, key) => { if (c[key] !== undefined) result[key] = copy(c[key]); return result; }, {});
 const empty = () => ({ version: 1, batches: [] });
 const onlyKeys = (value, keys) => Object.keys(value).every(k => keys.indexOf(k) >= 0);
@@ -34,7 +34,7 @@ function validate(state) {
         !onlyKeys(r, ['id', 'candidate', 'reason', 'matches', 'allowNew', 'choice', 'conflictFields']) ||
         r.conflictFields !== undefined && (!Array.isArray(r.conflictFields) || r.conflictFields.some(f => !string(f, 30))) ||
         r.matches.some(m => !m || !string(m.id) || !string(m.code, 32) || !string(m.station, 100) || typeof m.taken !== 'boolean' || ['carrier', 'pickupAddress', 'waybillNumber'].some(k => m[k] !== undefined && !string(m[k], k === 'carrier' ? 40 : 100)) || !onlyKeys(m, ['id', 'code', 'station', 'taken', 'carrier', 'pickupAddress', 'waybillNumber']))) throw Error('异常记录格式异常');
-      if (r.choice && (!['new', 'skip'].includes(r.choice.action) || !string(r.choice.station, 100) || !onlyKeys(r.choice, ['action', 'station']))) throw Error('异常选择格式异常');
+      if (r.choice && (!['new', 'skip'].includes(r.choice.action) || !string(r.choice.station, 100) || !onlyKeys(r.choice, ['action', 'station', 'rememberAlias']) || r.choice.rememberAlias !== undefined && !string(r.choice.rememberAlias, 100))) throw Error('异常选择格式异常');
     }
     if (b.outcomes.some(o => !o || !string(o.id) || !['AUTO_IMPORT', 'AUTO_SKIP', 'NEEDS_REVIEW'].includes(o.decision) || !string(o.reason, 50) || !onlyKeys(o, ['id', 'decision', 'reason']))) throw Error('导入决策格式异常');
   }
@@ -43,7 +43,7 @@ function validate(state) {
 function checkCandidate(c) {
   if (!c || !string(c.id) || typeof c.code !== 'string' || c.code.length > 32 ||
     typeof c.station !== 'string' || c.station.length > 100 || JSON.stringify(c) !== JSON.stringify(cleanCandidate(c)) ||
-    ['carrier', 'pickupAddress', 'waybillNumber'].some(k => c[k] !== undefined && !string(c[k], k === 'carrier' ? 40 : 100)) ||
+    ['carrier', 'pickupAddress', 'waybillNumber', 'stationId', 'originalPickupLocation'].some(k => c[k] !== undefined && !string(c[k], k === 'carrier' ? 40 : k === 'stationId' ? 150 : 100)) ||
     ['needsReview', 'batchConflict', 'uncertainCode', 'timeConflict', 'memoryAddress', 'unresolvedRegion'].some(k => c[k] !== undefined && typeof c[k] !== 'boolean') ||
     c.noticeAt !== undefined && (!Number.isSafeInteger(c.noticeAt) || c.noticeAt <= 0) ||
     c.parcelStatus !== undefined && !require('./import-evidence').statuses.includes(c.parcelStatus) ||

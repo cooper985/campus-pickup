@@ -9,7 +9,7 @@ function same(a, b, stationKey = normalize) {
   if (sameWaybill(a, b)) return true;
   if (!a.code || normalize(a.code) !== normalize(b.code)) return false;
   // Code reuse is common; require an additional matching identity field.
-  return known(a.station) && known(b.station) && stationKey(a.station) === stationKey(b.station) ||
+  return known(a.station) && known(b.station) && stationKey(a.station, a) === stationKey(b.station, b) ||
     !!a.noticeAt && a.noticeAt === b.noticeAt && !!a.carrier && carrierKey(a.carrier) === carrierKey(b.carrier);
 }
 const labels = { code: '取件码', station: '驿站', pickupAddress: '详细地址', carrier: '快递公司', waybillNumber: '运单号', parcelStatus: '物流状态', noticeAt: '通知时间', identity: '包裹身份' };
@@ -17,7 +17,7 @@ function conflicts(a, b, stationKey = normalize) {
   return ['code', 'station', 'pickupAddress', 'carrier', 'waybillNumber'].filter(f => {
     if (!(f === 'station' ? known(a[f]) && known(b[f]) : a[f] && b[f])) return false;
     const key = f === 'station' ? stationKey : f === 'carrier' ? carrierKey : normalize;
-    return key(a[f]) !== key(b[f]);
+    return key(a[f], a) !== key(b[f], b);
   });
 }
 module.exports = { normalize, validWaybill, known, carrierKey, sameWaybill, differentWaybill, same, conflicts, labels };

@@ -3,6 +3,7 @@ const BACKUP_KEY = `${KEY}.backup`;
 const VERSION = 1;
 const batches = require('./import-batches');
 const CONFIRMABLE = ["station", "code", "carrier", "pickupAddress"];
+const LOCATION_FIELDS = ["stationId", "originalPickupLocation"];
 const FIELDS = ["id", "station", "code", "carrier", "waybillNumber", "taken", "createdAt", "updatedAt", "takenAt"];
 const copy = value => JSON.parse(JSON.stringify(value));
 const time = value => Number.isSafeInteger(value) && value > 0;
@@ -33,6 +34,7 @@ function validate(value) {
       r.confirmedFields.length > CONFIRMABLE.length || r.confirmedFields.some(f => CONFIRMABLE.indexOf(f) < 0))) {
       throw new Error("本地字段确认信息异常");
     }
+    if (LOCATION_FIELDS.some(f => r[f] !== undefined && !text(r[f], f === "stationId" ? 150 : 100))) throw Error("驿站关联字段异常");
     ids.add(r.id);
   }
   return value;
@@ -40,6 +42,7 @@ function validate(value) {
 function storedRecord(record) {
   const result = {};
   FIELDS.forEach(key => { result[key] = record[key]; });
+  LOCATION_FIELDS.forEach(key => { if (record[key] !== undefined) result[key] = record[key]; });
   if (record.pickupAddress !== undefined) result.pickupAddress = record.pickupAddress;
   if (record.confirmedFields !== undefined) result.confirmedFields = record.confirmedFields.slice();
   if (record.parcelStatus !== undefined) result.parcelStatus = record.parcelStatus;
@@ -106,7 +109,8 @@ function newRecord(draft, existing = [], now = Date.now()) {
   do {
     id = `parcel-${now.toString(36)}-${(++sequence).toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   } while (existing.some(r => r.id === id));
-  return storedRecord({ id, station: draft.station.trim(), code: draft.code.trim(),
+  return storedRecord({ id, ...(draft.stationId ? { stationId: draft.stationId } : {}),
+    originalPickupLocation: draft.originalPickupLocation || draft.station.trim(), station: draft.station.trim(), code: draft.code.trim(),
     ...(draft.pickupAddress !== undefined ? { pickupAddress: draft.pickupAddress.trim() } : {}),
     carrier: draft.carrier || "", waybillNumber: draft.waybillNumber || "",
     taken: false, createdAt: now, updatedAt: now, takenAt: null,
