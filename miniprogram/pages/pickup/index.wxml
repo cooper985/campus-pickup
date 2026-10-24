@@ -96,12 +96,10 @@
 
   <view class="page-panel" wx:if="{{activeTab === 'stations'}}">
     <view class="heading">管理驿站</view>
-    <view class="subtitle">点击驿站可修改、合并或删除配置</view>
     <view wx:if="{{!stationList.length}}" class="empty">导入快递后，这里会列出已知取件地点。</view>
     <view wx:for="{{stationSuggestions}}" wx:key="*this" class="notice">可能同站：{{item}}</view>
-    <view class="hint">长按拖动排序，点击查看详情</view>
     <view wx:for="{{stationList}}" wx:key="id" wx:for-item="station" class="card station-setting sortable-station {{dragId === station.id ? 'station-lifted' : ''}}" style="{{station.dragStyle}}" data-id="{{station.id}}" bindtap="openStationDetail" bindtouchstart="stationTouchStart" bindtouchmove="moveStationDrag" bindtouchend="finishStationDrag" bindtouchcancel="cancelStationDrag" catchlongpress="beginStationDrag" role="button" aria-label="{{station.name}}，长按拖动排序，点击详情">
-      <view class="station-setting-top"><text class="drag-symbol">⠿</text><view class="parcel-main"><view class="station-name">{{station.name}}</view><view class="hint">{{station.count}} 件待取{{station.confirmed ? ' · 常用' : ''}}</view></view><text>›</text></view>
+      <view class="station-setting-top"><text class="drag-symbol">⠿</text><view class="parcel-main"><view class="station-name">{{station.name}}</view></view><text>›</text></view>
     </view>
     <button hover-class="{{(stationBusy) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(stationBusy) ? 'ui-disabled' : ''}} secondary" data-tab="home" catchtap="switchTab" disabled="{{stationBusy}}">返回待取件</button>
   </view>

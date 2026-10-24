@@ -2,11 +2,12 @@
 const notifications = require("./notification-parser");
 const { validCode } = require("./pickup-code");
 const evidence = require('./import-evidence');
+const layout = require('./recognition-layout');
 const { boundary } = require('./station-name');
 const { metadata } = require('./pickup-duplicates');
 const UNKNOWN = "待确认地点";
-const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|取货码|提货码|领取码|订单|商品|购买|付款|旗舰店|专营店/;
-const labels = /(?:取件码|取货码|提货码|领取码|自提码|提取码|取件密码)\s*[:：]?\s*/g;
+const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|取货码|提货码|提货号|领取码|订单|商品|购买|付款|旗舰店|专营店/;
+const labels = /(?:取件码|取货码|提货码|提货号|领取码|自提码|提取码|取件密码)\s*[:：]?\s*/g;
 function clean(text) {
   return String(text).normalize("NFKC").replace(/[—–－﹣−‐‑‒]/g, "-").trim();
 }
@@ -57,7 +58,7 @@ function extractCodes(text, boxes) {
       const label = matches[n];
       const prefix = text[i].slice(0, label.index);
       if (/(?:https?:\/\/|www\.|[A-Za-z0-9-]+\.[A-Za-z]{2,}\/)[^\s，。]*$/.test(prefix)) continue;
-      if (/(?:没有|暂无|未生成|未发现|未获取|无有效|查询|查看|获得|获取|输入|凭)\s*$/.test(prefix)) continue;
+      if (/(?:没有|暂无|未生成|未发现|未获取|无有效|复制|分享|查询|查看|获得|获取|输入|凭)\s*$/.test(prefix)) continue;
       let valueIndex = i;
       let value = text[i].slice(label.index + label[0].length, n + 1 < matches.length ? matches[n + 1].index : undefined).trim();
       if (!value) {
@@ -100,12 +101,12 @@ function placeName(candidates) {
   const branches = names.filter(name => !/^(?:菜鸟驿站|妈妈驿站|快递驿站)$/.test(name));
   return branches.length === 1 ? branches[0] : UNKNOWN;
 }
-function parse(lines, sourceIndex = 0, boxes = []) {
+function parse(lines, sourceIndex = 0, boxes = [], trace) {
   const text = lines.map(clean), eventText = evidence.withoutNavigation(text, boxes), extracted = extractCodes(text, boxes), places = [];
   // Join only contiguous notification rows, never the entire screenshot or adjacent columns.
   const notificationRecords = [], covered = new Set();
   for (let i = 0; i < text.length; i++) {
-    if (!/^【(?:驿小哥|京东(?:快递|物流)?|菜鸟(?:驿站)?|顺丰(?:快递|速运)?)】/.test(text[i]) &&
+    if (!/^【(?:递管家|驿小哥|京东(?:快递|物流)?|菜鸟(?:驿站)?|顺丰(?:快递|速运)?)】/.test(text[i]) &&
         !/(?:已到|已送达|已送至|已入库|凭)[^。]*[A-Za-z0-9]/.test(text[i])) continue;
     let paragraph = text[i], end = i;
     while (end + 1 < text.length) {
@@ -137,7 +138,8 @@ function parse(lines, sourceIndex = 0, boxes = []) {
     });
     let locationIndex = i;
     if (explicit && !name && text[i + 1] && (!boxAt(boxes, i) || !boxAt(boxes, i + 1) || labelNeighbor(boxAt(boxes, i), boxAt(boxes, i + 1)))) {
-      name = text[i + 1]; locationIndex = i + 1;
+      const value = layout.addressValue(text, boxes, i);
+      name = value ? value.value : text[i + 1]; locationIndex = i + 1;
     }
     name = boundary(name);
     name = name.replace(/^[【\[（(]([^】\]）)]+)[】\]）)].*$/, "$1");
@@ -150,6 +152,7 @@ function parse(lines, sourceIndex = 0, boxes = []) {
       places.push({ i: locationIndex, name, explicit: !!explicit, detail: !!explicit && /^地址/.test(explicit[0]) });
     }
   }
+  if (trace) { trace.codeCandidates = extracted.codes; trace.coveredCodeLines = [...covered]; trace.placeCandidates = places; }
   const records = [];
   for (const code of codes) {
     const a = boxAt(boxes, code.i);
@@ -170,10 +173,12 @@ function parse(lines, sourceIndex = 0, boxes = []) {
     const nearbyPrevious = previousRecord && (!a || !boxAt(boxes, previous.i) ||
       Math.abs(a.y - boxAt(boxes, previous.i).y) <= Math.max(a.height, boxAt(boxes, previous.i).height) * 8);
     const station = candidates.length ? placeName(stationCandidates.length ? stationCandidates : candidates) : nearbyPrevious ? previousRecord.station : UNKNOWN;
-    const scope = codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? eventText.join('\n') : eventText.slice(code.i, next ? next.i : text.length).filter((_, offset) => compatible({ i: code.i + offset })).join('\n');
+    const section = layout.sectionBounds(text, boxes, code.i);
+    const bounds = section && [...extracted.codes, ...extracted.issues].filter(c => c.i >= section.start && c.i <= section.end).length === 1 ? section : null;
+    const scope = bounds ? eventText.slice(bounds.start, bounds.end + 1).join('\n') : codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? eventText.join('\n') : eventText.slice(code.i, next ? next.i : text.length).filter((_, offset) => compatible({ i: code.i + offset })).join('\n');
     const options = [...new Set(candidates.map(p => p.name))];
-    const start = codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? 0 : Math.min(code.i, ...candidates.map(p => p.i));
-    const end = next ? Math.max(code.i, next.i - 2) : text.length - 1;
+    const start = bounds ? bounds.start : codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? 0 : Math.min(code.i, ...candidates.map(p => p.i));
+    const end = bounds ? bounds.end : next ? Math.max(code.i, next.i - 2) : text.length - 1;
     const record = { station, ...(station === UNKNOWN && options.length > 1 ? { locationOptions: options } : {}), ...evidence.inspect(scope), ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, ...(/\d[OILSB](?:\d|-|$)/i.test(code.code) ? { uncertainCode: true } : {}), sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i };
     Object.assign(record, metadata(text.slice(start, end + 1), extracted.codes.length + notificationRecords.length + extracted.uncertainCount));
     record.sourceRegions = [region(sourceIndex, start, end, boxes, record)];
@@ -185,8 +190,8 @@ function region(imageIndex, start, end, boxes, record) {
   return { imageIndex, start, end, boxes: boxes.slice(start, end + 1).filter(b => b && [b.x, b.y, b.width, b.height].every(Number.isFinite)).map(b => ({ x: b.x, y: b.y, width: b.width, height: b.height })),
     fields: ['code', 'station', 'pickupAddress', 'carrier', 'waybillNumber', 'parcelStatus', 'noticeAt'].filter(f => record[f] && record[f] !== UNKNOWN && record[f] !== 'unknown') };
 }
-function analyze(lines, sourceIndex = 0, boxes = []) {
-  const records = parse(lines, sourceIndex, boxes);
+function analyze(lines, sourceIndex = 0, boxes = [], trace) {
+  const records = parse(lines, sourceIndex, boxes, trace);
   const extracted = extractCodes(lines.map(clean), boxes), uncertainCount = extracted.uncertainCount;
   const issues = extracted.issues.map(({ i }) => {
     const previous = extracted.codes.filter(c => c.i < i).pop(), next = extracted.codes.find(c => c.i > i);
@@ -219,4 +224,4 @@ function group(records) {
   }
   return groups;
 }
-module.exports = { parse, analyze, group, region, UNKNOWN };
+module.exports = { parse, analyze, group, region, UNKNOWN, extractCodes, clean };

@@ -28,7 +28,7 @@ function carrier(text) {
 function parse(text) {
   const normalized = String(text || '').normalize('NFKC').replace(/[—–－﹣−‐‑‒]/g, '-')
     .replace(/(?:https?:\/\/|www\.)[^\s，。；;]+|\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?:\/[^\s，。；;]*)?/g, value => ' '.repeat(value.length));
-  const blocks = normalized.split(/\n\s*\n|(?=【(?:驿小哥|菜鸟(?:驿站|裹裹)?|(?:中国)?邮政(?:快递|快递包裹)?|EMS|京东(?:物流|快递)?|中通(?:快递)?|圆通(?:速递)?|申通(?:快递)?|韵达(?:快递)?|极兔(?:速递)?|顺丰(?:速运|快递)?|德邦(?:快递)?)】)|(?=(?:另一个|另一件|另外一件|下一个)(?:包裹|快递))/).filter(s => s.trim());
+  const blocks = normalized.split(/\n\s*\n|(?=【(?:递管家|驿小哥|菜鸟(?:驿站|裹裹)?|(?:中国)?邮政(?:快递|快递包裹)?|EMS|京东(?:物流|快递)?|中通(?:快递)?|圆通(?:速递)?|申通(?:快递)?|韵达(?:快递)?|极兔(?:速递)?|顺丰(?:速运|快递)?|德邦(?:快递)?)】)|(?=(?:另一个|另一件|另外一件|下一个)(?:包裹|快递))/).filter(s => s.trim());
   const records = [];
   for (const block of blocks) {
     const codes = [], excluded = [];
@@ -39,10 +39,10 @@ function parse(text) {
       const code = value.replace(/\s/g, '').toUpperCase();
       if (validCode(code) && !excluded.includes(code) && !codes.some(c => c.code === code && Math.abs(c.index - index) < 3)) codes.push({ code, index, anchor });
     };
-    const labels = /(?:取件码|取货码|提货码|领取码|自提码|提取码|取件密码|凭码(?:领取|取件|取货|提货))\s*(?:为|是)?\s*[:：]?\s*/g;
+    const labels = /(?:取件码|取货码|提货码|提货号|领取码|自提码|提取码|取件密码|凭码(?:领取|取件|取货|提货))\s*(?:为|是)?\s*[:：]?\s*/g;
     let label;
     while ((label = labels.exec(block))) {
-      if (/(?:暂无|没有|未生成|查看|查询|获取|输入)\s*$/.test(block.slice(0, label.index))) continue;
+      if (/(?:暂无|没有|未生成|复制|分享|查看|查询|获取|输入)\s*$/.test(block.slice(0, label.index))) continue;
       let remaining = block.slice(labels.lastIndex), offset = labels.lastIndex;
       while ((match = remaining.match(codeHead))) {
         add(match[1], offset, label.index);

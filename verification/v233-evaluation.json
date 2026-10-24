@@ -1,0 +1,924 @@
+{
+  "baseline": "84453c1",
+  "serviceSha256": {
+    "candidate-fusion.js": "f1617d262c8800a8b4a837262220c6b7170b0ce08dfcc0bea2a2eff0e69cbd2b",
+    "cloud-ocr.js": "f0f380fb8819d12aea80ec50864b9bd9053957d17334ee82d357039bdf3fdc72",
+    "fileid-ocr.js": "612089f9f7f2ef762afa4edfac816650b660ceb20ccad6a5db3b9e6ce4d9735e",
+    "image-dedup.js": "c5f2159254c97f76868fe1081fab5835aef23513c0eca4bb65b35178dea6c3b5",
+    "import-batches.js": "99f52dc1853f2dd774d0645a3ce2dd76f95460dc957421bd733294e4603765de",
+    "import-decision.js": "6c197074ac99900c8adb2ae715ea2033d1e062000d39ede1052559ed3b830bce",
+    "import-evidence.js": "373c794029a0090992414dc7fc5fa38e212a9c011a05da6cd4c2d8654bf7a318",
+    "import-results.js": "952ec4818f660344e5006906f3e9c1c3cd9c09c6cde405e2cc384346339af66e",
+    "mock-ocr.js": "94f673a56cfce8ce576529a8b4b66203e724ea0fc286326920d2ffa4cd4e6f7e",
+    "notification-parser.js": "85e10fe9396e314ae13ad22200d254915fb4adf5f70e8dce1fc43a0441cf2036",
+    "parcel-identity.js": "5dfd949d5b579e5103f64c78cd416a67a964eb57b303c8787b44a792cb082aca",
+    "pickup-code.js": "7d337250df33939e7fd33e62d3d6b786f4572e6a1712932bb3994abfca23c1ab",
+    "pickup-duplicates.js": "d04f4cfb420536f7cb7ff98aba2214586f547e69032298ac2d8e01b826d439fc",
+    "pickup-parser.js": "34585dcde4c0df1337c342fbd267780bb9da533d4fadcb2c060f98530078827e",
+    "pickup-store.js": "3335a0837b08def937d1febb708fb8b5cfe9c00f05416a7eb1897973913c9a52",
+    "recognition-diagnostics.js": "13bf2cd260b76075f3b3677b774e622acf19c780f8568cf3ef18a5c1a154457d",
+    "recognition-layout.js": "a8fbfa8c0fc3a8b728d6bfc435a0295cdacbe245e47685f3245a722e3c29ad5c",
+    "recognition-queue.js": "1b2a5cab90cb5af94b91dd1ea36a2243541a7af73b539678f5f18e4f7e459f77",
+    "recognition-task.js": "a51a2acf3f38ec24b53513ecfdf01194a4000408e357887c175fee4bb3f5382b",
+    "station-drag.js": "e550a4166548bcfba4349655e6d54012f167ca46a6a64cddcc5ed47bdd88a3b5",
+    "station-name.js": "a8d1ff38862186c1920e4fe5c8a2926e7b6c224bc0682f1497fe010d1999fe11",
+    "stations.js": "70a03f79c33320c07d385c88c0ef42d6804890f0cdd209f1227699122cc83c0a",
+    "storage-probe.js": "017f2d59c42a47c76d86ee1bbd8d92fcdaf12ae8ca846901ea967bc9d5c8f707"
+  },
+  "date": "2026-10-24",
+  "additionalCloudCalls": 0,
+  "additionalCloudCost": 0,
+  "missingTencentCache": [
+    "A",
+    "B",
+    "C",
+    "extra",
+    "D-later"
+  ],
+  "engines": {
+    "A": {
+      "tencent": {
+        "images": 11,
+        "expected": 21,
+        "rawCodePresent": 21,
+        "truePositive": 21,
+        "falsePositive": 0,
+        "knownLocations": 12,
+        "correctLocations": 12,
+        "correctAssociations": 21,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "rapid": {
+        "images": 3,
+        "expected": 3,
+        "rawCodePresent": 3,
+        "truePositive": 2,
+        "falsePositive": 0,
+        "knownLocations": 3,
+        "correctLocations": 0,
+        "correctAssociations": 0,
+        "missedCodes": 1,
+        "precision": 1,
+        "recall": 0.6666666666666666
+      },
+      "synthetic": {
+        "type": "synthetic",
+        "batches": 7,
+        "wrongMerges": 0,
+        "missedParcels": 0,
+        "unnecessaryReviews": 0,
+        "correctDecisions": 31,
+        "totalDecisions": 31
+      },
+      "timing": {
+        "scope": "warm local parser only; excludes OCR/network",
+        "runs": 450,
+        "medianMs": 0.04179199999998673,
+        "p95Ms": 0.10229200000003402
+      }
+    },
+    "B": {
+      "tencent": {
+        "images": 11,
+        "expected": 21,
+        "rawCodePresent": 21,
+        "truePositive": 21,
+        "falsePositive": 0,
+        "knownLocations": 12,
+        "correctLocations": 12,
+        "correctAssociations": 21,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "rapid": {
+        "images": 3,
+        "expected": 3,
+        "rawCodePresent": 3,
+        "truePositive": 3,
+        "falsePositive": 0,
+        "knownLocations": 3,
+        "correctLocations": 3,
+        "correctAssociations": 3,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "synthetic": {
+        "type": "synthetic",
+        "batches": 7,
+        "wrongMerges": 0,
+        "missedParcels": 0,
+        "unnecessaryReviews": 0,
+        "correctDecisions": 31,
+        "totalDecisions": 31
+      },
+      "timing": {
+        "scope": "warm local parser only; excludes OCR/network",
+        "runs": 450,
+        "medianMs": 0.04545899999999392,
+        "p95Ms": 0.10654199999999037
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "A",
+      "source": "RapidOCR full image",
+      "expected": [
+        [
+          "Y2-7-47",
+          "河工大31号楼北校便利东门驿站"
+        ]
+      ],
+      "results": {
+        "A": {
+          "records": [
+            {
+              "code": "Y2-7-47",
+              "station": "妈妈驿站",
+              "status": "unknown"
+            }
+          ],
+          "issues": 1,
+          "final": {
+            "added": 1,
+            "reviews": 1,
+            "skipped": 0,
+            "fusedSources": 0,
+            "duplicateImages": 0,
+            "records": [
+              {
+                "code": "Y2-7-47",
+                "station": "妈妈驿站"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "NEEDS_REVIEW",
+                "reason": "missing_code"
+              }
+            ],
+            "localMs": 3.1524579999999673
+          }
+        },
+        "B": {
+          "records": [
+            {
+              "code": "Y2-7-47",
+              "station": "河工大31号楼北校便利东门驿站",
+              "status": "unknown"
+            }
+          ],
+          "issues": 0,
+          "final": {
+            "added": 1,
+            "reviews": 0,
+            "skipped": 0,
+            "fusedSources": 0,
+            "duplicateImages": 0,
+            "records": [
+              {
+                "code": "Y2-7-47",
+                "station": "河工大31号楼北校便利东门驿站"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "localMs": 2.1698749999999905
+          }
+        }
+      }
+    },
+    {
+      "id": "B",
+      "source": "RapidOCR full image",
+      "expected": [
+        [
+          "A4-1-15010",
+          "河南工业大学31号楼北京东快递"
+        ]
+      ],
+      "results": {
+        "A": {
+          "records": [],
+          "issues": 0,
+          "final": {
+            "added": 0,
+            "reviews": 1,
+            "skipped": 0,
+            "fusedSources": 0,
+            "duplicateImages": 0,
+            "records": [],
+            "outcomes": [
+              {
+                "decision": "NEEDS_REVIEW",
+                "reason": "missing_code"
+              }
+            ],
+            "localMs": 0.9787919999999986
+          }
+        },
+        "B": {
+          "records": [
+            {
+              "code": "A4-1-15010",
+              "station": "河南工业大学31号楼北京东快递",
+              "status": "unknown"
+            }
+          ],
+          "issues": 0,
+          "final": {
+            "added": 1,
+            "reviews": 0,
+            "skipped": 0,
+            "fusedSources": 0,
+            "duplicateImages": 0,
+            "records": [
+              {
+                "code": "A4-1-15010",
+                "station": "河南工业大学31号楼北京东快递"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "localMs": 0.73599999999999
+          }
+        }
+      }
+    },
+    {
+      "id": "C",
+      "source": "RapidOCR full image",
+      "expected": [
+        [
+          "2-1-2003",
+          "商丘景苑鑫冉超市店"
+        ]
+      ],
+      "results": {
+        "A": {
+          "records": [
+            {
+              "code": "2-1-2003",
+              "station": "菜鸟驿站",
+              "status": "unknown"
+            }
+          ],
+          "issues": 1,
+          "final": {
+            "added": 1,
+            "reviews": 1,
+            "skipped": 0,
+            "fusedSources": 0,
+            "duplicateImages": 0,
+            "records": [
+              {
+                "code": "2-1-2003",
+                "station": "菜鸟驿站"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              },
+              {
+                "decision": "NEEDS_REVIEW",
+                "reason": "missing_code"
+              }
+            ],
+            "localMs": 1.3391659999999774
+          }
+        },
+        "B": {
+          "records": [
+            {
+              "code": "2-1-2003",
+              "station": "商丘景苑鑫冉超市店",
+              "status": "unknown"
+            }
+          ],
+          "issues": 0,
+          "final": {
+            "added": 1,
+            "reviews": 0,
+            "skipped": 0,
+            "fusedSources": 0,
+            "duplicateImages": 0,
+            "records": [
+              {
+                "code": "2-1-2003",
+                "station": "商丘景苑鑫冉超市店"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "localMs": 0.8735829999999964
+          }
+        }
+      }
+    },
+    {
+      "id": "D",
+      "source": "Tencent cached",
+      "expected": [
+        [
+          "127-3-5016",
+          "河工大洗浴中心北侧菜鸟驿站"
+        ]
+      ],
+      "results": {
+        "A": {
+          "records": [
+            {
+              "code": "127-3-5016",
+              "station": "河工大洗浴中心北侧菜鸟驿站",
+              "status": "conflict"
+            }
+          ],
+          "issues": 0,
+          "final": {
+            "added": 0,
+            "reviews": 1,
+            "skipped": 0,
+            "fusedSources": 0,
+            "duplicateImages": 0,
+            "records": [],
+            "outcomes": [
+              {
+                "decision": "NEEDS_REVIEW",
+                "reason": "status_conflict"
+              }
+            ],
+            "localMs": 1.6373340000000098
+          }
+        },
+        "B": {
+          "records": [
+            {
+              "code": "127-3-5016",
+              "station": "河工大洗浴中心北侧菜鸟驿站",
+              "status": "pending"
+            }
+          ],
+          "issues": 0,
+          "final": {
+            "added": 1,
+            "reviews": 0,
+            "skipped": 0,
+            "fusedSources": 0,
+            "duplicateImages": 0,
+            "records": [
+              {
+                "code": "127-3-5016",
+                "station": "河工大洗浴中心北侧菜鸟驿站"
+              }
+            ],
+            "outcomes": [
+              {
+                "decision": "AUTO_IMPORT",
+                "reason": "reliable"
+              }
+            ],
+            "localMs": 0.7627080000000319
+          }
+        }
+      }
+    }
+  ],
+  "batches": [
+    {
+      "name": "same parcel list/detail",
+      "expected": {
+        "added": 2,
+        "reviews": 0,
+        "fusedSources": 1
+      },
+      "results": {
+        "A": {
+          "added": 2,
+          "reviews": 0,
+          "skipped": 0,
+          "fusedSources": 1,
+          "duplicateImages": 0,
+          "records": [
+            {
+              "code": "73-3-4003",
+              "station": "河工大洗浴中心北侧菜鸟驿站"
+            },
+            {
+              "code": "313-3-3308",
+              "station": "河工大31号楼500以上在钟楼"
+            }
+          ],
+          "outcomes": [
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            }
+          ],
+          "localMs": 2.27049999999997,
+          "matchesExpected": true
+        },
+        "B": {
+          "added": 2,
+          "reviews": 0,
+          "skipped": 0,
+          "fusedSources": 1,
+          "duplicateImages": 0,
+          "records": [
+            {
+              "code": "73-3-4003",
+              "station": "河工大洗浴中心北侧菜鸟驿站"
+            },
+            {
+              "code": "313-3-3308",
+              "station": "河工大31号楼500以上在钟楼"
+            }
+          ],
+          "outcomes": [
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            }
+          ],
+          "localMs": 1.6890409999999747,
+          "matchesExpected": true
+        }
+      }
+    },
+    {
+      "name": "nine images",
+      "expected": {
+        "added": 7,
+        "reviews": 11,
+        "duplicateImages": 1
+      },
+      "results": {
+        "A": {
+          "added": 7,
+          "reviews": 11,
+          "skipped": 0,
+          "fusedSources": 1,
+          "duplicateImages": 1,
+          "records": [
+            {
+              "code": "1018-0079",
+              "station": "湘江集镇邮政"
+            },
+            {
+              "code": "186-220",
+              "station": "湘江集镇盖斯美水店"
+            },
+            {
+              "code": "186-139",
+              "station": "湘江集镇盖斯美水店"
+            },
+            {
+              "code": "1-1-6086",
+              "station": "遵义新蒲湘江集镇亿家华联超市店"
+            },
+            {
+              "code": "1-1-4956",
+              "station": "亚开好时嘉"
+            },
+            {
+              "code": "73-3-4003",
+              "station": "河工大洗浴中心北侧菜鸟驿站"
+            },
+            {
+              "code": "313-3-3308",
+              "station": "河工大31号楼500以上在钟楼"
+            }
+          ],
+          "outcomes": [
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "status_conflict"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "batch_conflict"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "batch_conflict"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            }
+          ],
+          "localMs": 16.520749999999964,
+          "matchesExpected": true
+        },
+        "B": {
+          "added": 7,
+          "reviews": 11,
+          "skipped": 0,
+          "fusedSources": 1,
+          "duplicateImages": 1,
+          "records": [
+            {
+              "code": "1018-0079",
+              "station": "湘江集镇邮政"
+            },
+            {
+              "code": "186-220",
+              "station": "湘江集镇盖斯美水店"
+            },
+            {
+              "code": "186-139",
+              "station": "湘江集镇盖斯美水店"
+            },
+            {
+              "code": "1-1-6086",
+              "station": "遵义新蒲湘江集镇亿家华联超市店"
+            },
+            {
+              "code": "1-1-4956",
+              "station": "亚开好时嘉"
+            },
+            {
+              "code": "73-3-4003",
+              "station": "河工大洗浴中心北侧菜鸟驿站"
+            },
+            {
+              "code": "313-3-3308",
+              "station": "河工大31号楼500以上在钟楼"
+            }
+          ],
+          "outcomes": [
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "status_conflict"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "batch_conflict"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_location"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "batch_conflict"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            }
+          ],
+          "localMs": 13.429083999999989,
+          "matchesExpected": true
+        }
+      }
+    },
+    {
+      "name": "three target notifications",
+      "expected": {
+        "added": 3,
+        "reviews": 0
+      },
+      "results": {
+        "A": {
+          "added": 2,
+          "reviews": 3,
+          "skipped": 0,
+          "fusedSources": 0,
+          "duplicateImages": 0,
+          "records": [
+            {
+              "code": "Y2-7-47",
+              "station": "妈妈驿站"
+            },
+            {
+              "code": "2-1-2003",
+              "station": "菜鸟驿站"
+            }
+          ],
+          "outcomes": [
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_code"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_code"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "NEEDS_REVIEW",
+              "reason": "missing_code"
+            }
+          ],
+          "localMs": 3.456624999999974,
+          "matchesExpected": false
+        },
+        "B": {
+          "added": 3,
+          "reviews": 0,
+          "skipped": 0,
+          "fusedSources": 0,
+          "duplicateImages": 0,
+          "records": [
+            {
+              "code": "Y2-7-47",
+              "station": "河工大31号楼北校便利东门驿站"
+            },
+            {
+              "code": "A4-1-15010",
+              "station": "河南工业大学31号楼北京东快递"
+            },
+            {
+              "code": "2-1-2003",
+              "station": "商丘景苑鑫冉超市店"
+            }
+          ],
+          "outcomes": [
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            },
+            {
+              "decision": "AUTO_IMPORT",
+              "reason": "reliable"
+            }
+          ],
+          "localMs": 2.4082500000000095,
+          "matchesExpected": true
+        }
+      }
+    }
+  ],
+  "cropExperiment": [
+    {
+      "id": "A",
+      "engine": "rapidocr-onnxruntime==1.4.4",
+      "manualCrop": [
+        25,
+        510,
+        1185,
+        1410
+      ],
+      "full": {
+        "images": 1,
+        "expected": 1,
+        "rawCodePresent": 1,
+        "truePositive": 1,
+        "falsePositive": 0,
+        "knownLocations": 1,
+        "correctLocations": 1,
+        "correctAssociations": 1,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "crop": {
+        "images": 1,
+        "expected": 1,
+        "rawCodePresent": 1,
+        "truePositive": 1,
+        "falsePositive": 0,
+        "knownLocations": 1,
+        "correctLocations": 1,
+        "correctAssociations": 1,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "fullMs": 593.5121249999966,
+      "cropMs": 337.97045899999745
+    },
+    {
+      "id": "B",
+      "engine": "rapidocr-onnxruntime==1.4.4",
+      "manualCrop": [
+        30,
+        510,
+        1020,
+        850
+      ],
+      "full": {
+        "images": 1,
+        "expected": 1,
+        "rawCodePresent": 1,
+        "truePositive": 1,
+        "falsePositive": 0,
+        "knownLocations": 1,
+        "correctLocations": 1,
+        "correctAssociations": 1,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "crop": {
+        "images": 1,
+        "expected": 1,
+        "rawCodePresent": 1,
+        "truePositive": 1,
+        "falsePositive": 0,
+        "knownLocations": 1,
+        "correctLocations": 1,
+        "correctAssociations": 1,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "fullMs": 516.452790999999,
+      "cropMs": 313.6396250000004
+    },
+    {
+      "id": "C",
+      "engine": "rapidocr-onnxruntime==1.4.4",
+      "manualCrop": [
+        25,
+        510,
+        1185,
+        1280
+      ],
+      "full": {
+        "images": 1,
+        "expected": 1,
+        "rawCodePresent": 1,
+        "truePositive": 1,
+        "falsePositive": 0,
+        "knownLocations": 1,
+        "correctLocations": 1,
+        "correctAssociations": 1,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "crop": {
+        "images": 1,
+        "expected": 1,
+        "rawCodePresent": 1,
+        "truePositive": 1,
+        "falsePositive": 0,
+        "knownLocations": 1,
+        "correctLocations": 1,
+        "correctAssociations": 1,
+        "missedCodes": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "fullMs": 473.4194579999951,
+      "cropMs": 236.61404099999572
+    }
+  ],
+  "limits": [
+    "Tencent existing labels: 11 real images / 21 codes; not population accuracy.",
+    "Rapid corpus is separate and cannot establish historical Tencent OCR behavior.",
+    "No complete real multi-parcel identity/status/time gold set: global merge and decision accuracy unavailable.",
+    "C uses manually selected regions, not an automatic retry policy.",
+    "Timing excludes cloud/network and Android; desktop CPU only."
+  ]
+}

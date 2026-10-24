@@ -8,7 +8,7 @@ function fuse(candidates, stationKey = normalize) {
   // Prefer complete waybills, so an incomplete candidate cannot bridge two parcels.
   const ordered = candidates.slice().sort((a, b) => Number(identity.validWaybill(b.waybillNumber)) - Number(identity.validWaybill(a.waybillNumber)));
   for (const c of ordered) {
-    const compatible = groups.filter(group => !c.unresolvedRegion && !group.some(p => p.unresolvedRegion) && group.some(p => identity.same(c, p, stationKey)) && !group.some(p => identity.differentWaybill(c, p)));
+    const compatible = groups.filter(group => !c.unresolvedRegion && !group.some(p => p.unresolvedRegion) && group.every(p => identity.same(c, p, stationKey)) && !group.some(p => identity.differentWaybill(c, p)));
     if (compatible.length === 1) compatible[0].push(c);
     else groups.push([c]);
   }

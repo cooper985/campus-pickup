@@ -1,0 +1,68 @@
+[
+  {
+    "id": "A",
+    "imageSha256": "d38f8e98fb67dec066bb8b0418ce117cc250cbd5ede8febe092073aa7d0011f1",
+    "source": "Original screenshot visually inspected 2026-10-24; no fabricated OCR",
+    "expected": [
+      [
+        "Y2-7-47",
+        "河工大31号楼北校便利东门驿站"
+      ]
+    ]
+  },
+  {
+    "id": "B",
+    "imageSha256": "3453d215520ed6ae21fb0fc9748c53f24163d0d003c9c703b3871d63b2d4cad4",
+    "source": "Original screenshot visually inspected 2026-10-24; no fabricated OCR",
+    "expected": [
+      [
+        "A4-1-15010",
+        "河南工业大学31号楼北京东快递"
+      ]
+    ]
+  },
+  {
+    "id": "C",
+    "imageSha256": "0943f4283d4fc54a19c5931d3b1b15394909008b9246b3fe8a63941628f63aae",
+    "source": "Original screenshot visually inspected 2026-10-24; no fabricated OCR",
+    "expected": [
+      [
+        "2-1-2003",
+        "商丘景苑鑫冉超市店"
+      ]
+    ]
+  },
+  {
+    "id": "D",
+    "imageSha256": "1b165f30d5cf2d1493dda9b0b4e888de63e44217180120bcbaeef9c4be5044e9",
+    "source": "Original screenshot visually inspected 2026-10-24; no fabricated OCR",
+    "expected": [
+      [
+        "127-3-5016",
+        "河工大洗浴中心北侧菜鸟驿站"
+      ]
+    ]
+  },
+  {
+    "id": "extra",
+    "imageSha256": "3a4b23352375161c5890b8436affe13532a80c80cdc0f444e76a1a3b735a83c8",
+    "source": "Original screenshot visually inspected 2026-10-24; no fabricated OCR",
+    "expected": [
+      [
+        "81-3-4012",
+        "河工大洗浴中心北侧菜鸟驿站"
+      ]
+    ]
+  },
+  {
+    "id": "D-later",
+    "imageSha256": "5120edeb001455a3c36428ba6be7ad309d4f0e988a0d66db8dd577dd235810c5",
+    "source": "Original screenshot visually inspected 2026-10-24; no fabricated OCR",
+    "expected": [
+      [
+        "127-3-5016",
+        "河工大洗浴中心北侧菜鸟驿站"
+      ]
+    ]
+  }
+]

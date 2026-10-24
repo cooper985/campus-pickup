@@ -52,7 +52,7 @@ function inspect(value) {
 }
 // Pure status labels in a horizontal navigation row are controls, not parcel events.
 function withoutNavigation(lines, boxes = []) {
-  const label = /^(?:全部|运输中|待取件|已签收|已取件|已领取|已退回|已取消)(?:\s*\d+)?$/;
+  const label = /^(?:全部|派送中|已揽收|已发货|运输中|待取件|已签收|已取件|已领取|已退回|已取消)(?:\s*\d+)?$/;
   const ignored = new Set();
   lines.forEach((line, i) => {
     const a = boxes[i];
