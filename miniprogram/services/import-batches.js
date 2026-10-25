@@ -1,4 +1,4 @@
-const PARSER_VERSION = '2.3.4';
+const PARSER_VERSION = '3.0.2';
 const copy = value => JSON.parse(JSON.stringify(value));
 const candidateFields = ['id', 'code', 'station', 'stationId', 'originalPickupLocation', 'pickupAddress', 'carrier', 'waybillNumber', 'sourceIndex', 'sourceIndices', 'sourceIds', 'confirmedFields', 'needsReview', 'batchConflict', 'uncertainCode', 'parcelStatus', 'noticeAt', 'timeConflict', 'locationOptions', 'memoryAddress', 'sourceRegions', 'fieldSources', 'statusEvents', 'conflictFields', 'relatedSourceIndices', 'unresolvedRegion'];
 const cleanCandidate = c => candidateFields.reduce((result, key) => { if (c[key] !== undefined) result[key] = copy(c[key]); return result; }, {});
@@ -13,8 +13,8 @@ function validate(state) {
     if (!b || typeof b.id !== 'string' || !b.id || ids.has(b.id) || !Number.isSafeInteger(b.createdAt) || b.createdAt <= 0 ||
       !['processing', 'completed', 'interrupted', 'undone'].includes(b.status) ||
       !['additions', 'updates', 'reviews', 'outcomes', 'images'].every(k => Array.isArray(b[k])) || b.images.length > 9 ||
-      !onlyKeys(b, ['id', 'createdAt', 'status', 'additions', 'updates', 'reviews', 'outcomes', 'images', 'elapsedMs', 'skipped', 'resolved', 'duplicateImages', 'unrelatedImages', 'fusedSources', 'undoConflicts']) ||
-      ['resolved', 'undoConflicts'].some(k => b[k] !== undefined && (!Array.isArray(b[k]) || b[k].some(id => !string(id)))) ||
+      !onlyKeys(b, ['id', 'createdAt', 'status', 'additions', 'updates', 'reviews', 'outcomes', 'images', 'elapsedMs', 'skipped', 'resolved', 'handledSources', 'duplicateImages', 'unrelatedImages', 'fusedSources', 'undoConflicts']) ||
+      ['resolved', 'undoConflicts', 'handledSources'].some(k => b[k] !== undefined && (!Array.isArray(b[k]) || b[k].some(id => !string(id)))) ||
       ['elapsedMs', 'skipped', 'duplicateImages', 'unrelatedImages', 'fusedSources'].some(k => b[k] !== undefined && (!Number.isSafeInteger(b[k]) || b[k] < 0))) throw Error('导入批次格式异常');
     ids.add(b.id);
     snapshots.push(...b.additions, ...b.updates.flatMap(u => [u.before, u.after]));

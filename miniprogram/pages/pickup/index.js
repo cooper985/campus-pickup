@@ -17,6 +17,7 @@ const importResults = require("../../services/import-results");
 const evidence = require("../../services/import-evidence");
 const identity = require("../../services/parcel-identity");
 const MAX_BYTES = 5 * 1024 * 1024;
+const candidateSources = c => [...new Set([c.id, ...(c.sourceIds || [])])];
 
 Page({
   data: { resultCategory: "", categoryItems: [], failureCount: 0, currentException: null, exceptionProgress: "", keyboardHeight: 0, recentImport: null, exceptionCount: 0, exceptionOpen: false, exceptionItems: [], batchError: "", newStations: [], swipeId: "", swipeStyle: "", reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
@@ -163,6 +164,8 @@ Page({
   },
   saveStations(state) {
     if (this.data.stationBlocked || this.data.storageBlocked) return false;
+    try { stations.validate(state); }
+    catch (err) { this.setData({ stationError: err.message }); return false; }
     try {
       this.stationState = this.stationStore.save(state);
       this.setData({ stationError: "" });
@@ -345,7 +348,7 @@ Page({
         if (!stations.reliable(name) || name.length > 100) throw Error("请填写有效驿站名称（1–100 字）。");
         if (this.stationState.groups.some(g => g.id !== edit.id && [g.name, ...g.aliases].some(a => stations.normalize(a) === stations.normalize(name)))) throw Error("名称已属于其他驿站，请选择两个驿站合并。");
         state = { ...this.stationState, groups: this.stationState.groups.map(g => g.id === edit.id ? { ...g, name, confirmed: true, discoveryStatus: 'confirmed',
-          aliases: [...new Set([...g.aliases, g.name, name])] } : g) };
+          aliases: stations.uniqueAliases([name, ...g.aliases, g.name]) } : g) };
       }
       if (this.saveStations(state)) this.setData({ stationEditor: null, stationSelection: [] });
     } catch (err) { this.setData({ stationError: err.message }); }
@@ -678,12 +681,39 @@ Page({
   persistBatch(batch, records = this.data.records) {
     return this.persistRecords(records, batches.replace(this.importState, batch));
   },
+  handledBatchSources(batch) {
+    const handled = new Set(batch.handledSources || []);
+    batch.outcomes.filter(o => o.decision !== decision.NEEDS_REVIEW).forEach(o => handled.add(o.id));
+    // Legacy receipts kept only the representative ID; capture its peers before a retry replaces them.
+    const previous = fuse(batch.images.flatMap(i => i.candidates), (name, record) => stations.resolve(this.stationState, name, record).id);
+    previous.forEach(c => {
+      const sources = candidateSources(c);
+      if (sources.some(id => handled.has(id))) sources.forEach(id => handled.add(id));
+    });
+    return [...handled];
+  },
+  evaluateAutoBatch(batch, candidates) {
+    const handled = new Set(this.handledBatchSources(batch)), resolved = new Set(batch.resolved || []);
+    const stale = new Set(batch.images.filter(i => i.parserVersion !== batches.PARSER_VERSION).flatMap(i => i.candidates.flatMap(candidateSources)));
+    const eligible = candidates.filter(c => !candidateSources(c).some(id => resolved.has(id))).map(candidate => {
+      // Retain old receipts, but never reuse an outdated parser's automatic status decision.
+      const c = candidateSources(candidate).some(id => stale.has(id)) ? { ...candidate, parcelStatus: 'conflict' } : candidate;
+      // A retry must not resurrect any processed source, even when fusion changes its representative.
+      return candidateSources(c).some(id => handled.has(id)) && decision.classify(c, this.data.records, this.stationState).decision === decision.AUTO_IMPORT
+        ? { ...c, batchConflict: true } : c;
+    });
+    const plan = decision.evaluate(eligible, this.data.records, this.stationState);
+    plan.decisions.filter(d => d.decision !== decision.NEEDS_REVIEW).forEach(d => candidateSources(d.candidate).forEach(id => handled.add(id)));
+    return { ...plan, handledSources: [...handled] };
+  },
   checkpointImage(run, index, image) {
     const original = this.importState.batches.find(b => b.id === run.batchId);
     if (!original || this.data.storageBlocked || original.status === 'undone') return;
     const batch = JSON.parse(JSON.stringify(original));
+    batch.handledSources = this.handledBatchSources(original);
     batch.status = 'processing';
-    batch.images[index] = { index, ...image, ...(image.state === 'done' ? { parserVersion: batches.PARSER_VERSION } : {}) };
+    const parserVersion = image.state === 'done' ? batches.PARSER_VERSION : original.images[index].parserVersion;
+    batch.images[index] = { index, ...image, ...(parserVersion ? { parserVersion } : {}) };
     this.persistBatch(batch);
   },
   completeAutoBatch(run, candidates) {
@@ -694,14 +724,9 @@ Page({
     if (run.committedSignature === signature) return;
     run.committing = true;
     try {
-      const resolved = new Set(original.resolved || []);
-      const eligible = candidates.filter(c => !resolved.has(c.id)).map(c => {
-        const handled = original.outcomes.some(o => o.id === c.id && o.decision !== decision.NEEDS_REVIEW);
-        // A retry must not resurrect a source after its saved record was edited or removed.
-        return handled && decision.classify(c, this.data.records, this.stationState).decision === decision.AUTO_IMPORT ? { ...c, batchConflict: true } : c;
-      });
-      const plan = decision.evaluate(eligible, this.data.records, this.stationState);
+      const plan = this.evaluateAutoBatch(original, candidates);
       const batch = batches.apply(original, plan, original.images);
+      batch.handledSources = plan.handledSources;
       const owned = new Set(original.additions.map(r => r.id));
       batch.skipped = plan.decisions.filter(d => d.decision === decision.AUTO_SKIP && !(d.matches || []).some(m => owned.has(m.id))).length;
       batch.duplicateImages = original.images.filter(i => i.state === 'duplicate').length;
@@ -739,8 +764,9 @@ Page({
       next.images = next.images.map(i => i.state === 'queued' ? { ...i, state: 'failed', status: 'INTERRUPTED' } : i);
       next.status = 'interrupted';
       const candidates = next.images.flatMap(i => i.candidates);
-      const plan = decision.evaluate(fuse(candidates, (name, record) => stations.resolve(this.stationState, name, record).id).map(c => stations.assist(this.stationState, c)).filter(c => !(next.resolved || []).includes(c.id)), this.data.records, this.stationState);
+      const plan = this.evaluateAutoBatch(next, fuse(candidates, (name, record) => stations.resolve(this.stationState, name, record).id).map(c => stations.assist(this.stationState, c)));
       const completed = batches.apply(next, plan, next.images);
+      completed.handledSources = plan.handledSources;
       if (!this.persistBatch(completed, plan.records)) break;
     }
   },
@@ -1343,11 +1369,14 @@ Page({
     }
     const original = [...this.data.records, ...this.data.drafts].find(r => r.id === edit.id);
     if (!original) return;
+    const stationChanged = changes.station !== original.station;
+    const addressChanged = changes.pickupAddress !== undefined && changes.pickupAddress !== original.pickupAddress;
     let memory;
     try {
-      memory = stations.reliable(changes.station) ? stations.remember(this.stationState, changes, edit.rememberLocation ? (original.originalPickupLocation || original.station) : undefined) : null;
+      memory = (stationChanged || addressChanged || edit.rememberLocation) && stations.reliable(changes.station)
+        ? stations.remember(this.stationState, { station: changes.station, ...(addressChanged ? { pickupAddress: changes.pickupAddress } : {}) }, edit.rememberLocation ? (original.originalPickupLocation || original.station) : undefined) : null;
     } catch (err) { this.setData({ editError: err.message }); return; }
-    Object.assign(changes, { stationId: memory ? stations.resolve(memory, changes.station).id : undefined });
+    Object.assign(changes, { stationId: memory ? stations.resolve(memory, changes.station).id : stationChanged ? undefined : original.stationId });
     changes.confirmedFields = [...new Set([...(original.confirmedFields || []), ...['station', 'code', 'carrier', 'pickupAddress'].filter(key =>
       changes[key] !== undefined && (changes[key] !== (original[key] || "") || (changes[key] && changes[key] !== parser.UNKNOWN)))])];
     if (this.data.drafts.some(r => r.id === edit.id)) {

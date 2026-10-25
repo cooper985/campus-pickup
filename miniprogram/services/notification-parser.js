@@ -1,6 +1,6 @@
 const UNKNOWN = '待确认地点';
 const { metadata } = require('./pickup-duplicates');
-const { validCode } = require('./pickup-code');
+const { validCode, codeLabels } = require('./pickup-code');
 const evidence = require('./import-evidence');
 const { boundary } = require('./station-name');
 const signatures = { '邮政': '中国邮政', '中国邮政': '中国邮政', '邮政快递': '中国邮政', 'EMS': '中国邮政', '京东': '京东物流', '京东快递': '京东物流', '京东物流': '京东物流', '中通': '中通快递', '圆通': '圆通速递', '申通': '申通快递', '韵达': '韵达快递', '极兔': '极兔速递', '顺丰': '顺丰速运', '德邦': '德邦快递' };
@@ -35,11 +35,11 @@ function parse(text) {
     const otherNumbers = /(?:验证码|校验码|动态码|登录码|电话|运单号|快递单号|物流单号|订单号|(?:快件|包裹)?尾号)\s*(?:为|是)?\s*[:：]?\s*([A-Za-z0-9-]+)/g;
     let match;
     while ((match = otherNumbers.exec(block))) excluded.push(match[1].toUpperCase());
-    const add = (value, index, anchor) => {
+    const add = (value, index, anchor, kind = 'label') => {
       const code = value.replace(/\s/g, '').toUpperCase();
-      if (validCode(code) && !excluded.includes(code) && !codes.some(c => c.code === code && Math.abs(c.index - index) < 3)) codes.push({ code, index, anchor });
+      if (validCode(code) && !excluded.includes(code) && !codes.some(c => c.code === code && Math.abs(c.index - index) < 3)) codes.push({ code, index, anchor, kind });
     };
-    const labels = /(?:取件码|取货码|提货码|提货号|领取码|自提码|提取码|取件密码|凭码(?:领取|取件|取货|提货))\s*(?:为|是)?\s*[:：]?\s*/g;
+    const labels = codeLabels();
     let label;
     while ((label = labels.exec(block))) {
       if (/(?:暂无|没有|未生成|复制|分享|查看|查询|获取|输入)\s*$/.test(block.slice(0, label.index))) continue;
@@ -54,13 +54,21 @@ function parse(text) {
       }
     }
     const credential = new RegExp('凭(?:码)?\\s*[:：]?\\s*[【\\[（(]?\\s*(' + token + ')\\s*[】\\]）)]?\\s*(?:到|至|前往|领取|取件|取货|提货|免费取(?:件|货)?|取(?!件码|货码))', 'g');
-    while ((match = credential.exec(block))) add(match[1], match.index, match.index);
+    while ((match = credential.exec(block))) add(match[1], match.index, match.index, 'credential');
     codes.sort((a, b) => a.index - b.index);
     const locations = places(block);
     const sentences = Array.from(block.matchAll(/[^。；;！!\n]+/g), m => ({ text: m[0], start: m.index, end: m.index + m[0].length }));
     const sentenceAt = index => sentences.find(s => s.start <= index && index < s.end);
     codes.forEach(c => { c.sentence = sentenceAt(c.index); });
     locations.forEach(p => { p.sentence = sentenceAt(p.index); });
+    // A credential can refer back to one labelled code; separate locations remain ambiguous.
+    for (let i = codes.length - 1; i >= 0; i--) {
+      const current = codes[i];
+      if (current.kind !== 'credential' || !current.sentence) continue;
+      const labels = codes.filter(c => c.kind === 'label' && c.code === current.code && c.sentence === current.sentence);
+      const localPlaces = locations.filter(p => p.sentence === current.sentence);
+      if (labels.length === 1 && [false, true].every(detail => new Set(localPlaces.filter(p => !!p.detail === detail).map(p => p.name)).size <= 1)) codes.splice(i, 1);
+    }
     const info = metadata([block], codes.length), blockCarrier = carrier(block);
     // Decide direction per sentence; a whole-message direction can attach a later parcel to the previous station.
     codes.forEach((entry, i) => {

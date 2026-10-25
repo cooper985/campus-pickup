@@ -2,6 +2,7 @@ const { UNKNOWN } = require('./pickup-parser');
 const { boundary, suspicious } = require('./station-name');
 const KEY = 'campus-pickup.stations';
 const normalize = value => String(value || '').normalize('NFKC').toUpperCase().replace(/[—–－﹣−‐‑‒]/g, '-').replace(/[\s\u200b，,。!！?？:：;；、·•“”"'‘’()（）【】\[\]<>《》]/g, '');
+const uniqueAliases = aliases => aliases.filter((a, i) => aliases.findIndex(b => normalize(a) === normalize(b)) === i);
 const known = value => !!normalize(value) && !/^(待确认|待确认地点|地点待确认|未知地点|未知)$/.test(normalize(value));
 const reliable = name => known(name) && String(name).length <= 100 && !suspicious(name) &&
   !/^(?:菜鸟驿站|妈妈驿站|快递驿站|驿站|快递柜|自提点|服务站|便利店|超市)$/.test(normalize(name)) &&
@@ -147,9 +148,9 @@ function merge(state, ids, name) {
   name = name.trim();
   if (selected.length !== 2 || selected[0].id === selected[1].id || !reliable(name) || name.length > 100) throw Error('请选择两个驿站，并填写有效的统一名称。');
   if (state.groups.some(g => !ids.includes(g.id) && [g.name, ...g.aliases].some(a => normalize(a) === normalize(name)))) throw Error('名称已属于其他驿站，请选择该驿站合并。');
-  const aliases = [...new Set([name, ...selected.flatMap(g => [...g.aliases, g.name])])];
-  const unique = aliases.filter((a, i) => aliases.findIndex(b => normalize(a) === normalize(b)) === i);
-  return { ...state, groups: state.groups.filter(g => g.id !== selected[1].id).map(g => g.id === selected[0].id ? { ...g, name, aliases: unique, confirmed: true, discoveryStatus: 'confirmed', redirectIds: [...new Set([...(g.redirectIds || []), selected[1].id, ...(selected[1].redirectIds || [])])], revokedAliases: (g.revokedAliases || []).filter(a => !unique.some(b => normalize(a) === normalize(b))) } : g) };
+  const aliases = uniqueAliases([name, ...selected.flatMap(g => [...g.aliases, g.name])]);
+  const revoked = uniqueAliases(selected.flatMap(g => g.revokedAliases || [])).filter(a => !aliases.some(b => normalize(a) === normalize(b)));
+  return { ...state, groups: state.groups.filter(g => g.id !== selected[1].id).map(g => g.id === selected[0].id ? { ...g, name, aliases, confirmed: true, discoveryStatus: 'confirmed', redirectIds: [...new Set([...(g.redirectIds || []), selected[1].id, ...(selected[1].redirectIds || [])])], revokedAliases: revoked } : g) };
 }
 function assist(state, candidate) {
   let resolved = resolve(state, candidate.station, candidate);
@@ -214,4 +215,4 @@ function suggestions(state) {
   }));
   return pairs.slice(0, 3);
 }
-module.exports = { KEY, normalize, known, createStore, sync, resolve, natural, group, merge, suggestions, assist, remember, remove, suspicious, reliable, canonical, deleted, addAlias, unlink };
+module.exports = { KEY, normalize, uniqueAliases, validate, known, createStore, sync, resolve, natural, group, merge, suggestions, assist, remember, remove, suspicious, reliable, canonical, deleted, addAlias, unlink };

@@ -1,13 +1,13 @@
 // Only explicit pickup semantics or recognizable station names may identify a location.
 const notifications = require("./notification-parser");
-const { validCode } = require("./pickup-code");
+const { validCode, codeLabels } = require("./pickup-code");
 const evidence = require('./import-evidence');
 const layout = require('./recognition-layout');
 const { boundary } = require('./station-name');
 const { metadata } = require('./pickup-duplicates');
 const UNKNOWN = "待确认地点";
 const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|取货码|提货码|提货号|领取码|订单|商品|购买|付款|旗舰店|专营店/;
-const labels = /(?:取件码|取货码|提货码|提货号|领取码|自提码|提取码|取件密码)\s*[:：]?\s*/g;
+const labels = codeLabels();
 function clean(text) {
   return String(text).normalize("NFKC").replace(/[—–－﹣−‐‑‒]/g, "-").trim();
 }
@@ -151,6 +151,7 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
     i = end;
   }
   const codes = extracted.codes.filter(c => !covered.has(c.i));
+  covered.forEach(i => { eventText[i] = ''; });
   const cainiao = cainiaoPage(text);
   for (let i = 0; i < text.length; i++) {
     if (covered.has(i) || /(?:收件|收货|寄件|寄货)(?:人)?地址/.test(text[i])) continue;
@@ -188,9 +189,11 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
     const anchors = [...codes, ...extracted.issues].sort((a, b) => a.i - b.i);
     const previous = anchors.filter(c => c.i < code.i && compatible(c)).pop();
     const next = anchors.find(c => c.i > code.i && compatible(c));
-    let candidates = places.filter(p => compatible(p) && p.i > (previous ? previous.i : -1) && p.i <= code.i &&
+    const owned = layout.parcelRows(eventText, boxes, anchors, places, code.i, evidence.inspect);
+    const ownedIds = new Set(owned.indices);
+    let candidates = places.filter(p => ownedIds.has(p.i) && compatible(p) && p.i > (previous ? previous.i : -1) && p.i <= code.i &&
       (!a || !boxAt(boxes, p.i) || boxAt(boxes, p.i).y <= a.y + a.height / 2));
-    const after = places.filter(p => (p.explicit || codes.length === 1) && compatible(p) && p.i > code.i && p.i < (next ? next.i : text.length) &&
+    const after = places.filter(p => ownedIds.has(p.i) && (p.explicit || codes.length === 1) && compatible(p) && p.i > code.i && p.i < (next ? next.i : text.length) &&
       (!a || !boxAt(boxes, p.i) || Math.abs(boxAt(boxes, p.i).y - a.y) <= Math.max(a.height, boxAt(boxes, p.i).height) * 8) &&
       (!next || !a || !boxAt(boxes, p.i) || !boxAt(boxes, next.i) ||
         Math.abs(boxAt(boxes, p.i).y - a.y) < Math.abs(boxAt(boxes, p.i).y - boxAt(boxes, next.i).y)));
@@ -203,34 +206,33 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
     const nearbyPrevious = previousRecord && (!a || !boxAt(boxes, previous.i) ||
       Math.abs(a.y - boxAt(boxes, previous.i).y) <= Math.max(a.height, boxAt(boxes, previous.i).height) * 8);
     const station = candidates.length ? placeName(stationCandidates.length ? stationCandidates : candidates) : nearbyPrevious ? previousRecord.station : UNKNOWN;
-    const section = layout.sectionBounds(text, boxes, code.i);
-    const bounds = section && [...extracted.codes, ...extracted.issues].filter(c => c.i >= section.start && c.i <= section.end).length === 1 ? section : null;
-    const stop = shared ? text.findIndex((line, i) => i > code.i && compatible({ i }) && (sectionStop.test(line) || badgeHeader(text, boxes, i))) : -1;
-    const parcelEnd = Math.min(next ? next.i : text.length, stop < 0 ? text.length : stop);
-    const scope = bounds ? eventText.slice(bounds.start, bounds.end + 1).join('\n') : codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? eventText.join('\n') : eventText.slice(code.i, parcelEnd).filter((_, offset) => compatible({ i: code.i + offset })).join('\n');
+    const scope = owned.indices.map(i => eventText[i]);
+    const status = evidence.inspect(scope.join('\n'));
+    if (!owned.reliable && !['unknown', 'pending'].includes(status.parcelStatus)) status.parcelStatus = 'conflict';
     const options = [...new Set(candidates.map(p => p.name))];
-    const start = bounds ? bounds.start : codes.length === 1 && !notificationRecords.length && !extracted.uncertainCount ? 0 : Math.min(code.i, ...candidates.map(p => p.i));
-    const end = bounds ? bounds.end : shared ? Math.max(code.i, parcelEnd - 1) : next ? Math.max(code.i, next.i - 2) : text.length - 1;
-    const record = { station, ...(station === UNKNOWN && options.length > 1 ? { locationOptions: options } : {}), ...evidence.inspect(scope), ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, ...(/\d[OILSB](?:\d|-|$)/i.test(code.code) ? { uncertainCode: true } : {}), sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i };
-    Object.assign(record, metadata(text.slice(start, end + 1), extracted.codes.length + notificationRecords.length + extracted.uncertainCount));
-    record.sourceRegions = [region(sourceIndex, start, end, boxes, record)];
+    const record = { station, ...(station === UNKNOWN && options.length > 1 ? { locationOptions: options } : {}), ...status, ...(addresses.length === 1 ? { pickupAddress: addresses[0] } : {}), code: code.code, ...(/\d[OILSB](?:\d|-|$)/i.test(code.code) ? { uncertainCode: true } : {}), sourceIndex, needsReview: station === UNKNOWN, lineIndex: code.i };
+    Object.assign(record, metadata(owned.indices.map(i => text[i]), extracted.codes.length + notificationRecords.length + extracted.uncertainCount));
+    record.sourceRegions = [region(sourceIndex, Math.min(...owned.indices), Math.max(...owned.indices), boxes, record, owned.indices)];
+    if (shared && !ownedIds.has(shared.i)) record.sourceRegions.push(region(sourceIndex, shared.i, shared.i, boxes, { station }));
     records.push(record);
   }
   return [...records, ...notificationRecords].sort((a, b) => a.lineIndex - b.lineIndex).map(({ lineIndex, sourceType, ...r }) => r);
 }
-function region(imageIndex, start, end, boxes, record) {
-  return { imageIndex, start, end, boxes: boxes.slice(start, end + 1).filter(b => b && [b.x, b.y, b.width, b.height].every(Number.isFinite)).map(b => ({ x: b.x, y: b.y, width: b.width, height: b.height })),
+function region(imageIndex, start, end, boxes, record, indices = boxes.map((_, i) => i).filter(i => i >= start && i <= end)) {
+  return { imageIndex, start, end, boxes: indices.map(i => boxes[i]).filter(b => b && [b.x, b.y, b.width, b.height].every(Number.isFinite)).map(b => ({ x: b.x, y: b.y, width: b.width, height: b.height })),
     fields: ['code', 'station', 'pickupAddress', 'carrier', 'waybillNumber', 'parcelStatus', 'noticeAt'].filter(f => record[f] && record[f] !== UNKNOWN && record[f] !== 'unknown') };
 }
 function analyze(lines, sourceIndex = 0, boxes = [], trace) {
   const records = parse(lines, sourceIndex, boxes, trace);
   const extracted = extractCodes(lines.map(clean), boxes), uncertainCount = extracted.uncertainCount;
   const issues = extracted.issues.map(({ i }) => {
-    const previous = extracted.codes.filter(c => c.i < i).pop(), next = extracted.codes.find(c => c.i > i);
-    const start = previous ? previous.i + 1 : 0, end = next ? next.i - 1 : lines.length - 1;
-    const scope = evidence.withoutNavigation(lines.slice(start, end + 1), boxes.slice(start, end + 1));
-    const item = { code: '', station: UNKNOWN, sourceIndex, needsReview: true, ...metadata(scope, 1), ...evidence.inspect(scope.join('\n')) };
-    item.sourceRegions = [region(sourceIndex, start, end, boxes, item)];
+    const text = lines.map(clean), events = evidence.withoutNavigation(text, boxes);
+    const places = text.map((s, i) => ({ i, name: boundary(s) })).filter(p => validPlace(p.name) && /驿站|服务站|快递柜|店$/.test(p.name));
+    const owned = layout.parcelRows(events, boxes, [...extracted.codes, ...extracted.issues], places, i, evidence.inspect);
+    const scope = owned.indices.map(j => events[j]), status = evidence.inspect(scope.join('\n'));
+    if (!owned.reliable && !['unknown', 'pending'].includes(status.parcelStatus)) status.parcelStatus = 'conflict';
+    const item = { code: '', station: UNKNOWN, sourceIndex, needsReview: true, ...metadata(scope, 1), ...status };
+    item.sourceRegions = [region(sourceIndex, Math.min(...owned.indices), Math.max(...owned.indices), boxes, item, owned.indices)];
     return item;
   });
   if (records.length) return { records, issues, uncertainCount, status: "code_found", reason: "code_found", message: `识别到 ${records.length} 件快递` };

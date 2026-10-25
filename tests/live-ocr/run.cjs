@@ -12,30 +12,40 @@ function save(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temp = file + '.tmp'; fs.writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 }); fs.renameSync(temp, file);
 }
-function inventory() {
+const controlPath = 'miniprogram/images/create_env.png';
+function sampleBytes(sample) {
+  if (!sample || typeof sample.path !== 'string' || !/^[a-f0-9]{64}$/.test(sample.hash)) throw Error('MANIFEST_INVALID');
+  const relative = sample.path.replace(/\\/g, '/');
+  if (path.isAbsolute(relative) || /^[a-z]:/i.test(relative) || relative.split('/').includes('..') ||
+      (!relative.startsWith('test-data/') && relative !== controlPath) || !/\.(?:jpe?g|png)$/i.test(relative)) throw Error('SAMPLE_PATH_INVALID');
+  const realRoot = fs.realpathSync(root), file = fs.realpathSync(path.join(root, relative));
+  const allowed = relative === controlPath ? file === path.join(realRoot, controlPath) : file.startsWith(path.join(realRoot, 'test-data') + path.sep);
+  if (!allowed || !fs.statSync(file).isFile()) throw Error('SAMPLE_PATH_INVALID');
+  const bytes = fs.readFileSync(file);
+  if (sha(bytes) !== sample.hash) throw Error('SAMPLE_HASH_MISMATCH');
+  return bytes;
+}
+function inventory(options = {}) {
+  // Historical manifests are read only for offline replay; live runs require an explicit selection.
+  const manifestFile = options.manifestFile || path.join(privateDir, 'manifest.json');
+  if (!options.manifestFile && !fs.existsSync(manifestFile)) return [];
+  const manifest = read(manifestFile);
+  if (!manifest || manifest.version !== undefined && manifest.version !== 1 || !Array.isArray(manifest.samples)) throw Error('MANIFEST_INVALID');
   const labels = new Map();
   for (const name of ['real-ocr-20261021', 'android-cases-20261021', 'cainiao-real-ocr-20261022', 'live-ocr-20261023']) {
     for (const c of read(path.join(root, `tests/fixtures/${name}.json`))) labels.set(c.imageSha256, { id: `${name}:${c.case}`, expected: c.expected });
   }
   const found = new Map();
-  function walk(dir) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const file = path.join(dir, entry.name);
-      if (entry.isDirectory() && file !== privateDir) walk(file);
-      else if (entry.isFile() && /\.(?:jpe?g|png)$/i.test(entry.name) && !/^prepared-/.test(entry.name)) {
-        const hash = sha(fs.readFileSync(file));
-        if (found.has(hash)) { found.get(hash).copies++; continue; }
-        const label = labels.get(hash);
-        found.set(hash, { hash, path: path.relative(root, file), copies: 1, ...(label || {}) });
-      }
-    }
+  for (const sample of manifest.samples) {
+    sampleBytes(sample);
+    if (found.has(sample.hash)) { found.get(sample.hash).copies++; continue; }
+    const relative = sample.path.replace(/\\/g, '/'), control = relative === controlPath;
+    const label = labels.get(sample.hash);
+    found.set(sample.hash, { hash: sample.hash, path: relative, copies: 1,
+      id: control ? 'unrelated-project-asset-control' : typeof sample.id === 'string' && sample.id || `unlabeled-${sample.hash.slice(0, 12)}`,
+      ...(label || {}), ...(control ? { expected: [], control: true } : {}) });
   }
-  walk(path.join(root, 'test-data'));
-  const samples = [...found.values()].sort((a, b) => Number(!!b.expected) - Number(!!a.expected) || a.path.localeCompare(b.path));
-  samples.forEach((s, i) => { if (!s.id) s.id = `unlabeled-${s.hash.slice(0, 12)}`; });
-  const control = path.join(root, 'miniprogram/images/create_env.png');
-  samples.push({ id: 'unrelated-project-asset-control', path: path.relative(root, control), hash: sha(fs.readFileSync(control)), copies: 1, expected: [], control: true });
-  return samples;
+  return [...found.values()].sort((a, b) => Number(!!b.expected) - Number(!!a.expected) || a.path.localeCompare(b.path));
 }
 function cacheFile(hash) { return path.join(privateDir, 'cache', `${profile}-${hash}.json`); }
 function budget() {
@@ -48,11 +58,13 @@ function reserve(b, hash, id) {
   if (b.state.reservations.some(r => r.hash === hash) || b.state.reservations.length >= b.state.limit) return false;
   b.state.reservations.push({ hash, id, issuedAt: Date.now(), status: 'reserved' }); save(b.file, b.state); return true;
 }
-function serve() {
+function serve(options = {}) {
+  if (options.allowLive !== true) throw Error('LIVE_NOT_AUTHORIZED');
+  if (typeof options.manifestFile !== 'string' || !options.manifestFile) throw Error('MANIFEST_REQUIRED');
   execFileSync('git', ['check-ignore', '-q', 'test-data/private/live-ocr-v23/cache/probe.json'], { cwd: root });
-  const samples = inventory(), b = budget(); let active, stopped = false;
+  const samples = inventory(options), b = budget(); let active, stopped = false;
   const sourceCommit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-  save(path.join(privateDir, 'manifest.json'), { profile, sourceCommit, samples });
+  save(path.join(privateDir, 'last-live-manifest.json'), { profile, sourceCommit, samples });
   const server = http.createServer(async (req, res) => {
     const json = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
     if (req.headers['x-campus-ocr-test'] !== 'local-run' || req.method === 'OPTIONS') return json(403, { error: 'LOCAL_ONLY' });
@@ -66,9 +78,11 @@ function serve() {
       if (req.url === '/next' && req.method === 'GET') {
         if (stopped || active) return json(200, { done: true });
         const next = samples.find(s => !fs.existsSync(cacheFile(s.hash)) && !b.state.reservations.some(r => r.hash === s.hash));
-        if (!next || !reserve(b, next.hash, next.id)) return json(200, { done: true });
+        if (!next) return json(200, { done: true });
+        const bytes = sampleBytes(next); // Recheck the selected bytes immediately before reserving and sending.
+        if (!reserve(b, next.hash, next.id)) return json(200, { done: true });
         active = next;
-        return json(200, { id: next.id, hash: next.hash, base64: fs.readFileSync(path.join(root, next.path)).toString('base64') });
+        return json(200, { id: next.id, hash: next.hash, base64: bytes.toString('base64') });
       }
       if (req.method !== 'POST' || !['/result', '/finish'].includes(req.url)) return json(404, { error: 'NOT_FOUND' });
       let body = '';
@@ -86,15 +100,25 @@ function serve() {
       console.log(JSON.stringify({ id: active.id, ok: !!value.result, error: value.report.error || '', ocrMs: value.report.timings.ocrMs || null, totalMs: value.report.timings.totalMs || null, confirmedOcrCalls: value.report.ocrCalls || 0, cleanupPending: !!value.report.cleanupPending }));
       stopped = !!value.report.cleanupPending || /OCR_AUTH|FORBIDDEN|UNAUTHORIZED|CONFIG_ERROR/.test(value.report.error || ''); active = null;
       return json(200, { ok: true });
-    } catch (_) { return json(400, { error: 'TEST_REQUEST_FAILED' }); }
+    } catch (_) { stopped = true; return json(400, { error: 'TEST_REQUEST_FAILED' }); }
   });
   server.listen(0, '127.0.0.1', () => {
     const url = `http://127.0.0.1:${server.address().port}`;
     const bootstrap = `void wx.request({url:${JSON.stringify(url + '/bootstrap')},header:{'X-Campus-Ocr-Test':'local-run'},success:r=>{if(r.statusCode===200)new Function('wx',r.data)(wx);else console.log('[live-ocr-stop]','LOCAL_HTTP_ERROR')},fail:()=>console.log('[live-ocr-stop]','LOCAL_CONNECTION_FAILED')})`;
     fs.writeFileSync(path.join(privateDir, 'bootstrap.js'), bootstrap + '\n', { mode: 0o600 });
-    console.log(JSON.stringify({ ready: true, url, uniqueScreenshots: samples.filter(s => !s.control).length, controls: 1, cached: samples.filter(s => fs.existsSync(cacheFile(s.hash))).length, firstRoundReserved: b.state.reservations.length, limit: 30 }));
+    console.log(JSON.stringify({ ready: true, url, uniqueScreenshots: samples.filter(s => !s.control).length, controls: samples.filter(s => s.control).length, cached: samples.filter(s => fs.existsSync(cacheFile(s.hash))).length, firstRoundReserved: b.state.reservations.length, limit: 30 }));
   });
   return server;
 }
 module.exports = { inventory, reserve, budget, cacheFile, privateDir, profile, save, read, serve };
-if (require.main === module) serve();
+if (require.main === module) {
+  const args = process.argv.slice(2), index = args.indexOf('--manifest');
+  const manifestFile = index < 0 ? undefined : args[index + 1];
+  try {
+    if (args.includes('--allow-live')) serve({ allowLive: true, manifestFile });
+    else if (manifestFile) {
+      const samples = inventory({ manifestFile });
+      console.log(JSON.stringify({ offline: true, samples: samples.length, controls: samples.filter(s => s.control).length }));
+    } else console.log('Offline by default. Inspect: node tests/live-ocr/run.cjs --manifest <private-selection.json>. Live bridge requires --allow-live and --manifest.');
+  } catch (error) { console.error(/^[A-Z_]+$/.test(error.message) ? error.message : 'LIVE_OCR_START_FAILED'); process.exitCode = 1; }
+}

@@ -58,7 +58,13 @@ function withoutNavigation(lines, boxes = []) {
     const a = boxes[i];
     if (!a || !label.test(line.trim())) return;
     const row = lines.map((s, j) => ({ s, j, b: boxes[j] })).filter(({ s, b }) => b && label.test(s.trim()) && Math.abs(b.y - a.y) <= Math.max(a.height, b.height) * .65);
-    if (row.length >= 3) row.forEach(({ j }) => ignored.add(j));
+    const separateCards = row.every(({ b }) => lines.some((s, j) => boxes[j] && boxes[j].y < b.y &&
+      /驿站|服务站|快递柜/.test(s) && boxes[j].x < b.x + b.width && boxes[j].x + boxes[j].width > b.x &&
+      row.filter(other => boxes[j].x < other.b.x + other.b.width && boxes[j].x + boxes[j].width > other.b.x).length === 1) &&
+      lines.some((s, j) => boxes[j] && boxes[j].y > b.y && /取件码|取货码|提货号/.test(s) &&
+        boxes[j].x < b.x + b.width && boxes[j].x + boxes[j].width > b.x));
+    if (row.length >= 2 && !separateCards && row.every(({ b }) => b.width > 0 && b.height > 0) &&
+        row.some(({ j, b }) => j !== i && (b.x >= a.x + a.width || a.x >= b.x + b.width))) row.forEach(({ j }) => ignored.add(j));
   });
   return lines.map((line, i) => ignored.has(i) ? '' : line);
 }
