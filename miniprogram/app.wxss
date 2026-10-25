@@ -1,22 +1,25 @@
 page {
-  --page: #111317;
-  --card: #23272E;
-  --surface: #2F343D;
-  --line: #39404A;
-  --accent: #0A84FF;
-  --text: #F5F6F8;
-  --secondary: #AAB0BA;
-  --muted: #939BA6;
-  --orange: #FF9F0A;
-  --purple: #BF5AF2;
-  --cyan: #64D2FF;
-  --success: #30D158;
-  --danger: #FF453A;
+  --page: #F7F5F0;
+  --card: #FFFFFF;
+  --text: #25231F;
+  --muted: #827E77;
+  /* Small secondary text needs stronger contrast on warm paper. */
+  --secondary: #68645E;
+  --accent: #C87356;
+  --primary: #A94F38;
+  --accent-ink: #9E4934;
+  --surface: #F2E5DC;
+  --line: #E7E2D9;
+  --success: #819B83;
+  --danger: #B84A44;
+  --radius: 24rpx;
+  --button-radius: 18rpx;
+  --press-duration: 140ms;
+  --motion-duration: 200ms;
   background: var(--page);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
 }
 .container { display: flex; flex-direction: column; align-items: center; box-sizing: border-box; }
 button { background: initial; }
-button:focus { outline: 0; }
 button::after { border: none; }

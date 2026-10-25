@@ -1,0 +1,30 @@
+{
+  "version": "3.0",
+  "date": "2026-10-25",
+  "baselineCommit": "fedda7b",
+  "scope": ["global theme and native navigation", "home", "import", "exception", "station list and detail", "history", "keyboard-aware editors"],
+  "regression": {"baseline": 216, "passed": 218, "failed": 0, "skipped": 0},
+  "browserLayout": {
+    "script": "tests/v30-layout.cjs",
+    "engine": "system Chrome via Playwright, approved execution outside restricted sandbox",
+    "source": "actual WXML and WXSS, synthetic in-memory data, HTML component approximations",
+    "viewports": [[320,480],[360,640],[390,844],[430,932]],
+    "statesPerViewport": 11,
+    "checks": ["no horizontal page overflow", "typical codes fully visible", "long code scrolls to end", "buttons at least 44px high", "exception content and actions fit", "editor save reachable with simulated keyboard"],
+    "passed": true
+  },
+  "wechatDeveloperTools": {
+    "version": "2.01.2510260",
+    "baseLibrary": "3.17.4",
+    "compileErrors": 0,
+    "finalWarnings": 3,
+    "warningTypes": ["automatic hot reload enabled", "SharedArrayBuffer deprecation", "getSystemInfo API guidance"],
+    "visualInspection": ["home", "import completion", "exception with two source labels", "station list and detail", "history"],
+    "smallScreen": "iPhone 5 simulator, 320px",
+    "data": "view-only synthetic state; no verification records persisted; recompiled afterward to restore normal display"
+  },
+  "preserved": ["all services and cloud functions unchanged", "OCR calls and cache version unchanged", "parcel and history structures unchanged", "station identity, aliases and correction memory unchanged", "no user data clearing or migration"],
+  "screenshots": ".local-backups/v30-visual/ (local only, excluded from Git)",
+  "notPerformed": ["Android physical-device testing", "live cloud OCR", "deployment", "push", "publish"],
+  "androidFollowUp": ["long press sorting and scroll edge behavior", "keyboard raise and lower in notification and edit forms", "long-code horizontal scrolling versus history delete swipe", "rapid take and undo", "nine-image import responsiveness", "system font scaling and safe areas"]
+}

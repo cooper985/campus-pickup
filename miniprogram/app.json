@@ -5,11 +5,11 @@
     "pages/example/index"
   ],
   "window": {
-    "backgroundColor": "#111317",
-    "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#111317",
+    "backgroundColor": "#F7F5F0",
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#F7F5F0",
     "navigationBarTitleText": "校园取件助手",
-    "navigationBarTextStyle": "white"
+    "navigationBarTextStyle": "black"
   },
   "sitemapLocation": "sitemap.json",
   "style": "v2",

@@ -48,7 +48,7 @@ test('核对层仅一个受约束滚动容器，无祖先触摸拦截，底栏�
   const wxml = fs.readFileSync('miniprogram/pages/pickup/index.wxml', 'utf8');
   const css = fs.readFileSync('miniprogram/pages/pickup/index.wxss', 'utf8');
   const review = wxml.slice(wxml.indexOf('<view wx:if="{{reviewOpen}}"'));
-  assert.equal((review.match(/<scroll-view\b/g) || []).length, 1);
+  assert.equal((review.match(/<scroll-view\b[^>]*scroll-y=/g) || []).length, 1);
   assert.doesNotMatch(review, /catchtouchmove/);
   assert.match(wxml, /<view hidden="{{reviewOpen \|\| exceptionOpen}}">/);
   assert.match(wxml.split('\n')[0], /reviewOpen.*overflow: hidden/);

@@ -293,7 +293,7 @@ Page({
     if (!edit || this.data.stationBusy || this.data.stationBlocked || this.data.storageBlocked) return;
     this.setData({ stationBusy: true });
     try {
-      const answer = await wx.showModal({ title: '删除驿站配置？', content: `删除「${edit.name}」及其别名和常用记忆。待取、历史包裹与原取件地点全部保留，可在 5 秒内撤销。`, confirmText: '删除驿站', confirmColor: '#b43b35' });
+      const answer = await wx.showModal({ title: '删除驿站配置？', content: `删除「${edit.name}」及其别名和常用记忆。待取、历史包裹与原取件地点全部保留，可在 5 秒内撤销。`, confirmText: '删除驿站', confirmColor: '#B84A44' });
       if (!answer.confirm || this.unloaded) return;
       const before = JSON.parse(JSON.stringify(this.stationState));
       if (!this.saveStations(stations.remove(before, edit.id))) return;
@@ -1185,7 +1185,7 @@ Page({
     if (this.data.deleting || this.data.importing || this.data.loading || this.data.storageBlocked || !this.data.history.length) return;
     this.setData({ deleting: true });
     try {
-      const answer = await wx.showModal({ title: '清空已取历史？', content: '仅删除已取件记录，待取件和驿站保留。5 秒内可撤销。', confirmText: '清空历史', confirmColor: '#FF453A' });
+      const answer = await wx.showModal({ title: '清空已取历史？', content: '仅删除已取件记录，待取件和驿站保留。5 秒内可撤销。', confirmText: '清空历史', confirmColor: '#B84A44' });
       if (!answer.confirm || this.unloaded || this.data.storageBlocked) return;
       const before = this.data.records.slice(), after = before.filter(r => !r.taken);
       if (!this.persistRecords(after)) return;
@@ -1210,7 +1210,7 @@ Page({
     this.setData({ deleting: true });
     try {
       const answer = await wx.showModal({ title: "删除已取记录？", content: `${record.station} · ${record.code}。删除后可在 5 秒内撤销，之后无法从页面恢复。${this.data.undoAvailable ? "继续删除将结束上次撤销机会。" : ""}`,
-        confirmText: "删除", confirmColor: "#FF453A" });
+        confirmText: "删除", confirmColor: "#B84A44" });
       if (!answer.confirm || this.data.storageBlocked || this.unloaded) return;
       const index = this.data.records.findIndex(r => r.id === id && r.taken);
       if (index < 0) return;
