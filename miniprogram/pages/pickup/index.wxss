@@ -29,7 +29,8 @@
 .text-action { display: inline-block; min-height: 44px; line-height: 44px; padding: 0 16rpx 0 0; color: var(--secondary); }
 .text-action.button-pressed { opacity: .65; }
 .parcel-row .ui-button { flex-shrink: 0; margin: 0; padding: 0 18rpx; font-size: 24rpx; }
-.take-button { color: var(--accent-ink); background: var(--surface); }
+.ui-button.take-button { display: inline-flex; flex: 0 0 auto; align-self: center; width: auto; min-width: 68px; height: 44px; min-height: 44px; padding: 0 24rpx; border: 0; border-radius: 999rpx; line-height: 1.4; white-space: nowrap; color: var(--accent-ink); background: var(--surface); }
+.ui-button.take-button.ui-disabled { background: var(--line); color: var(--secondary); }
 .empty { padding: 100rpx 12rpx; text-align: center; color: var(--secondary); line-height: 1.6; }
 .section-title, .section-heading { font-size: 30rpx; font-weight: 600; line-height: 1.5; }
 .section-title { margin-bottom: 16rpx; overflow-wrap: anywhere; }
@@ -38,8 +39,9 @@
 .inline { margin-left: 16rpx; font-weight: 400; }
 .batch-row { display: flex; justify-content: flex-end; padding: 8rpx 24rpx; border-top: 1rpx solid var(--line); }
 .batch-row .ui-button { margin: 0; background: transparent; border: 0; color: var(--accent-ink); font-size: 24rpx; padding: 0 12rpx; }
-.ui-button.manage-stations { margin: 0; padding: 0 8rpx; border: 0; color: var(--accent-ink); font-size: 26rpx; }
+.ui-button.manage-stations { display: inline-flex; width: auto; min-width: 0; flex: 0 0 auto; margin: 0 0 0 auto; padding: 0 0 0 16rpx; border: 0; line-height: 1.4; white-space: nowrap; color: var(--accent-ink); font-size: 26rpx; }
 .home-station { position: relative; }
+.home-station .parcel-row { padding-top: 12rpx; padding-bottom: 12rpx; }
 .station-sorting { transition: transform var(--motion-duration) ease; will-change: transform; }
 .station-lifted { z-index: 3; box-shadow: 0 8rpx 24rpx rgba(37,35,31,.12); transition: none; }
 .drag-handle { flex-shrink: 0; min-width: 44px; min-height: 44px; line-height: 44px; text-align: center; margin: -12rpx 0 -12rpx -16rpx; color: var(--muted); font-size: 34rpx; }
@@ -99,9 +101,10 @@
 .delete-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--card); font-size: 28rpx; font-weight: 600; }
 .history-top, .history-bottom { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .history-top .code-scroll { flex: 1; }
-.history-station { font-size: 28rpx; margin: 12rpx 0; overflow-wrap: anywhere; line-height: 1.6; }
-.history-bottom { flex-wrap: wrap; }
-.history-bottom .hint { margin: 0; }
+.history-card .swipe-content { padding: 16rpx 24rpx; }
+.history-station { font-size: 28rpx; margin: 4rpx 0; overflow-wrap: anywhere; line-height: 1.4; }
+.history-bottom { margin-top: 8rpx; }
+.history-bottom .hint { flex: 1; min-width: 0; margin: 0; }
 .history-bottom .ui-button { margin: 0; font-size: 24rpx; }
 .ui-button.history-menu { margin: 0; width: 44px; min-width: 44px; padding: 0; color: var(--text); }
 .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; background: var(--page); border-top: 1rpx solid var(--line); padding: 10rpx 16rpx calc(10rpx + env(safe-area-inset-bottom)); }

@@ -6,7 +6,7 @@
   <view wx:if="{{stationError}}" class="error" role="alert">{{stationError}}</view>
   <view wx:if="{{batchError}}" class="notice" role="status">{{batchError}}</view>
   <view class="page-panel" wx:if="{{activeTab === 'home'}}">
-    <view class="page-header"><view class="heading">待取件 <text class="count">{{remaining}}</text></view><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button text-button manage-stations" catchtap="openStations">管理驿站</button></view>
+    <view class="page-header"><view class="heading">待取件 <text class="count">{{remaining}}</text></view><button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button text-button manage-stations" catchtap="openStations">管理驿站</button></view>
     <view wx:if="{{exceptionCount}}" class="attention-row" hover-class="button-pressed" bindtap="openExceptions" role="button">待处理 {{exceptionCount}} 件 <text>›</text></view>
     <view wx:if="{{failureCount}}" class="failure-banner"><text>{{failureCount}} 张识别失败</text><button class="ui-button secondary" hover-class="button-pressed" bindtap="retryFailures">重试</button></view>
     <view wx:if="{{!remaining}}" class="empty">暂无待取快递</view>
@@ -88,7 +88,7 @@
         <view class="swipe-content {{openDeleteId === item.id ? 'swipe-open' : ''}}" style="{{swipeId === item.id ? swipeStyle : ''}}">
           <view class="history-top"><scroll-view class="code-scroll" scroll-x="{{true}}" catchtouchstart="noop" catchtouchmove="noop" catchtouchend="noop" catchtouchcancel="noop"><text class="pickup-code" user-select="{{true}}">{{item.code}}</text></scroll-view></view>
           <view class="history-station">{{item.station}}</view><view wx:if="{{item.pickupAddress}}" class="hint">取件地址：{{item.pickupAddress}}</view>
-          <view class="history-bottom"><text class="hint">{{item.takenTimeLabel}}{{item.carrier ? ' · ' + item.carrier : ''}}</text><button hover-class="{{(importing || deleting || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} secondary" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked}}">恢复待取</button></view>
+          <view class="history-bottom"><text class="hint">{{item.takenTimeLabel}}{{item.carrier ? ' · ' + item.carrier : ''}}</text><button hover-class="{{(importing || deleting || storageBlocked) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" size="mini" class="ui-button {{(importing || deleting || storageBlocked) ? 'ui-disabled' : ''}} take-button" data-id="{{item.id}}" catchtap="toggleTaken" disabled="{{importing || deleting || storageBlocked}}">恢复待取</button></view>
         </view></view>
       </view>
     </view>

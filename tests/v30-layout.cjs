@@ -57,7 +57,7 @@ const states = {
   progress: { activeTab:'import',loading:true,progress:'正在识别 3/9',recentImport:null },
   stations: { activeTab:'stations' },
   detail: { activeTab:'stations', stationEditor:{mode:'detail',id:'demo',name:'北门菜鸟驿站',aliases:['北门菜鸟驿站','学校北门快递中心'],confirmed:false,mergeNames:['图书馆东侧服务站']} },
-  history: { activeTab:'history', history:[{}],visibleHistory:[{id:'old',code:'B3-4-7401',station:'北门菜鸟驿站',takenTimeLabel:'10月25日 09:42'},{id:'legacy',code:'87-6-4601',station:'图书馆东侧服务站',takenTimeLabel:'领取时间未知'}] },
+  history: { activeTab:'history', history:[{}],visibleHistory:[{id:'old',code:'B3-4-7401',station:'北门菜鸟驿站',takenTimeLabel:'10月25日 09:42'},{id:'legacy',code:'87-6-4601',station:'学校生活区北门东侧综合服务中心菜鸟驿站',pickupAddress:'生活区北门东侧一楼服务中心',carrier:'顺丰速运',takenTimeLabel:'领取时间未知'}] },
   exception: { exceptionOpen:true, currentException:exception, exceptionProgress:'1 / 3' },
   missing: { exceptionOpen:true,currentException:{...exception,code:'',needsCode:true,matches:[]},exceptionProgress:'1 / 3' },
   long: { visiblePendingGroups:[{id:'long',station:'学校生活区北门东侧综合服务中心菜鸟驿站',items:[{id:'long',code:'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456'}]}] },
@@ -77,8 +77,27 @@ const states = {
      const buttons = await page.locator('button').evaluateAll(es=>es.map(e=>{ const r=e.getBoundingClientRect(); return {x:r.x,width:r.width,height:r.height}; }));
      assert.ok(buttons.every(b=>b.width>0&&b.x>=-1&&b.x+b.width<=width+1&&b.height>=43),`${width} ${name}: touch targets ${JSON.stringify(buttons)}`);
      if (name === 'home') {
+      const header = await page.locator('.page-header').boundingBox();
+      const manage = await page.locator('.manage-stations').boundingBox();
+      assert.ok(Math.abs(manage.x+manage.width-header.x-header.width)<1,`${width}: station management aligned right`);
+      const nav = await page.locator('.bottom-nav button').allTextContents();
+      assert.equal(nav.length,3);
+      assert.ok(nav[0].includes('待取件')&&nav[1].includes('＋')&&nav[1].includes('导入')&&nav[2].includes('历史'));
+      assert.equal(await page.locator('.home-station .text-action').count(),3,'each pending parcel retains its edit action');
+      const rows = await page.locator('.home-station .parcel-row').evaluateAll(es=>es.map(e=>{
+       const r=e.getBoundingClientRect(),b=e.querySelector('.take-button').getBoundingClientRect();
+       return {height:r.height,button:b.height,width:b.width,center:Math.abs(b.y+b.height/2-r.y-r.height/2)};
+      }));
+      assert.ok(rows.every(r=>r.height<110&&r.button===44&&r.width>r.button&&r.center<1),`${width}: compact centered take buttons ${JSON.stringify(rows)}`);
       const codes = await page.locator('.copy-code').evaluateAll(es=>es.map(e=>({width:e.getBoundingClientRect().width,available:e.parentElement.clientWidth,whiteSpace:getComputedStyle(e).whiteSpace})));
       assert.ok(codes.every(c=>c.width<=c.available+1&&c.whiteSpace==='nowrap'),`${width}: typical codes must fit ${JSON.stringify(codes)}`);
+     }
+     if (name === 'history') {
+      const cards = await page.locator('.swipe-content').evaluateAll(es=>es.map(e=>{
+       const code=e.querySelector('.history-top').getBoundingClientRect(),station=e.querySelector('.history-station').getBoundingClientRect(),bottom=e.querySelector('.history-bottom').getBoundingClientRect(),time=e.querySelector('.history-bottom .hint').getBoundingClientRect(),b=e.querySelector('.take-button'),r=b.getBoundingClientRect(),style=getComputedStyle(b);
+       return {ordered:code.bottom<=station.y+1&&station.bottom<=bottom.y+1,parallel:time.right<=r.x+1,height:r.height,bg:style.backgroundColor,color:style.color,nowrap:style.whiteSpace};
+      }));
+      assert.ok(cards.every(c=>c.ordered&&c.parallel&&c.height===44&&c.bg==='rgb(242, 229, 220)'&&c.color==='rgb(158, 73, 52)'&&c.nowrap==='nowrap'),`${width}: compact history and matching restore colors ${JSON.stringify(cards)}`);
      }
      if (name === 'long') assert.ok(await page.locator('.code-scroll').evaluate(e=>{e.scrollLeft=e.scrollWidth;return e.scrollLeft>0}), 'long code must scroll to its end');
      if (name === 'exception' || name === 'missing') {
@@ -91,7 +110,7 @@ const states = {
       const save = await page.locator('.edit-sheet .primary').boundingBox();
       assert.ok(save.y>=0&&save.y+save.height<=height-keyboardHeight+1,`${width}: editor keyboard`);
      }
-     if (width===390&&!keyboardHeight&&['home','import','exception','stations','detail','history'].includes(name)) await page.screenshot({path:`${output}/${name}.png`,fullPage:true});
+     if (!keyboardHeight&&((width===390&&['import','exception','stations','detail'].includes(name))||['home','history'].includes(name))) await page.screenshot({path:`${output}/${name}-${width}.png`,fullPage:true});
     }
    }
    await page.close(); console.log(`${width}x${height}: 11 states, code visibility, touch targets, overflow, scroll and keyboard geometry passed`);
