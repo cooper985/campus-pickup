@@ -1,4 +1,4 @@
-<page-meta page-style="{{(dragId || reviewOpen || exceptionOpen || editing || stationEditor) ? 'overflow: hidden;' : ''}}" />
+<page-meta page-style="{{(dragId || reviewOpen || exceptionOpen || editing || stationEditor || identityOpen) ? 'overflow: hidden;' : ''}}" />
 <view class="pickup {{reduceMotion ? 'reduce-motion' : ''}}" bindtap="closeDelete">
   <view hidden="{{reviewOpen || exceptionOpen}}">
   <view wx:if="{{storageError}}" class="error" role="alert">{{storageError}}</view>
@@ -131,10 +131,36 @@
   <view wx:if="{{!keyboardHeight}}" class="bottom-nav" catchtap="closeDelete">
     <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button nav-item {{activeTab === 'home' ? 'nav-active' : ''}}" data-tab="home" catchtap="switchTab"><text class="nav-symbol">▤</text><text>待取件</text></button>
     <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button nav-item {{activeTab === 'import' ? 'nav-active' : 'nav-import'}}" data-tab="import" catchtap="switchTab"><text class="nav-symbol">＋</text><text>导入{{validDraftCount ? ' · ' + validDraftCount : loading ? ' · 识别中' : ''}}</text></button>
+    <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button nav-item" catchtap="openIdentityGuide" aria-label="身份码，查看官方 App 打开步骤"><text class="nav-symbol" aria-hidden="true">▦</text><text>身份码</text></button>
     <button hover-class="button-pressed" hover-start-time="0" hover-stay-time="0" class="ui-button nav-item {{activeTab === 'history' ? 'nav-active' : ''}}" data-tab="history" catchtap="switchTab"><text class="nav-symbol">✓</text><text>历史</text></button>
   </view>
   <view wx:if="{{undoAvailable}}" class="undo-bar" catchtap="recordTap"><text>{{undoMessage}} · 5 秒内可撤销</text><button hover-class="{{(storageBlocked || importing || deleting) ? 'none' : 'button-pressed'}}" hover-start-time="0" hover-stay-time="0" class="ui-button {{(storageBlocked || importing || deleting) ? 'ui-disabled' : ''}} undo-action" size="mini" catchtap="undoDelete" disabled="{{storageBlocked || importing || deleting}}">撤销</button></view>
 
+  </view>
+  <view wx:if="{{identityOpen}}" class="modal-mask identity-mask" catchtap="closeIdentityGuide">
+    <view class="identity-sheet" catchtap="noop" role="dialog" aria-label="身份码打开指引">
+      <view class="identity-header"><view class="heading">身份码</view><button class="ui-button text-button" hover-class="button-pressed" catchtap="closeIdentityGuide" aria-label="关闭身份码指引">关闭</button></view>
+      <view class="identity-scroll-slot"><scroll-view class="identity-scroll" scroll-y="{{true}}">
+        <view class="identity-content">
+          <view class="subtitle">暂不支持微信内直达，请切换到官方 App。</view>
+          <button class="ui-button identity-option {{identityPlatform === 'taobao' ? 'identity-selected' : ''}}" hover-class="button-pressed" data-platform="taobao" catchtap="selectIdentityPlatform"><text>淘宝 / 菜鸟身份码</text><text class="identity-option-hint">打开步骤 ›</text></button>
+          <button class="ui-button identity-option {{identityPlatform === 'pinduoduo' ? 'identity-selected' : ''}}" hover-class="button-pressed" data-platform="pinduoduo" catchtap="selectIdentityPlatform"><text>拼多多身份码</text><text class="identity-option-hint">打开步骤 ›</text></button>
+          <view wx:if="{{identityPlatform === 'taobao'}}" class="identity-steps" role="status">
+            <view class="section-title">淘宝 App</view>
+            <view>首页「菜鸟驿站」 → 身份码</view>
+            <view class="hint">未找到时：我的淘宝 → 菜鸟 → 身份码。入口随版本和账号变化。</view>
+            <view class="hint">使用菜鸟 App：在首页查找「身份码」；若提示前往淘宝，请按提示打开。</view>
+          </view>
+          <view wx:if="{{identityPlatform === 'pinduoduo'}}" class="identity-steps" role="status">
+            <view class="section-title">拼多多 App</view>
+            <view>扫一扫 → 扫驿站官方入口二维码</view>
+            <view class="hint">进入「取快递」后，查找并出示身份码。若只出现扫码亮灯，按驿站指引操作。</view>
+            <view class="hint">需在拼多多登录；以当前页面和驿站要求为准。</view>
+          </view>
+          <view class="hint identity-note">身份码用于现场核验，货架取件码用于找包裹。现场出库后，再手动标记已取到。</view>
+        </view>
+      </scroll-view></view>
+    </view>
   </view>
   <view wx:if="{{exceptionOpen && currentException}}" class="review-screen exception-screen" catchtap="noop">
     <view class="review-header"><view class="exception-progress">{{loading ? progress : exceptionProgress}}</view></view>

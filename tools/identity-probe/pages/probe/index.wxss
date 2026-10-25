@@ -1,0 +1,7 @@
+page { background: #F7F5F0; color: #25231F; font-size: 28rpx; }
+.probe { padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom)); line-height: 1.6; overflow-wrap: anywhere; }
+.title { font-size: 36rpx; font-weight: 600; margin-bottom: 24rpx; }
+.hint { color: #6F685E; margin: 24rpx 0; }
+textarea { box-sizing: border-box; width: 100%; height: 180rpx; padding: 20rpx; background: #FFFFFF; }
+button { background: #A94F38; color: #FFFFFF; margin-top: 24rpx; font-size: 28rpx; min-height: 44px; }
+.result { background: #FFFFFF; padding: 24rpx; margin-top: 24rpx; }
