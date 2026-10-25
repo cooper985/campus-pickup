@@ -21,7 +21,6 @@ const MAX_BYTES = 5 * 1024 * 1024;
 Page({
   data: { resultCategory: "", categoryItems: [], failureCount: 0, currentException: null, exceptionProgress: "", keyboardHeight: 0, recentImport: null, exceptionCount: 0, exceptionOpen: false, exceptionItems: [], batchError: "", newStations: [], swipeId: "", swipeStyle: "", reduceMotion: false, visiblePendingGroups: [], visibleDraftGroups: [], visibleHistory: [], notificationOpen: false, notificationText: "", validDraftCount: 0, dragId: "", errorScope: "", stationList: [], stationSelection: [], stationSuggestions: [], stationEditor: null, stationError: "", stationBlocked: false, stationBusy: false, reviewOpen: false, reviewItems: [], reviewSummary: "", importFeedback: "", activeTab: "home", pendingGroups: [], history: [], collapsedStations: [], locationCount: 0, unknownCount: 0, undoMessage: "", editError: "", images: [], loading: false, choosing: false, error: "", completed: false,
     groups: [], records: [], drafts: [], draftGroups: [], results: [], progress: "", mock: false,
-    identityOpen: false, identityPlatform: "",
     remaining: 0, editing: null, importing: false, storageError: "", storageBlocked: false, openDeleteId: "", deleting: false, undoAvailable: false },
   onLoad() {
     this.unloaded = false;
@@ -1083,16 +1082,6 @@ Page({
       fail: () => wx.showToast({ title: "复制失败，请重试", icon: "none" }) });
   },
   noop() {},
-  openIdentityGuide() {
-    if (this.data.dragId) return;
-    this.closeDelete();
-    this.setData({ identityOpen: true, identityPlatform: "" });
-  },
-  selectIdentityPlatform(e) {
-    const platform = e.currentTarget.dataset.platform;
-    if (this.data.identityOpen && ["taobao", "pinduoduo"].includes(platform)) this.setData({ identityPlatform: platform });
-  },
-  closeIdentityGuide() { this.setData({ identityOpen: false, identityPlatform: "" }); },
   switchTab(e) {
     const activeTab = e.currentTarget.dataset.tab;
     if (!["home", "import", "history"].includes(activeTab) || this.data.importing || this.data.deleting || this.data.stationBusy) return;

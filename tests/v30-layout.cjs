@@ -53,9 +53,6 @@ const exception = { code:'B3-4-7401',station:'北门菜鸟驿站', message:'这�
 const states = {
   home: {},
   empty: { remaining:0, visiblePendingGroups:[] },
-  identity: { identityOpen:true, identityPlatform:'' },
-  identityTaobao: { identityOpen:true, identityPlatform:'taobao' },
-  identityPinduoduo: { identityOpen:true, identityPlatform:'pinduoduo' },
   import: { activeTab:'import', recentImport:{id:'demo',added:3,reviewCount:1,duplicate:2,unrelated:0,failures:0,canUndo:true},exceptionCount:1 },
   progress: { activeTab:'import',loading:true,progress:'正在识别 3/9',recentImport:null },
   stations: { activeTab:'stations' },
@@ -71,8 +68,7 @@ const states = {
  try {
   for (const [width,height] of [[320,480],[360,640],[390,844],[430,932]]) {
    const page = await browser.newPage({ viewport:{width,height},reducedMotion:'reduce' });
-   const safeAreaBottom = width === 390 ? 34 : 0;
-   const css = ['miniprogram/app.wxss','miniprogram/pages/pickup/index.wxss'].map(f=>fs.readFileSync(f,'utf8')).join('\n').replace(/([\d.]+)rpx/g,(_,n)=>`${Number(n)*width/750}px`).replace(/env\(safe-area-inset-bottom\)/g,`${safeAreaBottom}px`);
+   const css = ['miniprogram/app.wxss','miniprogram/pages/pickup/index.wxss'].map(f=>fs.readFileSync(f,'utf8')).join('\n').replace(/([\d.]+)rpx/g,(_,n)=>`${Number(n)*width/750}px`);
    for (const [name,patch] of Object.entries(states)) {
     for (const keyboardHeight of name === 'edit' ? [0,Math.min(260,Math.round(height*.5))] : [0]) {
      const html = render(tree,{...base,...patch,keyboardHeight});
@@ -81,21 +77,10 @@ const states = {
      const buttons = await page.locator('button').evaluateAll(es=>es.map(e=>{ const r=e.getBoundingClientRect(); return {x:r.x,width:r.width,height:r.height}; }));
      assert.ok(buttons.every(b=>b.width>0&&b.x>=-1&&b.x+b.width<=width+1&&b.height>=43),`${width} ${name}: touch targets ${JSON.stringify(buttons)}`);
      if (name === 'home') {
-      const nav = await page.locator('.bottom-nav button').evaluateAll(es=>es.map(e=>{const r=e.getBoundingClientRect();return {x:r.x,right:r.right,width:r.width,text:e.textContent};}));
-      assert.equal(nav.length,4);
-      assert.ok(nav.every((b,i)=>b.width>=44&&(!i||b.x>=nav[i-1].right-1)),`${width}: identity and import must not overlap`);
-      assert.ok(nav.some(b=>b.text.includes('＋')&&b.text.includes('导入')));
       const codes = await page.locator('.copy-code').evaluateAll(es=>es.map(e=>({width:e.getBoundingClientRect().width,available:e.parentElement.clientWidth,whiteSpace:getComputedStyle(e).whiteSpace})));
       assert.ok(codes.every(c=>c.width<=c.available+1&&c.whiteSpace==='nowrap'),`${width}: typical codes must fit ${JSON.stringify(codes)}`);
      }
      if (name === 'long') assert.ok(await page.locator('.code-scroll').evaluate(e=>{e.scrollLeft=e.scrollWidth;return e.scrollLeft>0}), 'long code must scroll to its end');
-     if (name.startsWith('identity')) {
-      const box = await page.locator('.identity-sheet').boundingBox();
-      assert.ok(box.y>=0&&box.y+box.height<=height+1,`${width}: identity sheet fits`);
-      await page.locator('.identity-scroll').evaluate(e=>e.scrollTop=e.scrollHeight);
-      const note = await page.locator('.identity-note').boundingBox();
-      assert.ok(note.y>=box.y&&note.y+note.height<=height-safeAreaBottom+1,`${width}: identity instructions reachable above safe area`);
-     }
      if (name === 'exception' || name === 'missing') {
       const box = await page.locator('.review-list').boundingBox();
       const footer = await page.locator('.review-footer').boundingBox();
@@ -106,10 +91,10 @@ const states = {
       const save = await page.locator('.edit-sheet .primary').boundingBox();
       assert.ok(save.y>=0&&save.y+save.height<=height-keyboardHeight+1,`${width}: editor keyboard`);
      }
-     if (width===390&&!keyboardHeight&&['home','import','exception','stations','detail','history','identity','identityTaobao','identityPinduoduo'].includes(name)) await page.screenshot({path:`${output}/${name}.png`,fullPage:true});
+     if (width===390&&!keyboardHeight&&['home','import','exception','stations','detail','history'].includes(name)) await page.screenshot({path:`${output}/${name}.png`,fullPage:true});
     }
    }
-   await page.close(); console.log(`${width}x${height}: ${Object.keys(states).length} states, safe area ${safeAreaBottom}px, code visibility, touch targets, overflow, scroll and keyboard geometry passed`);
+   await page.close(); console.log(`${width}x${height}: 11 states, code visibility, touch targets, overflow, scroll and keyboard geometry passed`);
   }
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

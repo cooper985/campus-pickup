@@ -1,7 +1,0 @@
-{
-  "appid": "wxe15d5846b002a9ed",
-  "projectname": "campus-identity-probe",
-  "compileType": "miniprogram",
-  "miniprogramRoot": "./",
-  "setting": { "urlCheck": true, "es6": true }
-}
