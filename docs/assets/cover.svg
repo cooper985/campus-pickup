@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" role="img" aria-labelledby="title desc">
+  <title id="title">校园取件助手 · Campus Pickup</title>
+  <desc id="desc">暖纸色校园取件助手封面。左侧介绍截图识别、通知粘贴与按站取件；右侧为现有界面的简化示意，全部地点及取件码为虚构数据。</desc>
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#E7E2D9" stroke-width="0.7"/>
+    </pattern>
+    <clipPath id="screen"><rect x="786" y="59" width="332" height="542" rx="31"/></clipPath>
+  </defs>
+  <rect width="1200" height="660" rx="28" fill="#F7F5F0"/>
+  <rect x="640" width="560" height="660" rx="28" fill="url(#grid)"/>
+  <circle cx="970" cy="304" r="207" fill="#F2E5DC"/>
+  <circle cx="716" cy="513" r="10" fill="#C87356"/>
+  <circle cx="1145" cy="101" r="6" fill="#C87356"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <rect x="64" y="58" width="48" height="48" rx="14" fill="#A94F38"/>
+    <g fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linejoin="round">
+      <path d="M76 76l12-6 12 6v14l-12 6-12-6z"/>
+      <path d="M76 76l12 6 12-6M88 82v14M82 73l12 6"/>
+    </g>
+    <text x="128" y="80" fill="#25231F" font-size="19" font-weight="700" letter-spacing="2">CAMPUS PICKUP</text>
+    <text x="128" y="102" fill="#68645E" font-size="14" letter-spacing="3">校园取件助手</text>
+
+    <text x="64" y="211" fill="#25231F" font-size="54" font-weight="750">把零散通知，</text>
+    <text x="64" y="285" fill="#A94F38" font-size="54" font-weight="750">整理成一张取件清单。</text>
+    <text x="66" y="341" fill="#68645E" font-size="22">从消息到驿站，让每一件快递都有着落。</text>
+
+    <g font-size="18" fill="#9E4934" text-anchor="middle">
+      <rect x="64" y="380" width="128" height="42" rx="21" fill="#F2E5DC"/>
+      <text x="128" y="407">截图识别</text>
+      <rect x="204" y="380" width="128" height="42" rx="21" fill="#F2E5DC"/>
+      <text x="268" y="407">通知粘贴</text>
+      <rect x="344" y="380" width="128" height="42" rx="21" fill="#F2E5DC"/>
+      <text x="408" y="407">按站取件</text>
+    </g>
+
+    <path d="M64 478h538" stroke="#DCD5CA"/>
+    <text x="64" y="523" fill="#25231F" font-size="20" font-weight="650">导入</text>
+    <path d="M124 516h42m-7-5 7 5-7 5" fill="none" stroke="#B6AA9B" stroke-width="1.5"/>
+    <text x="189" y="523" fill="#25231F" font-size="20" font-weight="650">核对</text>
+    <path d="M249 516h42m-7-5 7 5-7 5" fill="none" stroke="#B6AA9B" stroke-width="1.5"/>
+    <text x="314" y="523" fill="#25231F" font-size="20" font-weight="650">取件</text>
+    <path d="M374 516h42m-7-5 7 5-7 5" fill="none" stroke="#B6AA9B" stroke-width="1.5"/>
+    <text x="439" y="523" fill="#25231F" font-size="20" font-weight="650">完成</text>
+    <text x="64" y="591" fill="#827E77" font-size="15" letter-spacing="1">微信原生小程序  /  腾讯云 OCR  /  本机保存记录</text>
+
+    <rect x="779" y="57" width="346" height="560" rx="40" fill="#DDD3C6" opacity="0.45"/>
+    <rect x="776" y="49" width="352" height="562" rx="40" fill="#FFFFFF" stroke="#D6CDBF" stroke-width="1.5"/>
+    <g clip-path="url(#screen)">
+      <rect x="786" y="59" width="332" height="542" fill="#F7F5F0"/>
+      <text x="807" y="84" fill="#25231F" font-size="12" font-weight="600">9:41</text>
+      <g fill="#25231F">
+        <rect x="1062" y="76" width="3" height="4" rx="1"/>
+        <rect x="1067" y="73" width="3" height="7" rx="1"/>
+        <rect x="1072" y="70" width="3" height="10" rx="1"/>
+      </g>
+      <rect x="1085" y="71" width="18" height="9" rx="2" fill="none" stroke="#25231F"/>
+      <rect x="1087" y="73" width="13" height="5" rx="1" fill="#25231F"/>
+      <text x="952" y="116" fill="#25231F" font-size="14" font-weight="600" text-anchor="middle">校园取件助手</text>
+      <rect x="1051" y="99" width="53" height="24" rx="12" fill="none" stroke="#D6D0C7"/>
+      <text x="1063" y="115" fill="#25231F" font-size="13" font-weight="700">···</text>
+      <path d="M1080 104v14" stroke="#D6D0C7"/>
+      <circle cx="1091" cy="111" r="5" fill="none" stroke="#25231F" stroke-width="1.3"/>
+
+      <text x="809" y="160" fill="#25231F" font-size="20" font-weight="650">待取件 <tspan font-size="25">3</tspan></text>
+      <text x="1095" y="158" fill="#9E4934" font-size="13" text-anchor="end">管理驿站</text>
+
+      <rect x="805" y="182" width="294" height="220" rx="13" fill="#FFFFFF" stroke="#E7E2D9"/>
+      <circle cx="822" cy="208" r="3.5" fill="#C87356"/>
+      <text x="835" y="213" fill="#25231F" font-size="15" font-weight="600">校内东门驿站</text>
+      <text x="1081" y="212" fill="#68645E" font-size="12" text-anchor="end">2 件 −</text>
+      <path d="M805 229h294M805 304h294M805 376h294" stroke="#E7E2D9"/>
+      <text x="820" y="264" fill="#25231F" font-size="26" font-weight="700" font-family="Menlo, Consolas, monospace">6-2-801</text>
+      <text x="820" y="287" fill="#68645E" font-size="12">顺丰 · 修改</text>
+      <rect x="1021" y="249" width="65" height="32" rx="16" fill="#F2E5DC"/>
+      <text x="1053" y="270" fill="#9E4934" font-size="13" text-anchor="middle">已取到</text>
+      <text x="820" y="338" fill="#25231F" font-size="26" font-weight="700" font-family="Menlo, Consolas, monospace">3-5-206</text>
+      <text x="820" y="361" fill="#68645E" font-size="12">中通 · 修改</text>
+      <rect x="1021" y="323" width="65" height="32" rx="16" fill="#F2E5DC"/>
+      <text x="1053" y="344" fill="#9E4934" font-size="13" text-anchor="middle">已取到</text>
+      <text x="1081" y="393" fill="#9E4934" font-size="12" text-anchor="end">整站已取</text>
+
+      <rect x="805" y="417" width="294" height="116" rx="13" fill="#FFFFFF" stroke="#E7E2D9"/>
+      <circle cx="822" cy="443" r="3.5" fill="#C87356"/>
+      <text x="835" y="448" fill="#25231F" font-size="15" font-weight="600">学生服务中心</text>
+      <text x="1081" y="447" fill="#68645E" font-size="12" text-anchor="end">1 件 −</text>
+      <path d="M805 464h294" stroke="#E7E2D9"/>
+      <text x="820" y="498" fill="#25231F" font-size="26" font-weight="700" font-family="Menlo, Consolas, monospace">9-1-403</text>
+      <text x="820" y="520" fill="#68645E" font-size="12">圆通 · 修改</text>
+      <rect x="1021" y="483" width="65" height="32" rx="16" fill="#F2E5DC"/>
+      <text x="1053" y="504" fill="#9E4934" font-size="13" text-anchor="middle">已取到</text>
+
+      <path d="M786 548h332" stroke="#E7E2D9"/>
+      <text x="842" y="578" fill="#9E4934" font-size="14" font-weight="600" text-anchor="middle">待取件</text>
+      <circle cx="952" cy="568" r="20" fill="#A94F38"/>
+      <path d="M944 568h16m-8-8v16" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+      <text x="1064" y="578" fill="#68645E" font-size="14" text-anchor="middle">已取历史</text>
+      <rect x="915" y="593" width="74" height="3" rx="1.5" fill="#25231F"/>
+    </g>
+    <text x="952" y="641" fill="#827E77" font-size="13" text-anchor="middle">界面示意 · 虚构数据</text>
+  </g>
+</svg>
