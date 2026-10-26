@@ -520,6 +520,7 @@ Page({
       error: "" });
     if (!pending && this.recognitionRun && results.length === this.recognitionRun.imagePaths.length && !this.recognitionRun.preparing) {
       const run = this.recognitionRun;
+      run.finalizeStartedAt = Date.now();
       const raw = [...run.sources.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, records]) => records)
         .filter(r => !run.dismissed.has(r.id)).map(r => ({ ...r, ...(run.edits.get(r.id) || {}) }));
       const candidates = fuse(raw, (name, record) => stations.resolve(this.stationState, name, record).id).map(c => stations.assist(this.stationState, c));
@@ -532,7 +533,7 @@ Page({
     if (!this.data.images.length || this.data.loading || this.data.choosing || this.data.importing) return;
     const changedMode = this.recognitionRun && (this.recognitionRun.useCloud !== useCloud || this.recognitionRun.transport !== transport);
     const previous = !(useCloud && !shadow) && !changedMode && this.recognitionRun && JSON.stringify(this.recognitionRun.imagePaths) === JSON.stringify(this.data.images) && this.recognitionRun;
-    const run = { auto: useCloud && !shadow, preparing: true, imagePaths: this.data.images.slice(), id: previous ? previous.id : ++this.taskSequence, sources: previous ? previous.sources : new Map(),
+    const run = { auto: useCloud && !shadow, preparing: true, preflightSession: {}, imagePaths: this.data.images.slice(), id: previous ? previous.id : ++this.taskSequence, sources: previous ? previous.sources : new Map(),
       edits: previous ? previous.edits : new Map(), dismissed: previous ? previous.dismissed : new Set(), startedAt: Date.now(), selectedAt: this.imagesSelectedAt || Date.now(), useCloud, transport };
     this.recognitionRun = run;
     if (run.auto) {
@@ -543,8 +544,10 @@ Page({
     }
     this.setData({ activeTab: "import", resultCategory: "", results: [], loading: true, progress: `正在识别 0/${run.imagePaths.length}`, error: "", completed: false, editing: null,
       ...(changedMode ? { drafts: [], draftGroups: [], validDraftCount: 0 } : {}) });
+    const hashStartedAt = Date.now();
     run.identities = useCloud && !shadow ? await imageDedup.inspect(wx, run.imagePaths) : run.imagePaths.map(() => ({ hash: '', duplicateOf: -1 }));
     if (this.recognitionRun !== run || this.unloaded) return;
+    task.log("batch_hash", hashStartedAt, "OK", { traceId: run.startedAt, imageCount: run.imagePaths.length });
     run.preparing = false;
     if (run.cancelled) {
       const batch = this.importState.batches.find(b => b.id === run.batchId);
@@ -568,9 +571,15 @@ Page({
     const imagePath = this.data.images[i];
     let startedAt = 0;
     const current = () => this.recognitionRun === run && this.data.results.some(r => r.taskId === taskId);
-    const update = changes => {
+    const update = (changes, callback) => {
       if (!current()) return;
-      this.setData({ results: this.data.results.map(r => r.taskId === taskId ? { ...r, ...changes } : r) });
+      const index = this.data.results.findIndex(r => r.taskId === taskId);
+      const patch = {};
+      for (const [key, value] of Object.entries(changes)) {
+        if (this.data.results[index][key] !== value) patch[`results[${index}].${key}`] = value;
+      }
+      if (Object.keys(patch).length) this.setData(patch, callback);
+      else if (callback) callback();
     };
     const identity = (run.identities || [])[i] || { hash: '', duplicateOf: -1 };
     const entry = { taskId, traceId, index: i + 1, transport: run.transport, state: "queued", status: "queued", message: "排队中", error: "",
@@ -608,9 +617,10 @@ Page({
       this.refreshRecognition();
       return;
     }
+    const preflightSession = run.retrying ? undefined : run.preflightSession;
     const job = this.ocrQueue.add(control => {
       control.traceId = traceId;
-      return run.useCloud ? fileidOcr.recognize(imagePath, control) : mockOcr.recognize();
+      return run.useCloud ? fileidOcr.recognize(imagePath, control, preflightSession) : mockOcr.recognize();
     }, {
       timeoutMs: this.recognitionTimeoutMs,
       onStart: () => { startedAt = Date.now(); task.log("queue_wait", queuedAt, "OK", { traceId }); update({ state: "running", message: "识别中" }); },
@@ -663,9 +673,8 @@ Page({
       this.imageJobs.delete(taskId);
       if (current()) {
         const finishedAt = Date.now();
-        update({ elapsedMs: startedAt ? finishedAt - startedAt : 0, queueMs: (startedAt || finishedAt) - queuedAt });
         const status = this.data.results.find(r => r.taskId === taskId).status;
-        this.setData({ results: this.data.results.slice() }, () => {
+        update({ elapsedMs: startedAt ? finishedAt - startedAt : 0, queueMs: (startedAt || finishedAt) - queuedAt }, () => {
           if (!current()) return;
           const appearedMs = Date.now() - run.startedAt;
           task.log("selection_total", run.selectedAt, "OK", { traceId, selectedToResultMs: Date.now() - run.selectedAt });
@@ -738,6 +747,12 @@ Page({
       this.setDrafts([], { activeTab: 'import', notificationOpen: false, notificationText: '', completed: true, batchError: '', newStations });
       if (batch.reviews.length) this.openExceptions();
       if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+      if (task.PERFORMANCE_TIMING && task.isDevelopment() && run.imagePaths) {
+        task.log("batch_finalize", run.finalizeStartedAt || Date.now(), "OK", { traceId: run.startedAt, imageCount: run.imagePaths.length });
+        this.setData({ completed: true }, () => {
+          if (!this.unloaded && this.recognitionRun === run) task.log("batch_total", run.selectedAt, "OK", { traceId: run.startedAt, imageCount: run.imagePaths.length });
+        });
+      }
     } catch (_) {
       this.setData({ batchError: '整理未完成，请重进导入页继续' });
     } finally { run.committing = false; }
@@ -1303,7 +1318,9 @@ Page({
   },
   persistRecords(records, imports) {
     try {
-      this.updateRecords(this.store.save(records, imports));
+      const saved = this.store.save(records, imports);
+      // Evidence checkpoints keep the pickup list unchanged; retain the full storage verification.
+      if (!imports || records !== this.data.records) this.updateRecords(saved);
       if (imports) { this.importState = imports; this.refreshBatchSummary(); }
       return true;
     } catch (err) {

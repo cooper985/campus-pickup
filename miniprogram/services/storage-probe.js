@@ -43,13 +43,21 @@ async function run(imagePath, onStage = () => {}, options = {}) {
     } finally { clearTimeout(timer); report.timings[stage] = Date.now() - started; }
   }
   try {
-    // A small preflight confirms the deployed probe is enabled before uploading any screenshot.
-    const preflight = await step("preflightMs", () => wx.cloud.callFunction({ name: "recognizePickup",
-      config: { env: CLOUD_ENV }, data: { action, check: true } }));
-    const ready = preflight && preflight.result;
-    if (!ready || ready.protocol !== 1 || ready.ok !== true) throw { code: options.ocr ? ready && ready.error && ready.error.code || "CONFIG_ERROR" : "PROBE_NOT_READY" };
-    if (!/^[A-Za-z0-9_-]{1,128}$/.test(ready.openid) || typeof ready.filePrefix !== "string" ||
-        !new RegExp(`^cloud://${CLOUD_ENV}\\.[a-z0-9-]+/ocr-probe/${ready.openid}/$`).test(ready.filePrefix)) throw { code: "PROBE_BAD_RESPONSE" };
+    // Share readiness only within this batch; the server still authorizes every OCR request.
+    const session = options.ocr && options.preflightSession;
+    const ready = await step("preflightMs", () => {
+      if (session && session.ready) return session.ready;
+      const request = wx.cloud.callFunction({ name: "recognizePickup",
+        config: { env: CLOUD_ENV }, data: { action, check: true } }).then(preflight => {
+        const value = preflight && preflight.result;
+        if (!value || value.protocol !== 1 || value.ok !== true) throw { code: options.ocr ? value && value.error && value.error.code || "CONFIG_ERROR" : "PROBE_NOT_READY" };
+        if (!/^[A-Za-z0-9_-]{1,128}$/.test(value.openid) || typeof value.filePrefix !== "string" ||
+            !new RegExp(`^cloud://${CLOUD_ENV}\\.[a-z0-9-]+/ocr-probe/${value.openid}/$`).test(value.filePrefix)) throw { code: "PROBE_BAD_RESPONSE" };
+        return value;
+      });
+      if (session) session.ready = request;
+      return request;
+    });
     report.runtime = {};
     for (const key of ["credentialsComplete", "tokenPresent", "envMatches", "regionMatches"]) {
       if (typeof (ready.runtime && ready.runtime[key]) === "boolean") report.runtime[key] = ready.runtime[key];
@@ -58,11 +66,15 @@ async function run(imagePath, onStage = () => {}, options = {}) {
     const preparedPath = await step("prepareMs", async () => {
       const stat = path => new Promise((resolve, reject) => wx.getFileSystemManager().getFileInfo({ filePath: path, success: resolve, fail: () => reject({ code: "IMAGE_READ" }) }));
       let prepared = imagePath;
-      if ((await stat(imagePath)).size > MAX_BYTES) {
+      let info = await stat(imagePath);
+      control.check();
+      if (info.size > MAX_BYTES) {
         const result = await new Promise((resolve, reject) => wx.compressImage({ src: imagePath, quality: 70, success: resolve, fail: () => reject({ code: "IMAGE_COMPRESS" }) }));
+        control.check();
         prepared = result.tempFilePath;
+        info = await stat(prepared);
       }
-      report.imageBytes = (await stat(prepared)).size;
+      report.imageBytes = info.size;
       if (!Number.isFinite(report.imageBytes) || report.imageBytes <= 0 || report.imageBytes > MAX_BYTES) throw { code: options.ocr ? "IMAGE_TOO_LARGE" : "INVALID_IMAGE" };
       return prepared;
     });

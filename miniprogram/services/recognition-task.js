@@ -5,10 +5,12 @@ const WAIT_TIMEOUT_MS = 60000;
 const SLOW_AFTER_MS = 8000;
 const CLOUD_ENV = "cloud1-d8g3dicam66594fcf";
 const DIAGNOSTIC_BUILD = "20261022-cainiao-parser-v1";
+// Enable locally for device measurements; release builds never log timings.
+const PERFORMANCE_TIMING = false;
 // Memory only; one batch plus retries, never persist screenshot or OCR content.
 const events = [];
 const stages = new Set(["image_prepare", "image_stat", "image_size", "image_read", "image_compress", "compressed_read",
-  "fileid_preflight", "fileid_upload", "fileid_call", "fileid_cleanup", "fileid_read", "fileid_delete", "fileid_ocr", "selection_total", "cloud_submit", "cloud_roundtrip", "cloud_return", "cloud_result", "cloud_breakdown", "cloud_late_result", "text_parse", "image_total", "queue_wait"]);
+  "fileid_preflight", "fileid_upload", "fileid_call", "fileid_cleanup", "fileid_read", "fileid_delete", "fileid_ocr", "selection_total", "cloud_submit", "cloud_roundtrip", "cloud_return", "cloud_result", "cloud_breakdown", "cloud_late_result", "text_parse", "image_total", "queue_wait", "batch_hash", "batch_finalize", "batch_total"]);
 const messages = {
   IMAGE_READ: "无法读取图片，请重新选择。",
   IMAGE_COMPRESS: "图片压缩失败，请裁剪后重新选择。",
@@ -38,8 +40,9 @@ function isDevelopment() {
 function log(stage, started, code = "OK", metrics = {}) {
   if (!isDevelopment()) return;
   if (!stages.has(stage)) return;
+  if (!PERFORMANCE_TIMING && ["batch_hash", "batch_finalize", "batch_total"].includes(stage)) return;
   const safe = {};
-  for (const key of ["traceId", "imageBytes", "base64Chars", "requestBytes", "ocrMs", "overheadMs", "selectedToResultMs", "recordCount", "uncertainCount"]) {
+  for (const key of ["traceId", "imageBytes", "imageCount", "base64Chars", "requestBytes", "ocrMs", "overheadMs", "selectedToResultMs", "recordCount", "uncertainCount"]) {
     if (Number.isFinite(metrics[key]) && metrics[key] >= 0) safe[key] = metrics[key];
   }
   for (const key of ["serverDeleted", "clientDeleted", "cleanupPending"]) if (typeof metrics[key] === "boolean") safe[key] = metrics[key];
@@ -98,4 +101,4 @@ function start(work, timeoutMs, onStage = () => {}, onSlow = () => {}) {
   const settled = Promise.resolve(result).then(() => {}, () => {});
   return { promise, settled, cancel: (code = "CANCELLED") => stop(code) };
 }
-module.exports = { start, error, log, diagnostic, isDevelopment, CLOUD_ENV, WAIT_TIMEOUT_MS, PREPARE_TIMEOUT_MS, SLOW_AFTER_MS };
+module.exports = { start, error, log, diagnostic, isDevelopment, CLOUD_ENV, WAIT_TIMEOUT_MS, PREPARE_TIMEOUT_MS, SLOW_AFTER_MS, PERFORMANCE_TIMING };

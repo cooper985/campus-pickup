@@ -2,13 +2,13 @@ const task = require("./recognition-task");
 const storage = require("./storage-probe");
 
 // Upload binary; only the small, owner-scoped file ID crosses callFunction.
-async function recognize(imagePath, control) {
+async function recognize(imagePath, control, preflightSession) {
   let result;
   const report = await storage.run(imagePath, phase => {
     const stages = { preflightMs: "fileid_preflight", prepareMs: "image_prepare",
       uploadMs: "cloud_roundtrip", callMs: "fileid_call" };
     try { control.check(); if (stages[phase]) control.stage(stages[phase]); } catch (_) {}
-  }, { control, ocr: true, onResult: value => { result = value; } });
+  }, { control, ocr: true, preflightSession, onResult: value => { result = value; } });
   const stages = { preflightMs: "fileid_preflight", prepareMs: "image_prepare", uploadMs: "fileid_upload",
     callMs: "fileid_call", readMs: "fileid_read", deleteMs: "fileid_delete", ocrMs: "fileid_ocr", cleanupMs: "fileid_cleanup" };
   for (const key of Object.keys(stages)) {

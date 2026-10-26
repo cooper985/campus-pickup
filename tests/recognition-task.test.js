@@ -50,3 +50,32 @@ test('开发版失败后只复制一次脱敏诊断，正式版不显示入口�
  mode='release'; copied=''; p.copyRecognitionDiagnostic({currentTarget:{dataset:{taskId:p.data.results[0].taskId}}});
  assert.equal(copied,''); assert.equal(page(wx,undefined,undefined,{'recognition-task':task}).data.diagnosticEnabled,false);
 });
+
+test('批量性能计时默认关闭；开启后仅开发版脱敏输出，通知导入不进入图片计时分支',async()=>{
+ const source=fs.readFileSync('miniprogram/services/recognition-task.js','utf8');
+ for(const enabled of [false,true]) for(const mode of ['develop','release']) {
+  const logs=[],module={exports:{}};
+  vm.runInNewContext(enabled ? source.replace('const PERFORMANCE_TIMING = false;','const PERFORMANCE_TIMING = true;') : source,
+   {module,setTimeout,clearTimeout,Date:{now:()=>100},wx:{getAccountInfoSync:()=>({miniProgram:{envVersion:mode}})},console:{info:(...args)=>logs.push(args)}});
+  assert.equal(module.exports.PERFORMANCE_TIMING,enabled);
+  for(const stage of ['batch_hash','batch_finalize','batch_total']) module.exports.log(stage,25,'OK',{
+   imageCount:9,traceId:7,imagePath:'private-screenshot',code:'1234',phone:'private-phone',lines:['private-ocr'],token:'private-token',records:[{code:'1234'}],
+  });
+  assert.equal(logs.length,enabled&&mode==='develop'?3:0);
+  for(const [,event] of logs) {
+   assert.deepEqual(Object.keys(event).sort(),['imageCount','ms','stage','traceId','type']);
+   assert.equal(event.imageCount,9); assert.equal(event.ms,75); assert.equal(event.traceId,7);
+  }
+  assert.ok(!JSON.stringify(logs).includes('private'));
+  if(enabled&&mode==='develop') {
+   logs.length=0;
+   const {page}=require('./helpers/page'),{fakeStorage}=require('./helpers/storage');
+   const p=page(fakeStorage(),undefined,undefined,{'recognition-task':module.exports});
+   p.openNotification(); p.notificationInput({detail:{value:'【驿小哥】取件码C205-2004，已到东门驿站。'}});
+   await p.recognizeNotification();
+   assert.equal(p.data.records.length,1); assert.equal(p.data.batchError,'');
+   assert.equal(logs.length,0,'notification runs have no imagePaths and must skip image batch timing');
+   p.onUnload();
+  }
+ }
+});
