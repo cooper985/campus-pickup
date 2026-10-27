@@ -4,7 +4,7 @@ const PREPARE_TIMEOUT_MS = 15000;
 const WAIT_TIMEOUT_MS = 60000;
 const SLOW_AFTER_MS = 8000;
 const CLOUD_ENV = "cloud1-d8g3dicam66594fcf";
-const DIAGNOSTIC_BUILD = "20261022-cainiao-parser-v1";
+const DIAGNOSTIC_BUILD = "20261027-v303-detail";
 // Enable locally for device measurements; release builds never log timings.
 const PERFORMANCE_TIMING = false;
 // Memory only; one batch plus retries, never persist screenshot or OCR content.

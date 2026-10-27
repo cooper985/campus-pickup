@@ -1,4 +1,4 @@
-const PARSER_VERSION = '3.0.2';
+const PARSER_VERSION = '3.0.3.1';
 const copy = value => JSON.parse(JSON.stringify(value));
 const candidateFields = ['id', 'code', 'station', 'stationId', 'originalPickupLocation', 'pickupAddress', 'carrier', 'waybillNumber', 'sourceIndex', 'sourceIndices', 'sourceIds', 'confirmedFields', 'needsReview', 'batchConflict', 'uncertainCode', 'parcelStatus', 'noticeAt', 'timeConflict', 'locationOptions', 'memoryAddress', 'sourceRegions', 'fieldSources', 'statusEvents', 'conflictFields', 'relatedSourceIndices', 'unresolvedRegion'];
 const cleanCandidate = c => candidateFields.reduce((result, key) => { if (c[key] !== undefined) result[key] = copy(c[key]); return result; }, {});

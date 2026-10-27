@@ -142,7 +142,7 @@ test('V234 合成：现版缓存命中仍重匹配最新别名；旧解析版本
   const b=JSON.parse(JSON.stringify(p.importState.batches[0]));b.images[0].parserVersion='2.3.3';p.persistBatch(b);
   // Every old cache for this digest is invalidated, not just the latest batch.
   for (const batch of p.importState.batches.slice()) {const old=JSON.parse(JSON.stringify(batch));old.images.forEach(i=>i.parserVersion='2.3.3');p.persistBatch(old);}
-  assert.equal(batches.cachedImage(p.importState,'1'.padStart(40,'0')+':100','other'),null);assert.equal(batches.PARSER_VERSION,'3.0.2');p.onUnload();
+  assert.equal(batches.cachedImage(p.importState,'1'.padStart(40,'0')+':100','other'),null);assert.equal(batches.PARSER_VERSION,'3.0.3.1');p.onUnload();
 });
 
 test('V234 合成：手改旧记录阻止设置自动迁移，已知ID可恢复缺失名称，歧义名称不随意选择', () => {

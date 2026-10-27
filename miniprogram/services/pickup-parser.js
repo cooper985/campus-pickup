@@ -13,6 +13,7 @@ function clean(text) {
 }
 function validPlace(s) {
   return s.length >= 2 && s.length <= 100 && /[\u4e00-\u9fff]/.test(s) && !noise.test(s) &&
+    !/^(?:营业|工作|开放|服务)时间/.test(s) &&
     !/^(?:站?\d+\s*(?:小时|分钟|天)|今日到站|已到(?:站)?\s*\d*\s*(?:天|小时)|已入库|等待领取|待取件)/.test(s) &&
     !/^(?:收|寄)?[\u4e00-\u9fff]+(?:省|市|县|区)$/.test(s);
 }
@@ -84,10 +85,12 @@ function extractCodes(text, boxes) {
       if (/(?:没有|暂无|未生成|未发现|未获取|无有效|复制|分享|查询|查看|获得|获取|输入|凭)\s*$/.test(prefix)) continue;
       let valueIndex = i;
       let value = text[i].slice(label.index + label[0].length, n + 1 < matches.length ? matches[n + 1].index : undefined).trim();
-      if (!value) {
+      if (!value && text[i + 1] !== undefined) {
         const a = boxAt(boxes, i), b = boxAt(boxes, i + 1);
         if (!a || !b || labelNeighbor(a, b)) { value = text[i + 1] || ""; valueIndex = i + 1; }
       }
+      // Help text mentions the field; it does not describe another parcel's missing value.
+      if (!/[:：]/.test(label[0]) && /^(?:问题|疑问)/.test(value)) continue;
       const code = codeValue(value, cainiao);
       if (code) { codes.push({ i: valueIndex, code }); consumed.add(valueIndex); }
       else if (!value || !/^[*＊·•●xX\s-]+$|已隐藏|点击.*查看|待生成|暂未生成/.test(value)) { uncertainCount++; issues.push({ i: valueIndex }); }
@@ -156,7 +159,16 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
   for (let i = 0; i < text.length; i++) {
     if (covered.has(i) || /(?:收件|收货|寄件|寄货)(?:人)?地址/.test(text[i])) continue;
     const explicit = text[i].match(/(?:已派送至|已送至|已送达|已到达?|已入库(?:至|到|于)?|领取地点|自提地点|自提点|取件地址|取件地点|地址(?=\s*[:：]))\s*[:：]?\s*(.*)/);
-    let name = explicit ? boundary(explicit[1]) : text[i].replace(/^支持退换货\s*/, "");
+    let destination = explicit ? explicit[1] : '';
+    if (/^[【\[]?(?:菜鸟驿站|妈妈驿站|快递驿站)[】\]]?\s*[(（][^()（）]*$/.test(destination)) {
+      const a = boxAt(boxes, i), b = boxAt(boxes, i + 1);
+      if (a && b && b.y > a.y && b.y - a.y - a.height <= Math.max(a.height, b.height) * 1.5 &&
+          Math.abs(a.x - b.x) <= Math.max(a.height, b.height) * 2 && sameColumn(a, b) &&
+          !/^(?:另一个|另一件|另外一件|下一个)(?:包裹|快递)/.test(text[i + 1]) &&
+          ![...extracted.codes, ...extracted.issues].some(c => c.i === i + 1)) destination += text[i + 1];
+    }
+    const branch = destination.match(/^[【\[]?(?:菜鸟驿站|妈妈驿站|快递驿站)[】\]]?\s*[(（]([^()（）]+)[)）]/);
+    let name = explicit ? boundary(branch && /[栋楼号街路门站柜店]|中心|小区/.test(branch[1]) ? branch[1] : destination) : text[i].replace(/^支持退换货\s*/, "");
     const header = cainiao && badgeHeader(text, boxes, i);
     if (header) name = stationHeader(name).replace(/[>›〉]\s*$/, '');
     name = name.replace(/((?:驿站|服务站|快递柜))[>›〉]\s*$/, '$1');
@@ -165,6 +177,9 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
       return a && b && b.y >= a.y + a.height && b.y - a.y - a.height <= a.height * 2 &&
         Math.abs(b.x - a.x) <= a.height && sameColumn(a, b);
     });
+    const badgeDetail = cainiao && codes.length === 1 && !extracted.issues.length && /[栋楼]/.test(name) && /(?:在|旁|侧|对面|附近|门|入口)/.test(name) &&
+      [i - 1, i + 1].some(j => /^(?:菜鸟驿站|妈妈驿站|快递驿站)$/.test(text[j] || '') && boxAt(boxes, i) && boxAt(boxes, j) &&
+        Math.abs(boxAt(boxes, i).y - boxAt(boxes, j).y) <= Math.max(boxAt(boxes, i).height, boxAt(boxes, j).height) * 3 && sameColumn(boxAt(boxes, i), boxAt(boxes, j)));
     let locationIndex = i;
     if (explicit && !name && text[i + 1] && (!boxAt(boxes, i) || !boxAt(boxes, i + 1) || labelNeighbor(boxAt(boxes, i), boxAt(boxes, i + 1)))) {
       const value = layout.addressValue(text, boxes, i);
@@ -177,7 +192,7 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
     const section = /[号栋]|小区/.test(next) && validPlace(next) && (!a || !b ||
       Math.abs(a.x - b.x) <= Math.max(a.height, b.height) && b.y > a.y && b.y - a.y <= a.height * 3);
     if (validPlace(name) && !/^(?:中国邮政|邮政|中通快递|极兔速递)$/.test(name) &&
-      (explicit || header || detailPlace || /驿站|自提柜|快递柜|邮政$|(?:店|服务站)$/.test(name) || section)) {
+      (explicit || header || detailPlace || badgeDetail || /驿站|自提柜|快递柜|邮政$|(?:店|服务站)$/.test(name) || section)) {
       places.push({ i: locationIndex, name, explicit: !!explicit, detail: !!explicit && /^地址/.test(explicit[0]) });
     }
   }

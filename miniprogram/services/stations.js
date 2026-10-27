@@ -110,11 +110,11 @@ function resolve(state, name, record = {}) {
   const byId = state.groups.find(g => g.id === record.stationId || (g.redirectIds || []).includes(record.stationId));
   if (!known(name)) return byId && reliable(byId.name) ? byId : { id: '__unknown', name: UNKNOWN };
   const original = record.originalPickupLocation || name;
-  if (byId && !(byId.revokedAliases || []).some(a => normalize(a) === normalize(original) || normalize(a) === normalize(name)) &&
+  if (byId && !(reliable(name) && /^(?:营业|工作|开放|服务)时间/.test(byId.name)) && !(byId.revokedAliases || []).some(a => normalize(a) === normalize(original) || normalize(a) === normalize(name)) &&
       [byId.name, ...byId.aliases, byId.legacyName].filter(Boolean).some(a => normalize(a) === normalize(name) || !locked && normalize(a) === normalize(canonical(name)))) return byId;
   if (byId && (byId.revokedAliases || []).some(a => normalize(a) === normalize(original))) name = original;
   const found = match(state, name, !locked);
-  if (found && (!locked || !found.legacyName || normalize(name) !== normalize(found.legacyName))) return found;
+  if (found && !(reliable(name) && /^(?:营业|工作|开放|服务)时间/.test(found.name)) && (!locked || !found.legacyName || normalize(name) !== normalize(found.legacyName))) return found;
   const display = locked ? name : canonical(name);
   return reliable(display) || locked ? { id: state.groups.some(g => g.id === normalize(display)) ? 'unmapped-' + normalize(display) : normalize(display), name: display } : { id: '__unknown', name: UNKNOWN };
 }
