@@ -693,6 +693,7 @@ Page({
   handledBatchSources(batch) {
     const handled = new Set(batch.handledSources || []);
     batch.outcomes.filter(o => o.decision !== decision.NEEDS_REVIEW).forEach(o => handled.add(o.id));
+    if (!handled.size) return [];
     // Legacy receipts kept only the representative ID; capture its peers before a retry replaces them.
     const previous = fuse(batch.images.flatMap(i => i.candidates), (name, record) => stations.resolve(this.stationState, name, record).id);
     previous.forEach(c => {

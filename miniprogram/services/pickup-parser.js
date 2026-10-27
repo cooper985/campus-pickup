@@ -6,7 +6,7 @@ const layout = require('./recognition-layout');
 const { boundary } = require('./station-name');
 const { metadata } = require('./pickup-duplicates');
 const UNKNOWN = "待确认地点";
-const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|派送中|电话|联系|运单|单号|取件码|取货码|提货码|提货号|领取码|订单|商品|购买|付款|旗舰店|专营店/;
+const noise = /物流求助|复制|订阅|提醒|查看|地图|导航|收件|收货|寄件|运输|转运|分拨|途经|预计|揽收|发往|离开|到达|已放入|暂存至|您的|派送中|电话|联系|运单|单号|取件码|取货码|提货码|提货号|领取码|订单|商品|购买|付款|旗舰店|专营店/;
 const labels = codeLabels();
 function clean(text) {
   return String(text).normalize("NFKC").replace(/[—–－﹣−‐‑‒]/g, "-").trim();
@@ -91,7 +91,15 @@ function extractCodes(text, boxes) {
       }
       // Help text mentions the field; it does not describe another parcel's missing value.
       if (!/[:：]/.test(label[0]) && /^(?:问题|疑问)/.test(value)) continue;
-      const code = codeValue(value, cainiao);
+      let code = codeValue(value, cainiao);
+      // A wrapped value ending in a separator is still one labelled field.
+      if (!code && /[A-Za-z0-9]-$/.test(value) && text[valueIndex + 1]) {
+        const a = boxAt(boxes, valueIndex), b = boxAt(boxes, valueIndex + 1);
+        if (a && b && b.y > a.y && labelNeighbor(a, b)) {
+          code = codeValue(value + text[valueIndex + 1], cainiao);
+          if (code) consumed.add(valueIndex + 1);
+        }
+      }
       if (code) { codes.push({ i: valueIndex, code }); consumed.add(valueIndex); }
       else if (!value || !/^[*＊·•●xX\s-]+$|已隐藏|点击.*查看|待生成|暂未生成/.test(value)) { uncertainCount++; issues.push({ i: valueIndex }); }
     }
@@ -137,12 +145,12 @@ function parse(lines, sourceIndex = 0, boxes = [], trace) {
   // Join only contiguous notification rows, never the entire screenshot or adjacent columns.
   const notificationRecords = [], covered = new Set();
   for (let i = 0; i < text.length; i++) {
-    if (!/^【(?:递管家|驿小哥|京东(?:快递|物流)?|菜鸟(?:驿站)?|顺丰(?:快递|速运)?)】/.test(text[i]) &&
+    if (!/^[【\[](?:递管家|驿小哥|京东(?:快递|物流)?|菜鸟(?:驿站)?|顺丰(?:快递|速运)?)[】\]]/.test(text[i]) &&
         !/(?:已到|已送达|已送至|已入库|凭)[^。]*[A-Za-z0-9]/.test(text[i])) continue;
     let paragraph = text[i], end = i;
     while (end + 1 < text.length) {
       const a = boxAt(boxes, end), b = boxAt(boxes, end + 1);
-      if (!a || !b || /^【/.test(text[end + 1]) || !sameColumn(a, b) ||
+      if (!a || !b || /^[【\[]/.test(text[end + 1]) || !sameColumn(a, b) ||
           Math.abs(a.x - b.x) > Math.max(a.height, b.height) * 2 || b.y <= a.y ||
           b.y - a.y - a.height > Math.max(a.height, b.height) * 1.5 || /[。！!]$/.test(paragraph)) break;
       paragraph += text[++end];

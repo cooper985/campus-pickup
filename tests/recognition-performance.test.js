@@ -5,6 +5,25 @@ const vm = require('node:vm');
 const { page } = require('./helpers/page');
 const { fakeStorage } = require('./helpers/storage');
 
+test('首轮检查点不融合未处理来源；旧回执仍补齐已处理的融合来源', () => {
+  const fusion = require('../miniprogram/services/candidate-fusion');
+  let calls = 0;
+  const p = page(fakeStorage(), undefined, undefined, { 'candidate-fusion': {
+    fuse(...args) { calls++; return fusion.fuse(...args); },
+  } });
+  try {
+    const candidates = [0, 1].map(sourceIndex => ({ id: `source-${sourceIndex}`, sourceIndex,
+      code: 'A1-2-3456', station: '北门驿站', waybillNumber: 'SF123456789012' }));
+    const batch = { handledSources: [], outcomes: [], images: candidates.map(c => ({ candidates: [c] })) };
+    calls = 0;
+    assert.deepEqual(Array.from(p.handledBatchSources(batch)), []);
+    assert.equal(calls, 0);
+    batch.outcomes.push({ id: 'source-0', decision: 'AUTO_IMPORT' });
+    assert.deepEqual(Array.from(p.handledBatchSources(batch)).sort(), ['source-0', 'source-1']);
+    assert.equal(calls, 1);
+  } finally { p.onUnload(); }
+});
+
 // Only virtual time and synthetic responses: these numbers do not measure Tencent OCR.
 function simulation(concurrency) {
   let now = 0, sequence = 0;
